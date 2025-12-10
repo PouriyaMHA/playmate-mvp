@@ -1,5 +1,5 @@
 from fastapi.responses import HTMLResponse
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from pydantic import BaseModel
 from supabase import create_client
 from dotenv import load_dotenv
@@ -19,6 +19,7 @@ print("SUPABASE_KEY is None? ", SUPABASE_KEY is None)
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = FastAPI()
+API_PREFIX = "/api"
 
 
 # ----------------- مدل پروفایل -----------------
@@ -40,11 +41,10 @@ def parse_languages(lang_str: str) -> list[str]:
 
 
 # ----------------- روت‌ها -----------------
-@app.get("/ui", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse)
 def serve_ui():
-    # همین ui.html که فرستادی باید کنار main.py باشه
     html_path = Path(__file__).parent / "ui.html"
-    return html_path.read_text(encoding="utf-8")
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
 @app.get("/profile-full")
 def profile_full(username: str):
@@ -53,6 +53,9 @@ def profile_full(username: str):
         return {"error": "user not found"}
     return result.data[0]
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 @app.get("/", response_class=HTMLResponse)
 def landing():
@@ -301,7 +304,7 @@ def landing():
     """
 
 
-@app.post("/profile")
+@app.post(f"{API_PREFIX}/profile")
 def create_profile(profile: GamerProfile):
     result = supabase.table("profiles").insert({
         "username": profile.username,
@@ -316,13 +319,13 @@ def create_profile(profile: GamerProfile):
     return {"status": "saved", "data": result.data}
 
 
-@app.get("/profiles")
+@app.get(f"{API_PREFIX}/profiles")
 def list_profiles():
     result = supabase.table("profiles").select("*").execute()
     return {"count": len(result.data), "data": result.data}
 
 
-@app.post("/match")
+@app.post(f"{API_PREFIX}/match")
 def match_players(current: GamerProfile):
     # گرفتن همه‌ی پروفایل‌ها از دیتابیس
     result = supabase.table("profiles").select("*").execute()
@@ -398,7 +401,7 @@ class LikeRequest(BaseModel):
     game: str | None = "battlefield"
 
 
-@app.post("/like")
+@app.post(f"{API_PREFIX}/like")
 def add_like(like: LikeRequest):
     payload = {
         "from_user": like.from_user,
@@ -419,8 +422,8 @@ def add_like(like: LikeRequest):
 
 from typing import List
 
-@app.get("/my-squad")
-def my_squad(username: str):
+@app.get(f"{API_PREFIX}/my-squad")
+def my_squad(username: str = Query(..., alias="username")):
     # مثال: GET /my-squad?username=Pouriya
     result = supabase.rpc(
         "find_mutual_likes",
