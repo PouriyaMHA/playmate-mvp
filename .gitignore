@@ -1,0 +1,12 @@
+# Don't upload environment variables
+.env
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Virtual environment (should never be in Git)
+venv/
+
+# Test / temp files
+test_env.py

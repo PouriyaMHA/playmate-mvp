@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>PlayMate BF - Matchmaking</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #111827 0, #020617 40%, #000 100%);
+      color: #e5e7eb;
+    }
+
+    .page {
+      max-width: 1100px;
+      margin: 32px auto;
+      padding: 0 16px 32px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .logo-circle {
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #22c55e, #4ade80);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #020617;
+      font-weight: 800;
+      font-size: 14px;
+    }
+
+    .header-title {
+      font-size: 26px;
+      font-weight: 700;
+    }
+
+    .header-sub {
+      margin-top: 2px;
+      font-size: 13px;
+      color: #9ca3af;
+    }
+
+    .layout {
+      display: flex;
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .card {
+      background: rgba(15, 23, 42, 0.98);
+      border-radius: 18px;
+      padding: 18px 20px;
+      border: 1px solid #1f2933;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+    }
+
+    .card-left {
+      flex: 1.1;
+      min-width: 0;
+    }
+
+    .card-right {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      max-height: 520px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .card-sub {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+
+    .field-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .field-row > div {
+      flex: 1;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 8px 10px;
+      margin-bottom: 12px;
+      border-radius: 10px;
+      border: 1px solid #374151;
+      background: #020617;
+      color: #e5e7eb;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    }
+
+    input::placeholder {
+      color: #6b7280;
+    }
+
+    input:focus, select:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 1px #6366f1;
+      background: #020617;
+    }
+
+    .btn-primary {
+      background: #22c55e;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 999px;
+      color: #020617;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 18px 40px rgba(22, 163, 74, 0.45);
+      transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
+    }
+
+    .btn-primary:hover {
+      background: #16a34a;
+      transform: translateY(-1px);
+      box-shadow: 0 22px 50px rgba(22, 163, 74, 0.5);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+      box-shadow: 0 10px 25px rgba(22, 163, 74, 0.4);
+    }
+
+    .tip {
+      margin-left: 12px;
+      font-size: 11px;
+      color: #9ca3af;
+    }
+
+    .matches-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .matches-title {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .matches-count {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+
+    .matches-status {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-bottom: 8px;
+    }
+
+    .matches-list {
+      flex: 1;
+      overflow-y: auto;
+      padding-right: 4px;
+      margin-top: 4px;
+    }
+
+    .match-card {
+      background: #020617;
+      border-radius: 14px;
+      padding: 10px 12px 10px;
+      border: 1px solid #1f2937;
+      margin-bottom: 10px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      background: radial-gradient(circle at top, #22c55e, #4ade80);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #020617;
+      font-weight: 800;
+      font-size: 14px;
+    }
+
+    .match-main {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .match-name-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .match-name {
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .badge-small {
+      font-size: 11px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: #0b1120;
+      border: 1px solid #1f2937;
+      color: #9ca3af;
+    }
+
+    .match-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .badge {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: #0f172a;
+      color: #e5e7eb;
+      border: 1px solid #1f2937;
+    }
+
+    .badge-soft {
+      background: #020617;
+      color: #9ca3af;
+    }
+
+    .match-score {
+      font-size: 14px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid #1f2937;
+      min-width: 52px;
+      text-align: center;
+    }
+
+    .match-score.good {
+      background: rgba(22, 163, 74, 0.1);
+      border-color: rgba(22, 163, 74, 0.5);
+      color: #4ade80;
+    }
+
+    .match-score.medium {
+      background: rgba(234, 179, 8, 0.1);
+      border-color: rgba(234, 179, 8, 0.6);
+      color: #eab308;
+    }
+
+    .match-score.low {
+      background: rgba(248, 113, 113, 0.08);
+      border-color: rgba(248, 113, 113, 0.5);
+      color: #f97373;
+    }
+
+    .reasons {
+      grid-column: 1 / span 3;
+      margin-top: 4px;
+      font-size: 11px;
+      color: #9ca3af;
+    }
+
+    .reasons-title {
+      font-weight: 600;
+      margin-bottom: 2px;
+      color: #e5e7eb;
+    }
+
+    .reasons ul {
+      margin: 0;
+      padding-left: 16px;
+    }
+
+    .reasons li {
+      margin-bottom: 2px;
+    }
+
+    .match-actions {
+      grid-column: 1 / span 3;
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 6px;
+    }
+
+    .like-btn {
+      background: #22c55e;
+      border: none;
+      padding: 5px 12px;
+      border-radius: 999px;
+      color: #020617;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .like-btn:hover {
+      background: #16a34a;
+    }
+
+    .like-btn:disabled {
+      opacity: 0.7;
+      cursor: default;
+    }
+    .squad-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 16px;
+      margin-bottom: 6px;
+    }
+
+    .squad-title {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .squad-status {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-bottom: 6px;
+    }
+
+    .squad-list {
+      max-height: 200px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .squad-card {
+      background: #020617;
+      border-radius: 10px;
+      padding: 8px 10px;
+      border: 1px solid #1f2937;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .squad-main {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .squad-name {
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .squad-tag {
+      font-size: 11px;
+      color: #9ca3af;
+    }
+
+    .squad-pill {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid #1f2937;
+      background: #020617;
+      color: #22c55e;
+      white-space: nowrap;
+    }
+
+    .squad-refresh-btn {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid #374151;
+      background: #020617;
+      color: #e5e7eb;
+      cursor: pointer;
+    }
+
+    .squad-refresh-btn:hover {
+      background: #111827;
+    }
+
+	    .swipe-section {
+      margin-top: 18px;
+      padding-top: 12px;
+      border-top: 1px solid #111827;
+    }
+
+    .swipe-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .swipe-title {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .swipe-status {
+      font-size: 11px;
+      color: #9ca3af;
+    }
+
+    .swipe-card-box {
+      background: #020617;
+      border-radius: 12px;
+      border: 1px solid #1f2937;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      min-height: 72px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .swipe-main-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .swipe-name {
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .swipe-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 4px;
+      font-size: 11px;
+    }
+
+    .swipe-small {
+      font-size: 11px;
+      color: #9ca3af;
+    }
+
+    .swipe-actions {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .swipe-btn-skip,
+    .swipe-btn-like {
+      flex: 1;
+      border-radius: 999px;
+      padding: 7px 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid #1f2937;
+    }
+
+    .swipe-btn-skip {
+      background: #020617;
+      color: #e5e7eb;
+    }
+
+    .swipe-btn-skip:hover {
+      background: #111827;
+    }
+
+    .swipe-btn-like {
+      background: #22c55e;
+      color: #020617;
+      box-shadow: 0 12px 25px rgba(22, 163, 74, 0.35);
+      border-color: #16a34a;
+    }
+
+    .swipe-btn-like:hover {
+      background: #16a34a;
+    }
+
+    .swipe-empty {
+      font-size: 11px;
+      color: #6b7280;
+      padding: 4px 2px;
+    }
+
+	    .swipe-btn-skip:disabled,
+    .swipe-btn-like:disabled {
+      opacity: 0.4;
+      cursor: default;
+      box-shadow: none;
+    }
+
+    .swipe-btn-skip:disabled {
+      background: #020617;
+      color: #6b7280;
+    }
+
+    .swipe-btn-like:disabled {
+      background: #16a34a;
+      color: #022c22;
+    }
+
+
+    .match-card.top-pick {
+      border-color: rgba(34, 197, 94, 0.7);
+      box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.4), 0 16px 40px rgba(22, 163, 74, 0.4);
+      background: radial-gradient(circle at top left, rgba(34, 197, 94, 0.08), #020617);
+    }
+
+    .top-pick-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.7);
+      color: #bbf7d0;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+
+
+    @media (max-width: 900px) {
+      .layout {
+        flex-direction: column;
+      }
+      .card-right {
+        max-height: none;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+  <header class="header">
+    <div class="logo-circle">PM</div>
+    <div>
+      <div class="header-title">PlayMate BF</div>
+      <div class="header-sub">
+        Find Battlefield teammates by region, mode, class, language and mic — then upgrade later for more games.
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- LEFT: PROFILE FORM -->
+    <div class="card card-left">
+      <div class="card-title">Your Battlefield profile</div>
+      <div class="card-sub">Fill this once, then we'll search for the best squadmates for you.</div>
+
+      <form id="matchForm">
+        <label for="username">PlayMate username</label>
+        <input id="username" placeholder="Pouriya" required />
+
+        <div class="small" id="profileStatus">
+          New profile – fill in your details and click “Find matches”.
+        </div>
+        <button type="button" id="profileResetBtn" style="margin: 6px 0 10px; font-size: 11px; padding: 4px 10px; border-radius: 999px; border: 1px solid #374151; background: #020617; color: #9ca3af; cursor: pointer;">
+          Reset profile
+        </button>
+
+
+        <div class="field-row">
+          <div>
+            <label for="region">Region</label>
+            <input id="region" placeholder="e.g. Turkey, Canada West" required />
+          </div>
+          <div>
+            <label for="platform">Platform (optional)</label>
+            <select id="platform">
+              <option value="">Any</option>
+              <option value="PC">PC</option>
+              <option value="PS5">PS5</option>
+              <option value="Xbox">Xbox</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div>
+            <label for="favorite_mode">Favorite mode</label>
+            <select id="favorite_mode" required>
+              <option value="">Select mode...</option>
+              <option value="Conquest">Conquest</option>
+              <option value="Rush">Rush</option>
+              <option value="Breakthrough">Breakthrough</option>
+              <option value="TDM">Team Deathmatch</option>
+            </select>
+          </div>
+          <div>
+            <label for="class_type">Class</label>
+            <select id="class_type" required>
+              <option value="">Select class...</option>
+              <option value="assault">assault</option>
+              <option value="engineer">engineer</option>
+              <option value="support">support</option>
+              <option value="recon">recon</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div>
+            <label for="mic">Mic / Chat</label>
+            <select id="mic" required>
+              <option value="">Select...</option>
+              <option value="voice">Voice</option>
+              <option value="text">Text</option>
+              <option value="both">Both</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+          <div>
+            <label for="languages">Languages</label>
+            <input id="languages" placeholder="en,fa" value="en,fa" />
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; margin-top:4px;">
+          <button type="submit" class="btn-primary">Find matches</button>
+          <div class="tip">
+            Tip: we’ll match on <span style="color:#22c55e;">region &amp; mode</span> first, then class, mic and languages.
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- RIGHT: MATCHES -->
+    <div class="card card-right">
+      <div class="matches-header">
+        <div class="matches-title">Matches</div>
+        <div class="matches-count" id="matchesCount">No matches yet</div>
+      </div>
+      <div class="matches-status" id="statusText">
+        Fill your profile and click <b>Find matches</b> to see your best Battlefield squadmates.
+      </div>
+      <div class="matches-list" id="matchesList"></div>
+	
+	      <!-- SWIPE MODE SECTION -->
+      <div class="swipe-section">
+        <div class="swipe-header">
+          <div class="swipe-title">Swipe mode (beta)</div>
+          <div class="swipe-status" id="swipeStatus">
+            Run a match search, then swipe through your top picks.
+          </div>
+        </div>
+        <div id="swipeCard"></div>
+        <div class="swipe-actions">
+          <button type="button" class="swipe-btn-skip" id="swipeSkipBtn">
+            Skip
+          </button>
+          <button type="button" class="swipe-btn-like" id="swipeLikeBtn">
+            Add to squad
+          </button>
+        </div>
+      </div>
+
+
+      <!-- MY SQUAD SECTION -->
+      <div class="squad-header">
+        <div class="squad-title">My Squad (mutual likes)</div>
+        <button type="button" class="squad-refresh-btn" id="refreshSquadBtn">
+          Refresh
+        </button>
+      </div>
+      <div class="squad-status" id="squadStatus">
+        Mutual likes will appear here once you and other players add each other.
+      </div>
+      <div class="squad-list" id="squadList"></div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+
+      const STORAGE_KEY = "playmate_profile_v1";
+    const form = document.getElementById("matchForm");
+    const matchesList = document.getElementById("matchesList");
+    const statusText = document.getElementById("statusText");
+    const matchesCount = document.getElementById("matchesCount");
+    const profileStatus = document.getElementById("profileStatus");
+    const profileResetBtn = document.getElementById("profileResetBtn");
+
+
+    // state برای swipe
+    let swipeMatches = [];
+    let swipeIndex = 0;
+
+    const swipeCard = document.getElementById("swipeCard");
+    const swipeStatus = document.getElementById("swipeStatus");
+    const swipeSkipBtn = document.getElementById("swipeSkipBtn");
+    const swipeLikeBtn = document.getElementById("swipeLikeBtn");
+
+    let likedUsers = new Set();
+
+    const squadList = document.getElementById("squadList");
+    const squadStatus = document.getElementById("squadStatus");
+    const refreshSquadBtn = document.getElementById("refreshSquadBtn");
+
+     function fillFormFromProfile(profile) {
+      if (!profile) return;
+
+      if (profile.username) {
+        document.getElementById("username").value = profile.username;
+      }
+      if (profile.region) {
+        document.getElementById("region").value = profile.region;
+      }
+      if (profile.platform !== undefined) {
+        document.getElementById("platform").value = profile.platform || "";
+      }
+      if (profile.favorite_mode) {
+        document.getElementById("favorite_mode").value = profile.favorite_mode;
+      }
+      if (profile.class_type) {
+        document.getElementById("class_type").value = profile.class_type;
+      }
+      if (profile.mic) {
+        document.getElementById("mic").value = profile.mic;
+      }
+      if (profile.languages) {
+        document.getElementById("languages").value = profile.languages;
+      }
+    }
+  
+    // تلاش برای لود پروفایل ذخیره‌شده از localStorage
+        try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const profile = JSON.parse(saved);
+        fillFormFromProfile(profile);
+
+        if (profile.username) {
+          profileStatus.textContent = `Profile loaded for "${profile.username}". You can change fields or just click “Find matches”.`;
+          loadLikes(profile.username);
+          loadSquad(profile.username);
+        }
+      } else {
+        // هیچ پروفایل ذخیره‌شده‌ای نیست
+        profileStatus.textContent = 'New profile – fill in your details and click “Find matches”.';
+      }
+    } catch (e) {
+      console.error("Error loading profile from storage:", e);
+      profileStatus.textContent = 'New profile – fill in your details and click “Find matches”.';
+    }
+
+
+
+
+ function scoreClass(score) {
+      if (score >= 80) return "good";
+      if (score >= 50) return "medium";
+      return "low";
+    }
+
+    async function loadLikes(username) {
+      likedUsers = new Set();
+
+      if (!username) return;
+
+      try {
+        const res = await fetch("/my-likes?username=" + encodeURIComponent(username));
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const arr = data.liked_users || [];
+        arr.forEach((name) => {
+          if (name) likedUsers.add(name);
+        });
+      } catch (err) {
+        console.error("loadLikes error:", err);
+      }
+    }
+
+
+
+    // ---------- رندر مچ‌ها ----------
+    function renderMatches(matches) {
+      matchesList.innerHTML = "";
+
+      if (!matches || !matches.length) {
+        matchesCount.textContent = "No matches";
+        return;
+      }
+
+      matchesCount.textContent = `Found ${matches.length} matches`;
+
+      // تعیین Top picks: ۳ تا اولی که حداقل ۶۰٪ باشن
+      const TOP_LIMIT = 3;
+      const MIN_TOP_SCORE = 60;
+      const topIndexes = [];
+      matches.forEach((m, idx) => {
+        if ((m.match_percent || 0) >= MIN_TOP_SCORE && topIndexes.length < TOP_LIMIT) {
+          topIndexes.push(idx);
+        }
+      });
+
+      matches.forEach((m, index) => {
+        const p = m.profile || {};
+        const card = document.createElement("div");
+
+        const isTopPick = topIndexes.includes(index);
+        card.className = "match-card" + (isTopPick ? " top-pick" : "");
+
+        const header = document.createElement("div");
+        header.className = "match-name-row";
+
+        const name = document.createElement("div");
+        name.className = "match-name";
+        name.textContent = m.username;
+
+        header.appendChild(name);
+
+        // اگر Top pick است، badge اضافه کن
+        if (isTopPick) {
+          const topBadge = document.createElement("span");
+          topBadge.className = "top-pick-badge";
+          topBadge.textContent = "Top pick";
+          header.appendChild(topBadge);
+        } else {
+          const meta = document.createElement("div");
+          meta.className = "badge-small";
+          meta.textContent = p.platform ? p.platform : "Any platform";
+          header.appendChild(meta);
+        }
+
+        const badges = document.createElement("div");
+        badges.className = "match-badges";
+
+        if (p.region) {
+          const b = document.createElement("span");
+          b.className = "badge";
+          b.textContent = `Region: ${p.region}`;
+          badges.appendChild(b);
+        }
+        if (p.favorite_mode) {
+          const b = document.createElement("span");
+          b.className = "badge";
+          b.textContent = `Mode: ${p.favorite_mode}`;
+          badges.appendChild(b);
+        }
+        if (p.class_type) {
+          const b = document.createElement("span");
+          b.className = "badge";
+          b.textContent = `Class: ${p.class_type}`;
+          badges.appendChild(b);
+        }
+        if (p.mic) {
+          const b = document.createElement("span");
+          b.className = "badge badge-soft";
+          b.textContent = `Mic: ${p.mic}`;
+          badges.appendChild(b);
+        }
+        if (p.languages) {
+          const b = document.createElement("span");
+          b.className = "badge badge-soft";
+          b.textContent = `Lang: ${p.languages}`;
+          badges.appendChild(b);
+        }
+
+        const score = document.createElement("div");
+        score.className = "match-score " + scoreClass(m.match_percent || 0);
+        score.textContent = `${m.match_percent ?? 0}%`;
+
+        const headerRow = document.createElement("div");
+        headerRow.style.display = "flex";
+        headerRow.style.justifyContent = "space-between";
+        headerRow.style.alignItems = "center";
+        headerRow.appendChild(header);
+        headerRow.appendChild(score);
+
+        const reasonsBox = document.createElement("div");
+        reasonsBox.className = "reasons";
+
+        const title = document.createElement("div");
+        title.className = "reasons-title";
+        title.textContent = "Why this match:";
+
+        const ul = document.createElement("ul");
+        (m.reasons || []).forEach((r) => {
+          const li = document.createElement("li");
+          li.textContent = r;
+          ul.appendChild(li);
+        });
+
+        reasonsBox.appendChild(title);
+        reasonsBox.appendChild(ul);
+
+        const actions = document.createElement("div");
+        actions.className = "match-actions";
+
+        const likeBtn = document.createElement("button");
+        likeBtn.className = "like-btn";
+        likeBtn.dataset.username = m.username;
+
+        const isLiked = likedUsers.has(m.username);
+        if (isLiked) {
+          likeBtn.textContent = "Added ✓";
+          likeBtn.disabled = true;
+        } else {
+          likeBtn.textContent = "Add to squad";
+          likeBtn.disabled = false;
+        }
+
+        actions.appendChild(likeBtn);
+
+        card.appendChild(headerRow);
+        card.appendChild(badges);
+        card.appendChild(reasonsBox);
+        card.appendChild(actions);
+
+        matchesList.appendChild(card);
+      });
+    }
+
+
+        function initSwipe(matches) {
+      const raw = matches || [];
+
+      // ۱) فقط کسایی که already liked نیستن
+      let filtered = raw.filter((m) => !likedUsers.has(m.username));
+
+      // ۲) فقط مچ‌های قوی‌تر (مثلاً ۵۰٪ به بالا)
+      filtered = filtered.filter((m) => (m.match_percent || 0) >= 50);
+
+      swipeMatches = filtered;
+      swipeIndex = 0;
+
+      // اگر هیچ مچ قوی‌ای نبود، وضعیت رو تو swipeStatus توضیح بده
+      if (!swipeMatches.length) {
+        swipeStatus.textContent = "No strong matches to swipe. Try changing region/mode.";
+        swipeCard.innerHTML = "";
+        swipeSkipBtn.disabled = true;
+        swipeLikeBtn.disabled = true;
+        return;
+      }
+
+      // در غیر این صورت کارت اول رو رندر کن
+      renderSwipeCard();
+    }
+
+
+    function renderSwipeCard() {
+      swipeCard.innerHTML = "";
+
+      // 1) اصلاً مچی برای swipe نداریم
+      if (!swipeMatches.length) {
+        swipeStatus.textContent = "No matches to swipe. Run a search first.";
+        swipeSkipBtn.disabled = true;
+        swipeLikeBtn.disabled = true;
+        // کارت خالی بماند (هیچ div داخل swipeCard نگذار)
+        return;
+      }
+
+      // 2) به انتهای deck رسیدیم
+      if (swipeIndex >= swipeMatches.length) {
+        swipeStatus.textContent = "You reached the end of your current swipe deck.";
+        swipeSkipBtn.disabled = true;
+        swipeLikeBtn.disabled = true;
+        // باز هم کارت خالی، فقط متن بالا
+        return;
+      }
+
+      // 3) حالت عادی: کارت داریم
+      swipeSkipBtn.disabled = false;
+      swipeLikeBtn.disabled = false;
+
+      const m = swipeMatches[swipeIndex];
+      const p = m.profile || {};
+
+      swipeStatus.textContent = `Card ${swipeIndex + 1} of ${swipeMatches.length}`;
+
+      const box = document.createElement("div");
+      box.className = "swipe-card-box";
+
+      const mainRow = document.createElement("div");
+      mainRow.className = "swipe-main-row";
+
+      const left = document.createElement("div");
+      const name = document.createElement("div");
+      name.className = "swipe-name";
+      name.textContent = m.username;
+
+      const small = document.createElement("div");
+      small.className = "swipe-small";
+      small.textContent = `Match score: ${m.match_percent ?? 0}%`;
+
+      left.appendChild(name);
+      left.appendChild(small);
+
+      const right = document.createElement("div");
+      right.className = "match-score " + scoreClass(m.match_percent || 0);
+      right.textContent = `${m.match_percent ?? 0}%`;
+
+      mainRow.appendChild(left);
+      mainRow.appendChild(right);
+
+      const tags = document.createElement("div");
+      tags.className = "swipe-tags";
+
+      const tagItems = [
+        p.region ? `Region: ${p.region}` : null,
+        p.favorite_mode ? `Mode: ${p.favorite_mode}` : null,
+        p.class_type ? `Class: ${p.class_type}` : null,
+        p.mic ? `Mic: ${p.mic}` : null,
+        p.languages ? `Lang: ${p.languages}` : null,
+      ].filter(Boolean);
+
+      tagItems.forEach((t) => {
+        const span = document.createElement("span");
+        span.className = "badge badge-soft";
+        span.textContent = t;
+        tags.appendChild(span);
+      });
+
+      const why = document.createElement("div");
+      why.className = "swipe-small";
+      if (m.reasons && m.reasons.length) {
+        why.textContent = "Why this match: " + m.reasons.join(" • ");
+      }
+
+      box.appendChild(mainRow);
+      box.appendChild(tags);
+      box.appendChild(why);
+
+      swipeCard.appendChild(box);
+    }
+
+
+
+    // کلیک روی Skip در swipe mode
+    swipeSkipBtn.addEventListener("click", () => {
+      if (!swipeMatches.length) return;
+      swipeIndex += 1;
+      renderSwipeCard();
+    });
+
+    // کلیک روی Add to squad در swipe mode
+    swipeLikeBtn.addEventListener("click", async () => {
+      if (!swipeMatches.length) return;
+      if (swipeIndex >= swipeMatches.length) return;
+
+      const current = swipeMatches[swipeIndex];
+      const toUser = current.username;
+      const fromUser = document.getElementById("username").value.trim();
+
+      if (!fromUser) {
+        alert("اول PlayMate username خودت را در فرم بالا بنویس.");
+        return;
+      }
+
+      swipeLikeBtn.disabled = true;
+
+      try {
+        const res = await fetch("/like", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from_user: fromUser,
+            to_user: toUser,
+            game: "battlefield",
+          }),
+        });
+
+        if (!res.ok) {
+          alert("Error " + res.status);
+          swipeLikeBtn.disabled = false;
+          return;
+        }
+
+        likedUsers.add(toUser);
+
+        // بعد از لایک، رفرش Squad و برو کارت بعدی
+        loadSquad(fromUser);
+
+        swipeIndex += 1;
+        renderSwipeCard();
+      } catch (err) {
+        console.error(err);
+        alert("Network error");
+        swipeLikeBtn.disabled = false;
+      }
+    });
+
+    profileResetBtn.addEventListener("click", () => {
+      // پاک کردن localStorage
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch (e) {
+        console.error("Error clearing storage:", e);
+      }
+
+      // خالی کردن فرم
+      document.getElementById("username").value = "";
+      document.getElementById("region").value = "";
+      document.getElementById("platform").value = "";
+      document.getElementById("favorite_mode").value = "";
+      document.getElementById("class_type").value = "";
+      document.getElementById("mic").value = "";
+      document.getElementById("languages").value = "";
+
+      // پاک کردن state ها
+      likedUsers = new Set();
+      swipeMatches = [];
+      swipeIndex = 0;
+
+      // پاک کردن UIهای وابسته
+      matchesList.innerHTML = "";
+      matchesCount.textContent = "No matches yet";
+      statusText.textContent = 'Fill your profile and click "Find matches" to see your squadmates.';
+
+      squadList.innerHTML = "";
+      squadStatus.textContent = "Mutual likes will appear here once you and other players add each other.";
+
+      swipeCard.innerHTML = "";
+      swipeStatus.textContent = "Run a match search, then swipe through your top picks.";
+      swipeSkipBtn.disabled = true;
+      swipeLikeBtn.disabled = true;
+
+      profileStatus.textContent = 'New profile – fill in your details and click “Find matches”.';
+    });
+
+
+
+    // ---------- رندر My Squad ----------
+    function renderSquad(squadmates) {
+      squadList.innerHTML = "";
+
+      if (!squadmates || squadmates.length === 0) {
+        squadStatus.textContent = "No mutual squadmates yet.";
+        return;
+      }
+
+      squadStatus.textContent = `You have ${squadmates.length} squadmate(s).`;
+
+      squadmates.forEach((row) => {
+        const name = row.squadmate || row.squadMate || row.squadMateName || row.username || "Unknown";
+
+        const card = document.createElement("div");
+        card.className = "squad-card";
+
+        const main = document.createElement("div");
+        main.className = "squad-main";
+
+        const title = document.createElement("div");
+        title.className = "squad-name";
+        title.textContent = name;
+
+        const tag = document.createElement("div");
+        tag.className = "squad-tag";
+        tag.textContent = "Mutual like – you both added each other";
+
+        main.appendChild(title);
+        main.appendChild(tag);
+
+        const pill = document.createElement("div");
+        pill.className = "squad-pill";
+        pill.textContent = "Ready to squad up";
+
+        card.appendChild(main);
+        card.appendChild(pill);
+
+        squadList.appendChild(card);
+      });
+    }
+
+// ---------- لود کردن My Squad از سرور ----------
+    async function loadSquad(username) {
+      if (!username) {
+        squadStatus.textContent = "Enter your PlayMate username above, then refresh.";
+        squadList.innerHTML = "";
+        return;
+      }
+
+      squadStatus.textContent = "Loading squadmates...";
+      squadList.innerHTML = "";
+
+      try {
+        const res = await fetch("/my-squad?username=" + encodeURIComponent(username));
+        if (!res.ok) {
+          squadStatus.textContent = "Server error: " + res.status;
+          return;
+        }
+
+        const data = await res.json();
+        const rawList = data.squadmates || [];
+
+        // جلوگیری از تکراری‌ها (ShadowWolf فقط یک‌بار)
+        const uniqueList = [];
+        const seen = new Set();
+
+        for (const row of rawList) {
+          const mate = row.squadmate;
+          if (mate && !seen.has(mate)) {
+            seen.add(mate);
+            uniqueList.push(row);   // خود row رو نگه می‌داریم
+          }
+        }
+
+        // حالا فقط لیست یکتا رو رندر کن
+        renderSquad(uniqueList);
+      } catch (err) {
+        console.error(err);
+        squadStatus.textContent = "Error: " + err.message;
+      }
+    }
+
+    // ---------- submit فرم: save profile + match + auto squad refresh ----------
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const payload = {
+        username: document.getElementById("username").value.trim(),
+        platform: document.getElementById("platform").value.trim() || null,
+        region: document.getElementById("region").value.trim(),
+        favorite_mode: document.getElementById("favorite_mode").value,
+        class_type: document.getElementById("class_type").value,
+        mic: document.getElementById("mic").value,
+        languages: document.getElementById("languages").value.trim(),
+      };
+
+      // ذخیره پروفایل در localStorage برای دفعات بعد
+            try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        profileStatus.textContent = `Profile saved for "${payload.username}".`;
+      } catch (e) {
+        console.error("Error saving profile to storage:", e);
+      }
+
+
+
+      if (
+        !payload.username ||
+        !payload.region ||
+        !payload.favorite_mode ||
+        !payload.class_type ||
+        !payload.mic
+      ) {
+        alert("لطفاً فیلدهای الزامی را پر کن.");
+        return;
+      }
+
+      statusText.textContent = "Saving your profile & searching...";
+      matchesList.innerHTML = "";
+      matchesCount.textContent = "";
+
+            try {
+        // 1) ذخیره پروفایل
+        await fetch("/profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }).catch(() => {});
+
+        // 2) لود کردن لایک‌های قبلی این کاربر
+        await loadLikes(payload.username);
+
+        // 3) گرفتن مچ‌ها
+        const res = await fetch("/match", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+
+        if (!res.ok) {
+          statusText.textContent = "Server error: " + res.status;
+          return;
+        }
+
+        const data = await res.json();
+        const matches = data.matches || [];
+
+        if (!matches.length) {
+          statusText.textContent = "No matches found.";
+          renderMatches([]);
+          initSwipe([]);
+        } else {
+          statusText.textContent = `Done. These are your best current matches.`;
+          renderMatches(matches);
+          initSwipe(matches);  // <- اینو اضافه کن
+        }
+
+        // 3) بعد از مچ، خودکار Squad رو هم آپدیت کن
+        loadSquad(payload.username);
+      } catch (err) {
+        console.error(err);
+        statusText.textContent = "Error: " + err.message;
+      }
+    });
+
+    // ---------- کلیک روی Add to squad ----------
+    matchesList.addEventListener("click", async (e) => {
+      const btn = e.target.closest(".like-btn");
+      if (!btn) return;
+
+      const toUser = btn.dataset.username;
+      const fromUser = document.getElementById("username").value.trim();
+
+      if (!fromUser) {
+        alert("اول PlayMate username خودت را در فرم بالا بنویس.");
+        return;
+      }
+
+      btn.disabled = true;
+      const oldText = btn.textContent;
+      btn.textContent = "Added ✓";
+
+      try {
+        const res = await fetch("/like", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from_user: fromUser,
+            to_user: toUser,
+            game: "battlefield",
+          }),
+        });
+
+        if (!res.ok) {
+          btn.disabled = false;
+          btn.textContent = oldText;
+          alert("Error " + res.status);
+          return;
+        }
+
+        // اینجا: موفق بود → توی Set هم ثبتش کن
+        likedUsers.add(toUser);
+
+        // بعد از لایک، squad رو دوباره لود کن (ممکنه mutual بشه)
+        loadSquad(fromUser);
+      } catch (err) {
+        console.error(err);
+        btn.disabled = false;
+        btn.textContent = oldText;
+        alert("Network error");
+      }
+    });
+
+    // ---------- کلیک روی دکمه Refresh My Squad ----------
+    refreshSquadBtn.addEventListener("click", () => {
+      const username = document.getElementById("username").value.trim();
+      loadSquad(username);
+    });
+
+    // هنگام لود اولیه صفحه، swipe را با لیست خالی تنظیم کن
+    initSwipe([]);
+
+
+  });
+</script>
+</body>
+</html>
