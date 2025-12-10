@@ -42,7 +42,12 @@ def parse_languages(lang_str: str) -> list[str]:
 
 # ----------------- روت‌ها -----------------
 @app.get("/", response_class=HTMLResponse)
-def serve_ui():
+def landing_page():
+    html_path = Path(__file__).parent / "landing.html"
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+@app.get("/bf", response_class=HTMLResponse)
+def bf_page():
     html_path = Path(__file__).parent / "ui.html"
     return HTMLResponse(html_path.read_text(encoding="utf-8"))
 

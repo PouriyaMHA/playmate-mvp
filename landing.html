@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>PlayMate BF – Find your Battlefield squad</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #111827 0, #020617 40%, #000 100%);
+      color: #e5e7eb;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .shell {
+      max-width: 960px;
+      width: 100%;
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+      gap: 24px;
+      background: rgba(15, 23, 42, 0.95);
+      border-radius: 24px;
+      border: 1px solid #1f2937;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+      padding: 28px 32px;
+    }
+    @media (max-width: 800px) {
+      .shell {
+        grid-template-columns: minmax(0,1fr);
+        padding: 22px 20px;
+      }
+    }
+    .logo-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .logo-circle {
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #22c55e, #4ade80);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #020617;
+      font-weight: 800;
+      font-size: 14px;
+    }
+    .logo-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .logo-text-main {
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .logo-text-sub {
+      font-size: 11px;
+      color: #9ca3af;
+    }
+    h1 {
+      font-size: 30px;
+      line-height: 1.1;
+      margin-bottom: 10px;
+    }
+    h1 span {
+      color: #22c55e;
+    }
+    .lead {
+      font-size: 14px;
+      color: #9ca3af;
+      margin-bottom: 16px;
+    }
+    ul {
+      list-style: none;
+      margin-bottom: 18px;
+    }
+    li {
+      font-size: 13px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #d1d5db;
+    }
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: #22c55e;
+    }
+    .cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .btn-primary {
+      background: #22c55e;
+      border: none;
+      padding: 11px 26px;
+      border-radius: 999px;
+      color: #020617;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 18px 40px rgba(22, 163, 74, 0.55);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-primary:hover {
+      background: #16a34a;
+      box-shadow: 0 22px 55px rgba(22, 163, 74, 0.6);
+      transform: translateY(-1px);
+    }
+    .btn-primary:active {
+      transform: translateY(0);
+      box-shadow: 0 12px 30px rgba(22, 163, 74, 0.5);
+    }
+    .btn-secondary {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+    .btn-secondary span {
+      color: #e5e7eb;
+      font-weight: 600;
+    }
+    .right-card {
+      background: radial-gradient(circle at top left, #022c22, #020617 55%);
+      border-radius: 18px;
+      border: 1px solid #064e3b;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .tag {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid #1f2937;
+      color: #e5e7eb;
+    }
+    .tag-soft {
+      background: rgba(15, 23, 42, 0.8);
+      color: #9ca3af;
+    }
+    .right-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .right-text {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-bottom: 4px;
+    }
+    .right-small {
+      font-size: 11px;
+      color: #6b7280;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div>
+      <div class="logo-row">
+        <div class="logo-circle">PM</div>
+        <div class="logo-text">
+          <div class="logo-text-main">PlayMate BF · MVP</div>
+          <div class="logo-text-sub">Battlefield squad finder – early preview</div>
+        </div>
+      </div>
+      <h1>
+        Find your <span>Battlefield squad</span><br/>
+        in under 30 seconds.
+      </h1>
+      <p class="lead">
+        PlayMate BF matches Battlefield players by region, favorite mode, class and languages –
+        so you can skip random lobbies and build a real squad.
+      </p>
+      <ul>
+        <li><span class="dot"></span> Smart matching based on <b>region, mode, class, mic and languages</b>.</li>
+        <li><span class="dot"></span> Swipe through your best matches, then <b>add them to your squad</b>.</li>
+        <li><span class="dot"></span> See <b>mutual likes</b> in My Squad when both of you add each other.</li>
+      </ul>
+      <div class="cta-row">
+        <a href="/bf" class="btn-primary">
+          Start matchmaking
+        </a>
+        <div class="btn-secondary">
+          No login yet. <span>Set your Battlefield profile</span> and start matching.
+        </div>
+      </div>
+    </div>
+    <div class="right-card">
+      <div class="right-title">What you’ll see inside</div>
+      <div class="tag-row">
+        <div class="tag">Battlefield profile form</div>
+        <div class="tag">Match list (0–100%)</div>
+        <div class="tag">Swipe mode (beta)</div>
+        <div class="tag">My Squad · mutual likes</div>
+      </div>
+      <div class="right-title">Match inputs</div>
+      <div class="right-text">Region, platform, favorite mode, class, mic, languages.</div>
+      <div class="right-title">Perfect for</div>
+      <div class="right-text">Players tired of random teammates & solo queue.</div>
+      <div class="right-title">Current scope</div>
+      <div class="right-small">
+        Battlefield only. Designed to extend to more games later.
+      </div>
+    </div>
+  </div>
+</body>
+</html>
