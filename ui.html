@@ -713,6 +713,13 @@
 
       const STORAGE_KEY = "playmate_profile_v1";
     const form = document.getElementById("matchForm");
+
+  if (!form) {
+    console.error('matchForm not found. Check <form id="matchForm">');
+    return;
+  }
+
+
     const matchesList = document.getElementById("matchesList");
     const statusText = document.getElementById("statusText");
     const matchesCount = document.getElementById("matchesCount");
@@ -797,7 +804,7 @@
       if (!username) return;
 
       try {
-        const res = await fetch("/my-likes?username=" + encodeURIComponent(username));
+        const res = await fetch("/api/my-likes?username=" + encodeURIComponent(username));
         if (!res.ok) return;
 
         const data = await res.json();
@@ -1090,7 +1097,7 @@
       swipeLikeBtn.disabled = true;
 
       try {
-        const res = await fetch("/like", {
+        const res = await fetch("/api/like", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1204,21 +1211,21 @@
 
 // ---------- لود کردن My Squad از سرور ----------
     async function loadSquad(username) {
-      if (!username) {
-        squadStatus.textContent = "Enter your PlayMate username above, then refresh.";
-        squadList.innerHTML = "";
-        return;
-      }
+  if (!username) {
+    squadStatus.textContent = "Enter your PlayMate username above, then refresh.";
+    squadList.innerHTML = "";
+    return;
+  }
 
       squadStatus.textContent = "Loading squadmates...";
       squadList.innerHTML = "";
 
       try {
-        const res = await fetch("/my-squad?username=" + encodeURIComponent(username));
-        if (!res.ok) {
-          squadStatus.textContent = "Server error: " + res.status;
-          return;
-        }
+    const res = await fetch('/api/my-squad?username=' + encodeURIComponent(username));
+    if (!res.ok) {
+      squadStatus.textContent = 'Server error: ' + res.status;
+      return;
+    }
 
         const data = await res.json();
         const rawList = data.squadmates || [];
@@ -1284,7 +1291,7 @@
 
             try {
         // 1) ذخیره پروفایل
-        await fetch("/profile", {
+        await fetch("/api/profile", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -1294,11 +1301,11 @@
         await loadLikes(payload.username);
 
         // 3) گرفتن مچ‌ها
-        const res = await fetch("/match", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+        const res = await fetch('/api/match', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(payload),
+});
 
 
         if (!res.ok) {
@@ -1328,52 +1335,54 @@
     });
 
     // ---------- کلیک روی Add to squad ----------
-    matchesList.addEventListener("click", async (e) => {
-      const btn = e.target.closest(".like-btn");
-      if (!btn) return;
+    // ---------- کلیک روی Add to squad ----------
+matchesList.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".like-btn");
+  if (!btn) return;
 
-      const toUser = btn.dataset.username;
-      const fromUser = document.getElementById("username").value.trim();
+  const toUser = btn.dataset.username;
+  const fromUser = document.getElementById("username").value.trim();
 
-      if (!fromUser) {
-        alert("اول PlayMate username خودت را در فرم بالا بنویس.");
-        return;
-      }
+  if (!fromUser) {
+    alert("اول PlayMate username خودت را در فرم بالا بنویس.");
+    return;
+  }
 
-      btn.disabled = true;
-      const oldText = btn.textContent;
-      btn.textContent = "Added ✓";
+  btn.disabled = true;
+  const oldText = btn.textContent;
+  btn.textContent = "Added ✓";
 
-      try {
-        const res = await fetch("/like", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            from_user: fromUser,
-            to_user: toUser,
-            game: "battlefield",
-          }),
-        });
-
-        if (!res.ok) {
-          btn.disabled = false;
-          btn.textContent = oldText;
-          alert("Error " + res.status);
-          return;
-        }
-
-        // اینجا: موفق بود → توی Set هم ثبتش کن
-        likedUsers.add(toUser);
-
-        // بعد از لایک، squad رو دوباره لود کن (ممکنه mutual بشه)
-        loadSquad(fromUser);
-      } catch (err) {
-        console.error(err);
-        btn.disabled = false;
-        btn.textContent = oldText;
-        alert("Network error");
-      }
+  try {
+    const res = await fetch("/api/like", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from_user: fromUser,
+        to_user: toUser,
+        game: "battlefield",
+      }),
     });
+
+    if (!res.ok) {
+      btn.disabled = false;
+      btn.textContent = oldText;
+      alert("Error " + res.status);
+      return;
+    }
+
+    // موفق بود → توی Set هم ثبتش کن
+    likedUsers.add(toUser);
+
+    // بعد از لایک، squad رو دوباره لود کن (ممکنه mutual بشه)
+    loadSquad(fromUser);
+  } catch (err) {
+    console.error(err);
+    btn.disabled = false;
+    btn.textContent = oldText;
+    alert("Network error");
+  }
+});
+
 
     // ---------- کلیک روی دکمه Refresh My Squad ----------
     refreshSquadBtn.addEventListener("click", () => {

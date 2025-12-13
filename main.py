@@ -1,10 +1,12 @@
+from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 from fastapi.responses import HTMLResponse
-from fastapi import FastAPI, Query
 from pydantic import BaseModel
+from pathlib import Path
 from supabase import create_client
 from dotenv import load_dotenv
-from pathlib import Path
 import os
+
 
 # لود کردن .env از کنار همین فایل
 env_path = Path(__file__).parent / ".env"
@@ -51,6 +53,11 @@ def bf_page():
     html_path = Path(__file__).parent / "ui.html"
     return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
+@app.get("/ui")
+def ui_redirect():
+    return RedirectResponse(url="/bf", status_code=302)
+
+
 @app.get("/profile-full")
 def profile_full(username: str):
     result = supabase.table("profiles").select("*").eq("username", username).execute()
@@ -62,255 +69,11 @@ def profile_full(username: str):
 def health():
     return {"status": "ok"}
 
-@app.get("/", response_class=HTMLResponse)
-def landing():
-    return """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>PlayMate BF – Find your Battlefield squad</title>
-  <style>
-    * {
-      box-sizing: border-box;
-    }
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: radial-gradient(circle at top, #111827 0, #020617 40%, #000 100%);
-      color: #e5e7eb;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .shell {
-      max-width: 900px;
-      width: 100%;
-      padding: 24px;
-    }
-    .card-landing {
-      background: rgba(15, 23, 42, 0.98);
-      border-radius: 20px;
-      border: 1px solid #1f2933;
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
-      padding: 28px 28px 22px;
-      display: grid;
-      grid-template-columns: minmax(0, 3fr) minmax(0, 2.2fr);
-      gap: 24px;
-    }
-    .logo-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      background: #020617;
-      border: 1px solid #1f2937;
-      font-size: 11px;
-      color: #9ca3af;
-      margin-bottom: 10px;
-    }
-    .logo-circle {
-      width: 22px;
-      height: 22px;
-      border-radius: 999px;
-      background: linear-gradient(135deg, #22c55e, #4ade80);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #020617;
-      font-weight: 800;
-      font-size: 11px;
-    }
-    h1 {
-      font-size: 30px;
-      margin: 0 0 6px;
-    }
-    .headline-highlight {
-      color: #4ade80;
-    }
-    .sub {
-      font-size: 13px;
-      color: #9ca3af;
-      margin-bottom: 18px;
-      max-width: 480px;
-    }
-    .points {
-      font-size: 12px;
-      color: #9ca3af;
-      display: grid;
-      gap: 6px;
-      margin-bottom: 20px;
-    }
-    .point-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .point-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 999px;
-      background: #4ade80;
-    }
-    .cta-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-    .btn-main {
-      background: #22c55e;
-      color: #020617;
-      border-radius: 999px;
-      padding: 10px 24px;
-      font-weight: 700;
-      font-size: 14px;
-      border: none;
-      cursor: pointer;
-      box-shadow: 0 20px 45px rgba(22, 163, 74, 0.6);
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .btn-main:hover {
-      background: #16a34a;
-      transform: translateY(-1px);
-      box-shadow: 0 24px 55px rgba(22, 163, 74, 0.7);
-    }
-    .btn-main:active {
-      transform: translateY(0);
-      box-shadow: 0 16px 35px rgba(22, 163, 74, 0.5);
-    }
-    .btn-arrow {
-      font-size: 14px;
-    }
-    .cta-caption {
-      font-size: 11px;
-      color: #9ca3af;
-    }
-    .right-col {
-      border-radius: 16px;
-      background: radial-gradient(circle at top, rgba(34, 197, 94, 0.16), transparent 55%),
-                  linear-gradient(145deg, #020617, #020617);
-      border: 1px solid #1f2933;
-      padding: 14px 14px 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      font-size: 11px;
-    }
-    .right-title {
-      font-size: 12px;
-      font-weight: 600;
-      color: #e5e7eb;
-    }
-    .right-pill-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-    .right-pill {
-      padding: 3px 9px;
-      border-radius: 999px;
-      border: 1px solid #1f2937;
-      background: #020617;
-      color: #9ca3af;
-      font-size: 11px;
-    }
-    .right-meta {
-      margin-top: 6px;
-      display: grid;
-      gap: 3px;
-    }
-    .meta-line {
-      color: #6b7280;
-    }
-    .meta-strong {
-      color: #e5e7eb;
-      font-weight: 500;
-    }
-    @media (max-width: 780px) {
-      .card-landing {
-        grid-template-columns: minmax(0, 1fr);
-      }
-      .shell {
-        padding: 16px;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="shell">
-    <div class="card-landing">
-      <div>
-        <div class="logo-pill">
-          <div class="logo-circle">PM</div>
-          <span>PlayMate BF · MVP</span>
-        </div>
-        <h1>
-          Find your <span class="headline-highlight">Battlefield squad</span><br />
-          in under 30 seconds.
-        </h1>
-        <p class="sub">
-          PlayMate BF matches Battlefield players by region, favorite mode, class, language and mic – 
-          so you can skip random lobbies and build a real squad.
-        </p>
-        <div class="points">
-          <div class="point-row">
-            <div class="point-dot"></div>
-            <div>Smart matching based on region, mode, class, mic and languages.</div>
-          </div>
-          <div class="point-row">
-            <div class="point-dot"></div>
-            <div>Swipe through your best matches, then add them to your squad.</div>
-          </div>
-          <div class="point-row">
-            <div class="point-dot"></div>
-            <div>See mutual likes in <b>My Squad</b> when both of you add each other.</div>
-          </div>
-        </div>
-        <div class="cta-row">
-          <button class="btn-main" onclick="window.location.href='/ui'">
-            Start matchmaking
-            <span class="btn-arrow">→</span>
-          </button>
-          <div class="cta-caption">
-            No login yet. Just set your Battlefield profile and start matching.
-          </div>
-        </div>
-      </div>
-      <div class="right-col">
-        <div class="right-title">What you’ll see inside</div>
-        <div class="right-pill-row">
-          <div class="right-pill">Battlefield profile form</div>
-          <div class="right-pill">Match list (0–100%)</div>
-          <div class="right-pill">Swipe mode (beta)</div>
-          <div class="right-pill">My Squad · mutual likes</div>
-        </div>
-        <div class="right-meta">
-          <div class="meta-line">
-            <span class="meta-strong">Match inputs:</span> region, platform, favorite mode, class, mic, languages.
-          </div>
-          <div class="meta-line">
-            <span class="meta-strong">Perfect for:</span> players tired of random teammates & solo queue.
-          </div>
-          <div class="meta-line">
-            <span class="meta-strong">Current scope:</span> Battlefield only. Designed to extend to more games later.
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</body>
-</html>
-    """
 
 
-@app.post(f"{API_PREFIX}/profile")
+@app.post("/api/profile")
 def create_profile(profile: GamerProfile):
+
     result = supabase.table("profiles").insert({
         "username": profile.username,
         "platform": profile.platform,
@@ -330,8 +93,9 @@ def list_profiles():
     return {"count": len(result.data), "data": result.data}
 
 
-@app.post(f"{API_PREFIX}/match")
+@app.post("/api/match")
 def match_players(current: GamerProfile):
+
     # گرفتن همه‌ی پروفایل‌ها از دیتابیس
     result = supabase.table("profiles").select("*").execute()
     players = result.data or []
@@ -406,8 +170,9 @@ class LikeRequest(BaseModel):
     game: str | None = "battlefield"
 
 
-@app.post(f"{API_PREFIX}/like")
+@app.post("/api/like")
 def add_like(like: LikeRequest):
+
     payload = {
         "from_user": like.from_user,
         "to_user": like.to_user,
@@ -425,11 +190,12 @@ def add_like(like: LikeRequest):
         # هر خطای دیگه رو هم برگردونیم برای دیباگ
         return {"status": "error", "error": str(e)}
 
-from typing import List
+from typing import List, Dict
+from fastapi import Query
 
-@app.get(f"{API_PREFIX}/my-squad")
+@app.get("/api/my-squad")
 def my_squad(username: str = Query(..., alias="username")):
-    # مثال: GET /my-squad?username=Pouriya
+    # GET /api/my-squad?username=Pouriya
     result = supabase.rpc(
         "find_mutual_likes",
         {"user_input": username}
