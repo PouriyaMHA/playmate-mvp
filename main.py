@@ -214,7 +214,7 @@ def my_squad(username: str = Query(..., alias="username")):
         ]
     }
 
-@app.get("/my-likes")
+@app.get("/api/my-likes")
 def my_likes(username: str, game: str = "battlefield"):
     result = (
         supabase
