@@ -614,20 +614,33 @@
 
 
         <div class="field-row">
-          <div>
-            <label for="region">Region</label>
-            <input id="region" placeholder="e.g. Turkey, Canada West" required />
-          </div>
-          <div>
-            <label for="platform">Platform (optional)</label>
-            <select id="platform">
-              <option value="">Any</option>
-              <option value="PC">PC</option>
-              <option value="PS5">PS5</option>
-              <option value="Xbox">Xbox</option>
-            </select>
-          </div>
-        </div>
+  <div>
+    <label for="region">Region</label>
+    <input id="region" placeholder="e.g. Turkey, Canada West" required />
+  </div>
+  <div>
+    <label for="city">City</label>
+    <input id="city" placeholder="e.g. Vancouver" required />
+
+  </div>
+</div>
+
+<div class="field-row">
+  <div>
+    <label for="platform">Platform (optional)</label>
+    <select id="platform">
+      <option value="">Any</option>
+      <option value="PC">PC</option>
+      <option value="PS5">PS5</option>
+      <option value="Xbox">Xbox</option>
+    </select>
+  </div>
+  <div>
+    <label for="in_game_username">Battlefield username (hidden until mutual)</label>
+    <input id="in_game_username" placeholder="e.g. BF_Pouriya" />
+  </div>
+</div>
+
 
         <div class="field-row">
           <div>
@@ -638,6 +651,7 @@
               <option value="Rush">Rush</option>
               <option value="Breakthrough">Breakthrough</option>
               <option value="TDM">Team Deathmatch</option>
+	<option value="Redsec">Redsec</option>
             </select>
           </div>
           <div>
@@ -877,6 +891,14 @@ function setMatchesStatus(text) {
       if (profile.languages) {
         document.getElementById("languages").value = profile.languages;
       }
+         if (profile.city !== undefined) {
+  document.getElementById("city").value = profile.city || "";
+}
+if (profile.in_game_username !== undefined) {
+  document.getElementById("in_game_username").value = profile.in_game_username || "";
+}
+
+
     }
   
     // تلاش برای لود پروفایل ذخیره‌شده از localStorage
@@ -1255,13 +1277,16 @@ function setMatchesStatus(text) {
       }
 
       // خالی کردن فرم
-      document.getElementById("username").value = "";
-      document.getElementById("region").value = "";
-      document.getElementById("platform").value = "";
-      document.getElementById("favorite_mode").value = "";
-      document.getElementById("class_type").value = "";
-      document.getElementById("mic").value = "";
-      document.getElementById("languages").value = "";
+document.getElementById("username").value = "";
+document.getElementById("region").value = "";
+document.getElementById("city").value = "";
+document.getElementById("platform").value = "";
+document.getElementById("in_game_username").value = "";
+document.getElementById("favorite_mode").value = "";
+document.getElementById("class_type").value = "";
+document.getElementById("mic").value = "";
+document.getElementById("languages").value = "";
+
 
       // پاک کردن state ها
       likedUsers = new Set();
@@ -1271,7 +1296,7 @@ function setMatchesStatus(text) {
       // پاک کردن UIهای وابسته
       matchesList.innerHTML = "";
       matchesCount.textContent = "No matches yet";
-      statusText.textContent = 'Fill your profile and click "Find matches" to see your squadmates.';
+      setMatchesStatus('Fill your profile and click <b>Find matches</b> to see your squadmates.');
 
       squadList.innerHTML = "";
       setSquadStatus("Mutual likes will appear here once you and other players add each other.");
@@ -1387,14 +1412,26 @@ form.addEventListener("submit", async (e) => {
 
   try {
     const payload = {
-      username: document.getElementById("username").value.trim(),
-      platform: document.getElementById("platform").value.trim() || null,
-      region: document.getElementById("region").value.trim(),
-      favorite_mode: document.getElementById("favorite_mode").value,
-      class_type: document.getElementById("class_type").value,
-      mic: document.getElementById("mic").value,
-      languages: document.getElementById("languages").value.trim(),
-    };
+  username: document.getElementById("username").value.trim(),
+  game: "battlefield",
+
+  in_game_username: document.getElementById("in_game_username").value.trim() || null,
+
+  platform: document.getElementById("platform").value.trim() || null,
+  region: document.getElementById("region").value.trim(),
+  city: document.getElementById("city").value.trim() || null,
+
+  favorite_mode: document.getElementById("favorite_mode").value,
+  class_type: document.getElementById("class_type").value,
+  mic: document.getElementById("mic").value,
+  languages: document.getElementById("languages").value.trim(),
+
+  // فعلاً خالی، بعداً در Profile page اضافه می‌کنیم
+  profile_pic_url: null,
+  wallpaper_url: null,
+  game_meta: {},
+};
+
 
     // ذخیره پروفایل در localStorage برای دفعات بعد
     try {
@@ -1405,15 +1442,16 @@ form.addEventListener("submit", async (e) => {
     }
 
     if (
-      !payload.username ||
-      !payload.region ||
-      !payload.favorite_mode ||
-      !payload.class_type ||
-      !payload.mic
-    ) {
-      alert("لطفاً فیلدهای الزامی را پر کن.");
-      return; // finally اجرا می‌شود و دکمه آزاد می‌شود
-    }
+  !payload.username ||
+  !payload.region ||
+  !payload.city ||
+  !payload.favorite_mode ||
+  !payload.class_type ||
+  !payload.mic
+) {
+  alert("Please fill in all required fields before continuing.");
+  return;
+}
 
     // ---- منطق اصلی (همان قبلی شما) ----
     setMatchesStatus("Saving your profile & searching...");

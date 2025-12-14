@@ -26,13 +26,19 @@ API_PREFIX = "/api"
 
 # ----------------- مدل پروفایل -----------------
 class GamerProfile(BaseModel):
-    username: str
-    platform: str | None = None   # اختیاری، فقط برای نمایش
-    region: str                   # Turkey / EU West / NA West ...
-    favorite_mode: str            # Conquest / Rush / Breakthrough ...
-    class_type: str               # assault / engineer / support / recon
-    mic: str                      # voice / text / both / none
-    languages: str                # مثل: "en,fa" یا "en" یا "fa,tr"
+    username: str                      # PlayMate username
+    game: str | None = "battlefield"   # per-game profile
+    in_game_username: str | None = None  # hidden until mutual
+    platform: str | None = None
+    region: str
+    city: str 
+    favorite_mode: str
+    class_type: str
+    mic: str
+    languages: str
+    profile_pic_url: str | None = None
+    wallpaper_url: str | None = None
+    game_meta: dict | None = None      # JSON for future
 
 
 # ----------------- توابع کمکی -----------------
@@ -71,22 +77,38 @@ def health():
 
 
 
+from datetime import datetime, timezone
+
 @app.post("/api/profile")
 def create_profile(profile: GamerProfile):
+    game = (profile.game or "battlefield").lower().strip()
+
     payload = {
         "username": profile.username,
+        "game": game,
+
+        "in_game_username": profile.in_game_username,
         "platform": profile.platform,
         "region": profile.region,
+        "city": profile.city,
+
         "favorite_mode": profile.favorite_mode,
         "class_type": profile.class_type,
         "mic": profile.mic,
         "languages": profile.languages,
+
+        "profile_pic_url": profile.profile_pic_url,
+        "wallpaper_url": profile.wallpaper_url,
+        "game_meta": profile.game_meta or {},
+
+        "last_active": datetime.now(timezone.utc).isoformat(),
     }
 
+    # Upsert بر اساس (username, game)
     result = (
         supabase
         .table("profiles")
-        .upsert(payload, on_conflict="username")
+        .upsert(payload, on_conflict="username,game")
         .execute()
     )
 
@@ -101,72 +123,106 @@ def list_profiles():
 
 @app.post("/api/match")
 def match_players(current: GamerProfile):
+    game = (current.game or "battlefield").lower().strip()
 
-    # گرفتن همه‌ی پروفایل‌ها از دیتابیس
-    result = supabase.table("profiles").select("*").execute()
+    # فقط پروفایل‌های همین بازی
+    result = (
+        supabase
+        .table("profiles")
+        .select("*")
+        .eq("game", game)
+        .execute()
+    )
     players = result.data or []
 
     current_langs = parse_languages(current.languages)
     voice_set = {"voice", "both"}
 
     matches = []
-
     for p in players:
-        # خودش رو از لیست حذف کن
         if p.get("username") == current.username:
             continue
 
         score = 0
         reasons: list[str] = []
 
-        # 1) Region
+        # الگوریتم فعلی فعلاً می‌ماند (Step 6 تغییرش می‌دهیم)
         if p.get("region") == current.region:
             score += 40
             reasons.append(f"Region match: {current.region}")
 
-        # 2) favorite_mode
         if p.get("favorite_mode") == current.favorite_mode:
             score += 25
             reasons.append(f"Same favorite mode: {current.favorite_mode}")
 
-        # 3) class_type
         if p.get("class_type") == current.class_type:
             score += 15
             reasons.append(f"Same class: {current.class_type}")
 
-        # 4) languages
         other_langs = parse_languages(p.get("languages", ""))
         common_langs = sorted(set(current_langs) & set(other_langs))
         if common_langs:
             score += 10
             reasons.append("Common languages: " + ", ".join(common_langs))
 
-        # 5) mic
         mic_current = (current.mic or "").lower()
         mic_other = (p.get("mic") or "").lower()
-
         if mic_current in voice_set and mic_other in voice_set:
             score += 10
             reasons.append("Both can use voice chat")
 
-        # مطمئن شو از 0 تا 100 بیرون نره (برای احتیاط)
         if score > 100:
             score = 100
+
+        # پروفایل طرف مقابل برای UI – ولی بدون in_game_username
+        safe_profile = dict(p)
+        safe_profile.pop("in_game_username", None)
 
         matches.append({
             "username": p.get("username"),
             "match_percent": score,
             "reasons": reasons,
-            "profile": p,   # کل پروفایل طرف مقابل
+            "profile": safe_profile,
         })
 
-    # مرتب‌سازی بر اساس درصد مچ
     matches.sort(key=lambda x: x["match_percent"], reverse=True)
 
     return {
         "target_user": current.username,
-        "matches": matches[:10]  # حداکثر ۱۰ تا
+        "game": game,
+        "matches": matches[:10],
     }
+
+
+@app.get("/api/my-squad-details")
+def my_squad_details(username: str, game: str = "battlefield"):
+    game = (game or "battlefield").lower().strip()
+
+    # 1) mutuals از RPC
+    result = supabase.rpc("find_mutual_likes", {"user_input": username}).execute()
+    rows = result.data or []
+    mates = [r.get("squadmate") for r in rows if r.get("squadmate")]
+
+    if not mates:
+        return {"username": username, "game": game, "squadmates": []}
+
+    # 2) گرفتن پروفایل‌های همین game برای mutualها
+    prof = (
+        supabase
+        .table("profiles")
+        .select("username,in_game_username,profile_pic_url,wallpaper_url,region,city,languages,mic,favorite_mode")
+        .eq("game", game)
+        .in_("username", mates)
+        .execute()
+    )
+
+    # اینجا مجازیم in_game_username را بدهیم چون mutual هستند
+    return {
+        "username": username,
+        "game": game,
+        "squadmates": prof.data or []
+    }
+
 
 
 # ----------------- مدل لایک / افزودن اسکادمیت -----------------
@@ -241,6 +297,62 @@ def my_likes(username: str, game: str = "battlefield"):
     return {
         "username": username,
         "liked_users": [r["to_user"] for r in rows]
+    }
+@app.get("/api/meta/{game}")
+def get_game_meta(game: str):
+    game = game.lower().strip()
+
+    if game != "battlefield":
+        return {"error": "Unsupported game"}
+
+    return {
+        "game": "battlefield",
+
+        "regions": [
+            {
+                "id": "na-west",
+                "label": "North America West",
+                "cities": ["Vancouver", "Seattle", "San Francisco", "Los Angeles"]
+            },
+            {
+                "id": "na-east",
+                "label": "North America East",
+                "cities": ["Toronto", "New York", "Montreal"]
+            },
+            {
+                "id": "eu-west",
+                "label": "Europe West",
+                "cities": ["London", "Paris", "Amsterdam"]
+            },
+            {
+                "id": "eu-central",
+                "label": "Europe Central",
+                "cities": ["Frankfurt", "Berlin", "Vienna"]
+            },
+            {
+                "id": "middle-east",
+                "label": "Middle East",
+                "cities": ["Istanbul", "Dubai"]
+            }
+        ],
+
+        "languages": [
+            { "code": "en", "label": "English" },
+            { "code": "fa", "label": "Persian" },
+            { "code": "tr", "label": "Turkish" },
+            { "code": "de", "label": "German" },
+            { "code": "fr", "label": "French" },
+            { "code": "ar", "label": "Arabic" }
+        ],
+
+       "favorite_modes": [
+    "Conquest",
+    "Rush",
+    "Breakthrough",
+    "TDM",
+    "Redsec"
+]
+
     }
 
 
