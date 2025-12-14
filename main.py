@@ -298,7 +298,7 @@ def my_likes(username: str, game: str = "battlefield"):
         "username": username,
         "liked_users": [r["to_user"] for r in rows]
     }
-@app.get("/api/meta/{game}")
+@app.get(f"{API_PREFIX}/meta/{game}")
 def get_game_meta(game: str):
     game = game.lower().strip()
 

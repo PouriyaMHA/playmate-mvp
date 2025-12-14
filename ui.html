@@ -960,12 +960,21 @@ if (profile.in_game_username !== undefined) {
         (async function init() {
   // 1) meta first (dropdown ها باید قبل از set کردن value آماده باشند)
   try {
-    await loadMeta();
-  } catch (err) {
-    console.error("Meta load error:", err);
-    setMatchesStatus("Failed to load form options. Please refresh the page.");
-    // فرم بدون meta ناقص می‌شود، ولی صفحه کرش نمی‌کند
-  }
+  await loadMeta();
+} catch (err) {
+  console.error("Meta load error:", err);
+
+  // Disable inputs to prevent broken submissions
+  if (regionEl) regionEl.disabled = true;
+  if (cityEl) cityEl.disabled = true;
+  if (favoriteModeEl) favoriteModeEl.disabled = true;
+
+  setMatchesStatus(
+    "Failed to load form options. Please refresh the page. " +
+    "If the issue persists, the server may be unavailable."
+  );
+}
+
 
   // 2) load saved profile after meta
   try {
@@ -1083,25 +1092,37 @@ regionEl.addEventListener("change", () => {
 
 
 async function loadMeta() {
-  const res = await fetch(`/api/meta/${encodeURIComponent(GAME)}`);
-  if (!res.ok) throw new Error("Failed to load meta (HTTP " + res.status + ")");
+  const res = await fetch(`/api/meta/${encodeURIComponent(GAME)}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to load options (HTTP " + res.status + ")");
 
-  META = await res.json();
+  const json = await res.json();
+
+  // اگر سرور به هر دلیل error برگردوند، ساکت خالی نذار
+  if (json && json.error) {
+    throw new Error(json.error);
+  }
+
+  META = json;
 
   // Regions
   const regionOptions = (META.regions || []).map((r) => ({ value: r.id, label: r.label }));
   setSelectOptions(regionEl, regionOptions, "Select region...");
 
-  // Favorite modes (strings)
+  // Favorite modes
   const modeOptions = (META.favorite_modes || []).map((m) => ({ value: m, label: m }));
   setSelectOptions(favoriteModeEl, modeOptions, "Select mode...");
 
-  // Languages
+  // Languages multi-select
   buildLanguagesMulti(META.languages || []);
 
-  // City: default disabled until region selected
+  // City depends on region
   cityEl.disabled = true;
   setSelectOptions(cityEl, [], "Select city...");
+
+  // اگر meta خالی بود، به کاربر بگو مشکل داریم
+  if (!regionOptions.length) {
+    setMatchesStatus("Form options failed to load. Please refresh the page.");
+  }
 }
 
 
