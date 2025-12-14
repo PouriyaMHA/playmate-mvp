@@ -42,6 +42,35 @@
       font-size: 14px;
     }
 
+.lang-grid{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap:8px;
+  margin-bottom: 12px;
+}
+
+.lang-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 10px;
+  border:1px solid #1f2937;
+  border-radius:12px;
+  background:#020617;
+  cursor:pointer;
+  font-size:13px;
+  color:#e5e7eb;
+}
+
+.lang-item input{
+  width:auto;
+  margin:0;
+}
+
+
+
+
+
     .header-title {
       font-size: 26px;
       font-weight: 700;
@@ -616,11 +645,15 @@
         <div class="field-row">
   <div>
     <label for="region">Region</label>
-    <input id="region" placeholder="e.g. Turkey, Canada West" required />
-  </div>
-  <div>
-    <label for="city">City</label>
-    <input id="city" placeholder="e.g. Vancouver" required />
+<select id="region" required>
+  <option value="">Select region...</option>
+</select>
+
+<label for="city">City</label>
+<select id="city" required disabled>
+  <option value="">Select city...</option>
+</select>
+
 
   </div>
 </div>
@@ -678,8 +711,19 @@
             </select>
           </div>
           <div>
-            <label for="languages">Languages</label>
-            <input id="languages" placeholder="en,fa" value="en,fa" />
+
+<label for="languagesMulti">Languages</label>
+
+<!-- این input فقط برای نگه داشتن CSV نهایی است و در payload استفاده می‌شود -->
+<input id="languages" type="hidden" value="" />
+
+<!-- UI multi-select -->
+<div id="languagesMulti" class="lang-grid"></div>
+
+<div class="small" style="margin-top:6px; color:#9ca3af;">
+  Select all languages you can speak. Matching will score higher if at least one overlaps.
+</div>
+
           </div>
         </div>
 
@@ -755,6 +799,16 @@
 
 const findMatchesBtn = document.getElementById("findMatchesBtn");
 
+const GAME = "battlefield";
+
+const regionEl = document.getElementById("region");
+const cityEl = document.getElementById("city");
+const favoriteModeEl = document.getElementById("favorite_mode");
+
+const languagesMultiEl = document.getElementById("languagesMulti");
+const languagesHiddenEl = document.getElementById("languages");
+
+let META = null;
 
 
     const matchesList = document.getElementById("matchesList");
@@ -874,8 +928,9 @@ function setMatchesStatus(text) {
         document.getElementById("username").value = profile.username;
       }
       if (profile.region) {
-        document.getElementById("region").value = profile.region;
-      }
+  regionEl.value = profile.region;          // region = regionId مثل "na-west"
+  populateCitiesForRegion(regionEl.value);  // cities را بر اساس region پر کن
+}
       if (profile.platform !== undefined) {
         document.getElementById("platform").value = profile.platform || "";
       }
@@ -888,11 +943,11 @@ function setMatchesStatus(text) {
       if (profile.mic) {
         document.getElementById("mic").value = profile.mic;
       }
-      if (profile.languages) {
-        document.getElementById("languages").value = profile.languages;
-      }
-         if (profile.city !== undefined) {
-  document.getElementById("city").value = profile.city || "";
+      if (profile.languages !== undefined) {
+  setLanguagesChecked(profile.languages);   // languages = "en,fa"
+}
+         if (profile.city) {
+  cityEl.value = profile.city;              // city = "Vancouver"
 }
 if (profile.in_game_username !== undefined) {
   document.getElementById("in_game_username").value = profile.in_game_username || "";
@@ -902,30 +957,152 @@ if (profile.in_game_username !== undefined) {
     }
   
     // تلاش برای لود پروفایل ذخیره‌شده از localStorage
-        try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const profile = JSON.parse(saved);
-        fillFormFromProfile(profile);
+        (async function init() {
+  // 1) meta first (dropdown ها باید قبل از set کردن value آماده باشند)
+  try {
+    await loadMeta();
+  } catch (err) {
+    console.error("Meta load error:", err);
+    setMatchesStatus("Failed to load form options. Please refresh the page.");
+    // فرم بدون meta ناقص می‌شود، ولی صفحه کرش نمی‌کند
+  }
 
-        if (profile.username) {
-          setProfileStatus(`Profile loaded for "${profile.username}". You can change fields or just click “Find matches”.`);
+  // 2) load saved profile after meta
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const profile = JSON.parse(saved);
+      fillFormFromProfile(profile);
 
-
-          loadLikes(profile.username);
-          loadSquad(profile.username);
-        }
-      } else {
-        // هیچ پروفایل ذخیره‌شده‌ای نیست
-        setProfileStatus('New profile – fill in your details and click “Find matches”.');
-
+      if (profile.username) {
+        setProfileStatus(
+          `Profile loaded for "${profile.username}". You can update fields or click "Find matches".`
+        );
+        loadLikes(profile.username);
+        loadSquad(profile.username);
       }
-    } catch (e) {
-      console.error("Error loading profile from storage:", e);
-      setProfileStatus("New profile – fill in your details and click “Find matches”.");
+    } else {
+      setProfileStatus('New profile — fill in your details and click "Find matches".');
     }
+  } catch (e) {
+    console.error("Error loading profile from storage:", e);
+    setProfileStatus('New profile — fill in your details and click "Find matches".');
+  }
+})();
 
 
+
+function setSelectOptions(selectEl, options, placeholderText) {
+  selectEl.innerHTML = "";
+  const ph = document.createElement("option");
+  ph.value = "";
+  ph.textContent = placeholderText || "Select...";
+  selectEl.appendChild(ph);
+
+  options.forEach((opt) => {
+    const o = document.createElement("option");
+    o.value = opt.value;
+    o.textContent = opt.label;
+    selectEl.appendChild(o);
+  });
+}
+
+function buildLanguagesMulti(languages) {
+  languagesMultiEl.innerHTML = "";
+
+  languages.forEach((lang) => {
+    const label = document.createElement("label");
+    label.className = "lang-item";
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = lang.code;
+
+    const span = document.createElement("span");
+    span.textContent = lang.label;
+
+    cb.addEventListener("change", syncLanguagesHidden);
+
+    label.appendChild(cb);
+    label.appendChild(span);
+    languagesMultiEl.appendChild(label);
+  });
+
+  // initial sync
+  syncLanguagesHidden();
+}
+
+function syncLanguagesHidden() {
+  const checked = Array.from(languagesMultiEl.querySelectorAll('input[type="checkbox"]:checked'))
+    .map((x) => x.value.trim().toLowerCase())
+    .filter(Boolean);
+
+  languagesHiddenEl.value = checked.join(",");
+}
+
+function setLanguagesChecked(csv) {
+  const set = new Set(
+    (csv || "")
+      .split(",")
+      .map((x) => x.trim().toLowerCase())
+      .filter(Boolean)
+  );
+
+  Array.from(languagesMultiEl.querySelectorAll('input[type="checkbox"]')).forEach((cb) => {
+    cb.checked = set.has(cb.value.toLowerCase());
+  });
+
+  syncLanguagesHidden();
+}
+
+function findRegionById(regionId) {
+  if (!META || !META.regions) return null;
+  return META.regions.find((r) => r.id === regionId) || null;
+}
+
+function populateCitiesForRegion(regionId) {
+  const r = findRegionById(regionId);
+
+  if (!r) {
+    cityEl.disabled = true;
+    setSelectOptions(cityEl, [], "Select city...");
+    return;
+  }
+
+  const cityOptions = (r.cities || []).map((c) => ({ value: c, label: c }));
+  cityEl.disabled = false;
+  setSelectOptions(cityEl, cityOptions, "Select city...");
+}
+
+regionEl.addEventListener("change", () => {
+  populateCitiesForRegion(regionEl.value);
+});
+
+
+
+
+
+async function loadMeta() {
+  const res = await fetch(`/api/meta/${encodeURIComponent(GAME)}`);
+  if (!res.ok) throw new Error("Failed to load meta (HTTP " + res.status + ")");
+
+  META = await res.json();
+
+  // Regions
+  const regionOptions = (META.regions || []).map((r) => ({ value: r.id, label: r.label }));
+  setSelectOptions(regionEl, regionOptions, "Select region...");
+
+  // Favorite modes (strings)
+  const modeOptions = (META.favorite_modes || []).map((m) => ({ value: m, label: m }));
+  setSelectOptions(favoriteModeEl, modeOptions, "Select mode...");
+
+  // Languages
+  buildLanguagesMulti(META.languages || []);
+
+  // City: default disabled until region selected
+  cityEl.disabled = true;
+  setSelectOptions(cityEl, [], "Select city...");
+}
 
 
  function scoreClass(score) {
@@ -1286,6 +1463,20 @@ document.getElementById("favorite_mode").value = "";
 document.getElementById("class_type").value = "";
 document.getElementById("mic").value = "";
 document.getElementById("languages").value = "";
+document.getElementById("username").value = "";
+document.getElementById("in_game_username").value = "";
+document.getElementById("platform").value = "";
+
+regionEl.value = "";
+populateCitiesForRegion("");   // city را disable + خالی می‌کند
+cityEl.value = "";
+
+favoriteModeEl.value = "";
+document.getElementById("class_type").value = "";
+document.getElementById("mic").value = "";
+
+// languages: همه unchecked + hidden پاک
+setLanguagesChecked("");
 
 
       // پاک کردن state ها
@@ -1418,13 +1609,25 @@ form.addEventListener("submit", async (e) => {
   in_game_username: document.getElementById("in_game_username").value.trim() || null,
 
   platform: document.getElementById("platform").value.trim() || null,
-  region: document.getElementById("region").value.trim(),
-  city: document.getElementById("city").value.trim() || null,
 
-  favorite_mode: document.getElementById("favorite_mode").value,
+  // regionId از dropdown
+  region: regionEl.value.trim(),
+
+  // city از dropdown (اجباری)
+  city: cityEl.value.trim(),
+
+  favorite_mode: favoriteModeEl.value,
   class_type: document.getElementById("class_type").value,
   mic: document.getElementById("mic").value,
-  languages: document.getElementById("languages").value.trim(),
+
+  // از hidden input که با multi-select sync می‌شود
+  languages: languagesHiddenEl.value.trim(),
+
+  profile_pic_url: null,
+  wallpaper_url: null,
+  game_meta: {},
+};
+
 
   // فعلاً خالی، بعداً در Profile page اضافه می‌کنیم
   profile_pic_url: null,
@@ -1447,11 +1650,13 @@ form.addEventListener("submit", async (e) => {
   !payload.city ||
   !payload.favorite_mode ||
   !payload.class_type ||
-  !payload.mic
+  !payload.mic ||
+  !payload.languages
 ) {
   alert("Please fill in all required fields before continuing.");
   return;
 }
+
 
     // ---- منطق اصلی (همان قبلی شما) ----
     setMatchesStatus("Saving your profile & searching...");
