@@ -610,6 +610,78 @@
         max-height: none;
       }
     }
+
+/* ---------- Languages Dropdown (Multi Select) ---------- */
+.pm-dropdown {
+  position: relative;
+  width: 100%;
+}
+
+.pm-dropdown-btn {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #374151;
+  background: #020617;
+  color: #e5e7eb;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+}
+
+.pm-dropdown-btn:hover {
+  background: #111827;
+}
+
+.pm-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: #020617;
+  border: 1px solid #374151;
+  border-radius: 12px;
+  padding: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  display: none;
+  z-index: 50;
+}
+
+.pm-dropdown-menu.open {
+  display: block;
+}
+
+.pm-lang-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.pm-lang-row:hover {
+  background: #111827;
+}
+
+.pm-lang-row input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+}
+
+.pm-lang-row label {
+  margin: 0;          /* مهم: label کلی صفحه margin نگیرد */
+  font-size: 13px;
+  cursor: pointer;
+  flex: 1;
+}
+
+
+
+
   </style>
 </head>
 <body>
@@ -712,18 +784,21 @@
           </div>
           <div>
 
-<label for="languagesMulti">Languages</label>
+<label for="languagesDropdownBtn">Languages</label>
 
-<!-- این input فقط برای نگه داشتن CSV نهایی است و در payload استفاده می‌شود -->
-<input id="languages" type="hidden" value="" />
+<div class="pm-dropdown" id="languagesDropdown">
+  <button type="button" id="languagesDropdownBtn" class="pm-dropdown-btn">
+    Select languages...
+  </button>
 
-<!-- UI multi-select -->
-<div id="languagesMulti" class="lang-grid"></div>
-
-<div class="small" style="margin-top:6px; color:#9ca3af;">
-  Select all languages you can speak. Matching will score higher if at least one overlaps.
+  <div id="languagesMulti" class="pm-dropdown-menu"></div>
 </div>
 
+<input type="hidden" id="languagesHidden" value="" />
+
+<div class="small">
+  Select all languages you can speak. Matching will score higher if at least one overlaps.
+</div>
           </div>
         </div>
 
@@ -806,7 +881,48 @@ const cityEl = document.getElementById("city");
 const favoriteModeEl = document.getElementById("favorite_mode");
 
 const languagesMultiEl = document.getElementById("languagesMulti");
-const languagesHiddenEl = document.getElementById("languages");
+const languagesHiddenEl = document.getElementById("languagesHidden");
+const languagesDropdownBtn = document.getElementById("languagesDropdownBtn");
+
+
+function openLanguagesDropdown() {
+  if (!languagesMultiEl) return;
+  languagesMultiEl.classList.add("open");
+}
+
+function closeLanguagesDropdown() {
+  if (!languagesMultiEl) return;
+  languagesMultiEl.classList.remove("open");
+}
+
+function toggleLanguagesDropdown() {
+  if (!languagesMultiEl) return;
+  languagesMultiEl.classList.toggle("open");
+}
+
+// کلیک روی دکمه dropdown
+if (languagesDropdownBtn) {
+  languagesDropdownBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    toggleLanguagesDropdown();
+  });
+}
+
+// کلیک بیرون dropdown => بسته شود
+document.addEventListener("click", (e) => {
+  const wrap = document.getElementById("languagesDropdown");
+  if (!wrap || !languagesMultiEl) return;
+
+  const clickedInside = wrap.contains(e.target);
+  if (!clickedInside) closeLanguagesDropdown();
+});
+
+
+if (!languagesMultiEl || !languagesHiddenEl) {
+  console.error(
+    "Languages elements missing. Check #languagesMulti and #languagesHidden in HTML."
+  );
+}
 
 let META = null;
 
@@ -915,12 +1031,6 @@ async function fetchJson(url, options = {}, timeoutMs = 12000) {
   }
 }
 
-function setMatchesStatus(text) {
-  statusText.innerHTML = text;
-}
-
-
-
      function fillFormFromProfile(profile) {
       if (!profile) return;
 
@@ -953,6 +1063,18 @@ if (profile.in_game_username !== undefined) {
   document.getElementById("in_game_username").value = profile.in_game_username || "";
 }
 
+  // languages: set checkboxes from stored "en,fa"
+  if (profile.languages && languagesMultiEl) {
+    const want = profile.languages.split(",").map((x) => x.trim()).filter(Boolean);
+    const set = new Set(want);
+
+    const boxes = languagesMultiEl.querySelectorAll('input[type="checkbox"]');
+    boxes.forEach((cb) => {
+      cb.checked = set.has(cb.value);
+    });
+
+    syncLanguagesHidden();
+  }
 
     }
   
@@ -1001,14 +1123,17 @@ if (profile.in_game_username !== undefined) {
 
 
 
-function setSelectOptions(selectEl, options, placeholderText) {
+function setSelectOptions(selectEl, options, placeholder) {
+  if (!selectEl) return;
+
   selectEl.innerHTML = "";
+
   const ph = document.createElement("option");
   ph.value = "";
-  ph.textContent = placeholderText || "Select...";
+  ph.textContent = placeholder || "Select...";
   selectEl.appendChild(ph);
 
-  options.forEach((opt) => {
+  (options || []).forEach((opt) => {
     const o = document.createElement("option");
     o.value = opt.value;
     o.textContent = opt.label;
@@ -1017,52 +1142,79 @@ function setSelectOptions(selectEl, options, placeholderText) {
 }
 
 function buildLanguagesMulti(languages) {
+  if (!languagesMultiEl) return;
+
   languagesMultiEl.innerHTML = "";
 
-  languages.forEach((lang) => {
-    const label = document.createElement("label");
-    label.className = "lang-item";
+  (languages || []).forEach((lang) => {
+    const row = document.createElement("div");
+    row.className = "pm-lang-row";
 
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.value = lang.code;
 
-    const span = document.createElement("span");
-    span.textContent = lang.label;
+    const lbl = document.createElement("label");
+    lbl.textContent = lang.label;
 
-    cb.addEventListener("change", syncLanguagesHidden);
+    // کلیک روی ردیف => toggle checkbox (UX بهتر)
+    row.addEventListener("click", (e) => {
+      // اگر خود checkbox کلیک شد، دوباره toggle نکن
+      if (e.target === cb) return;
+      cb.checked = !cb.checked;
+      syncLanguagesHidden();
+    });
 
-    label.appendChild(cb);
-    label.appendChild(span);
-    languagesMultiEl.appendChild(label);
+    cb.addEventListener("change", () => {
+      syncLanguagesHidden();
+    });
+
+    row.appendChild(cb);
+    row.appendChild(lbl);
+
+    languagesMultiEl.appendChild(row);
   });
 
-  // initial sync
+  // بعد از ساختن لیست، متن دکمه را با وضعیت فعلی sync کن
   syncLanguagesHidden();
 }
 
 function syncLanguagesHidden() {
-  const checked = Array.from(languagesMultiEl.querySelectorAll('input[type="checkbox"]:checked'))
-    .map((x) => x.value.trim().toLowerCase())
-    .filter(Boolean);
+  if (!languagesMultiEl || !languagesHiddenEl) return;
+
+  const checked = [...languagesMultiEl.querySelectorAll('input[type="checkbox"]:checked')]
+    .map((x) => x.value);
 
   languagesHiddenEl.value = checked.join(",");
+
+  // متن دکمه dropdown
+  if (languagesDropdownBtn) {
+    if (checked.length === 0) {
+      languagesDropdownBtn.textContent = "Select languages...";
+    } else if (checked.length <= 3) {
+      languagesDropdownBtn.textContent = checked.join(", ");
+    } else {
+      languagesDropdownBtn.textContent = `${checked.length} languages selected`;
+    }
+  }
 }
 
-function setLanguagesChecked(csv) {
+function setLanguagesChecked(langStr) {
   const set = new Set(
-    (csv || "")
+    (langStr || "")
       .split(",")
-      .map((x) => x.trim().toLowerCase())
+      .map((x) => x.trim())
       .filter(Boolean)
   );
 
-  Array.from(languagesMultiEl.querySelectorAll('input[type="checkbox"]')).forEach((cb) => {
-    cb.checked = set.has(cb.value.toLowerCase());
+  const boxes = languagesMultiEl.querySelectorAll("input[type=checkbox]");
+  boxes.forEach((b) => {
+    b.checked = set.has(b.value);
   });
 
   syncLanguagesHidden();
 }
+
 
 function findRegionById(regionId) {
   if (!META || !META.regions) return null;
@@ -1092,38 +1244,74 @@ regionEl.addEventListener("change", () => {
 
 
 async function loadMeta() {
-  const res = await fetch(`/api/meta/${encodeURIComponent(GAME)}`, { cache: "no-store" });
-  if (!res.ok) throw new Error("Failed to load options (HTTP " + res.status + ")");
+  const res = await fetch(`/api/meta/${GAME}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to load meta (HTTP " + res.status + ")");
 
   const json = await res.json();
-
-  // اگر سرور به هر دلیل error برگردوند، ساکت خالی نذار
-  if (json && json.error) {
-    throw new Error(json.error);
-  }
+  if (json && json.error) throw new Error(json.error);
 
   META = json;
 
   // Regions
-  const regionOptions = (META.regions || []).map((r) => ({ value: r.id, label: r.label }));
+  const regionOptions = (META.regions || []).map((r) => ({
+    value: r.id,
+    label: r.label,
+  }));
   setSelectOptions(regionEl, regionOptions, "Select region...");
 
   // Favorite modes
-  const modeOptions = (META.favorite_modes || []).map((m) => ({ value: m, label: m }));
+  const modeOptions = (META.favorite_modes || []).map((m) => ({
+    value: m,
+    label: m,
+  }));
   setSelectOptions(favoriteModeEl, modeOptions, "Select mode...");
 
-  // Languages multi-select
-  buildLanguagesMulti(META.languages || []);
-
-  // City depends on region
+  // Cities dependent
   cityEl.disabled = true;
   setSelectOptions(cityEl, [], "Select city...");
 
-  // اگر meta خالی بود، به کاربر بگو مشکل داریم
-  if (!regionOptions.length) {
-    setMatchesStatus("Form options failed to load. Please refresh the page.");
-  }
+  // Languages (objects)
+  buildLanguagesMulti(META.languages || []);
+
+console.log("META regions:", (META.regions || []).length, "META languages:", (META.languages || []).length);
+
+
 }
+
+(async () => {
+  try {
+    await loadMeta(); // <-- این باید حتماً اجرا شود
+  } catch (err) {
+    console.error("loadMeta failed:", err);
+    setMatchesStatus(
+      "Failed to load form options. Please refresh the page."
+    );
+  }
+
+  // بعد از meta، تازه localStorage را load کن
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const profile = JSON.parse(saved);
+      fillFormFromProfile(profile);
+
+      if (profile.username) {
+        setProfileStatus(
+          `Profile loaded for "${profile.username}". You can update fields or click "Find matches".`
+        );
+        loadLikes(profile.username);
+        loadSquad(profile.username);
+      }
+    } else {
+      setProfileStatus('New profile — fill in your details and click "Find matches".');
+    }
+  } catch (e) {
+    console.error("Error loading profile from storage:", e);
+    setProfileStatus('New profile — fill in your details and click "Find matches".');
+  }
+})();
+
+
 
 
  function scoreClass(score) {
@@ -1623,38 +1811,30 @@ form.addEventListener("submit", async (e) => {
   lockSubmitUI();
 
   try {
-    const payload = {
+   const payload = {
   username: document.getElementById("username").value.trim(),
   game: "battlefield",
 
   in_game_username: document.getElementById("in_game_username").value.trim() || null,
-
   platform: document.getElementById("platform").value.trim() || null,
 
-  // regionId از dropdown
+  // dropdown values
   region: regionEl.value.trim(),
-
-  // city از dropdown (اجباری)
   city: cityEl.value.trim(),
 
   favorite_mode: favoriteModeEl.value,
   class_type: document.getElementById("class_type").value,
   mic: document.getElementById("mic").value,
 
-  // از hidden input که با multi-select sync می‌شود
-  languages: languagesHiddenEl.value.trim(),
+  // synced from multi-select
+  languages: (languagesHiddenEl ? languagesHiddenEl.value : "").trim(),
 
+  // reserved for profile page later
   profile_pic_url: null,
   wallpaper_url: null,
   game_meta: {},
 };
 
-
-  // فعلاً خالی، بعداً در Profile page اضافه می‌کنیم
-  profile_pic_url: null,
-  wallpaper_url: null,
-  game_meta: {},
-};
 
 
     // ذخیره پروفایل در localStorage برای دفعات بعد
