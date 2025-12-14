@@ -154,6 +154,23 @@
       box-shadow: 0 10px 25px rgba(22, 163, 74, 0.4);
     }
 
+     .btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+#profileResetBtn:disabled,
+#refreshSquadBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+
+
+
     .tip {
       margin-left: 12px;
       font-size: 11px;
@@ -653,7 +670,8 @@
         </div>
 
         <div style="display:flex; align-items:center; margin-top:4px;">
-          <button type="submit" class="btn-primary">Find matches</button>
+          <button type="submit" class="btn-primary" id="findMatchesBtn">Find matches</button>
+
           <div class="tip">
             Tip: we’ll match on <span style="color:#22c55e;">region &amp; mode</span> first, then class, mic and languages.
           </div>
@@ -708,16 +726,21 @@
   </div>
 </div>
 
+
 <script>
   document.addEventListener("DOMContentLoaded", () => {
 
       const STORAGE_KEY = "playmate_profile_v1";
     const form = document.getElementById("matchForm");
 
+
   if (!form) {
     console.error('matchForm not found. Check <form id="matchForm">');
     return;
   }
+
+const findMatchesBtn = document.getElementById("findMatchesBtn");
+
 
 
     const matchesList = document.getElementById("matchesList");
@@ -725,6 +748,34 @@
     const matchesCount = document.getElementById("matchesCount");
     const profileStatus = document.getElementById("profileStatus");
     const profileResetBtn = document.getElementById("profileResetBtn");
+
+let isSubmitting = false;
+
+const findMatchesBtnOriginalText = findMatchesBtn ? findMatchesBtn.textContent : "Find matches";
+
+function lockSubmitUI() {
+  isSubmitting = true;
+
+  if (findMatchesBtn) {
+    findMatchesBtn.disabled = true;
+    findMatchesBtn.textContent = "Searching...";
+  }
+
+  if (profileResetBtn) profileResetBtn.disabled = true;
+  if (refreshSquadBtn) refreshSquadBtn.disabled = true;
+}
+
+function unlockSubmitUI() {
+  isSubmitting = false;
+
+  if (findMatchesBtn) {
+    findMatchesBtn.disabled = false;
+    findMatchesBtn.textContent = findMatchesBtnOriginalText;
+  }
+
+  if (profileResetBtn) profileResetBtn.disabled = false;
+  if (refreshSquadBtn) refreshSquadBtn.disabled = false;
+}
 
 
     // state برای swipe
@@ -741,6 +792,66 @@
     const squadList = document.getElementById("squadList");
     const squadStatus = document.getElementById("squadStatus");
     const refreshSquadBtn = document.getElementById("refreshSquadBtn");
+
+
+
+function setProfileStatus(text) {
+  profileStatus.textContent = text;
+}
+
+function setSquadStatus(text) {
+  squadStatus.textContent = text;
+}
+
+function setMatchesStatus(text) {
+  statusText.innerHTML = text;
+}
+
+
+// ---------- API helpers (Phase 2) ----------
+function classifyError(err) {
+  const msg = (err && err.message) ? err.message : String(err || "");
+  const isAbort = err && (err.name === "AbortError");
+  const isNetwork = /network|failed to fetch|fetch|cors|timeout/i.test(msg) || isAbort;
+  return {
+    kind: isAbort ? "timeout" : (isNetwork ? "network" : "unknown"),
+    message: msg
+  };
+}
+
+async function fetchJson(url, options = {}, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+
+    // تلاش برای خواندن body (حتی در خطا)
+    let data = null;
+    try { data = await res.json(); } catch (_) { data = null; }
+
+    if (!res.ok) {
+      const detail =
+        (data && (data.detail || data.error || data.message)) ?
+        (data.detail || data.error || data.message) :
+        "HTTP " + res.status;
+      const err = new Error(detail);
+      err.httpStatus = res.status;
+      err.data = data;
+      throw err;
+    }
+
+    return data;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+function setMatchesStatus(text) {
+  statusText.innerHTML = text;
+}
+
+
 
      function fillFormFromProfile(profile) {
       if (!profile) return;
@@ -776,17 +887,20 @@
         fillFormFromProfile(profile);
 
         if (profile.username) {
-          profileStatus.textContent = `Profile loaded for "${profile.username}". You can change fields or just click “Find matches”.`;
+          setProfileStatus(`Profile loaded for "${profile.username}". You can change fields or just click “Find matches”.`);
+
+
           loadLikes(profile.username);
           loadSquad(profile.username);
         }
       } else {
         // هیچ پروفایل ذخیره‌شده‌ای نیست
-        profileStatus.textContent = 'New profile – fill in your details and click “Find matches”.';
+        setProfileStatus('New profile – fill in your details and click “Find matches”.');
+
       }
     } catch (e) {
       console.error("Error loading profile from storage:", e);
-      profileStatus.textContent = 'New profile – fill in your details and click “Find matches”.';
+      setProfileStatus("New profile – fill in your details and click “Find matches”.");
     }
 
 
@@ -798,24 +912,29 @@
       return "low";
     }
 
-    async function loadLikes(username) {
-      likedUsers = new Set();
+   async function loadLikes(username) {
+  likedUsers = new Set();
+  if (!username) return;
 
-      if (!username) return;
+  try {
+    const data = await fetchJson(
+      "/api/my-likes?username=" + encodeURIComponent(username),
+      {},
+      12000
+    );
 
-      try {
-        const res = await fetch("/api/my-likes?username=" + encodeURIComponent(username));
-        if (!res.ok) return;
+    const arr = (data && data.liked_users) ? data.liked_users : [];
+    arr.forEach((name) => {
+      if (name) likedUsers.add(name);
+    });
 
-        const data = await res.json();
-        const arr = data.liked_users || [];
-        arr.forEach((name) => {
-          if (name) likedUsers.add(name);
-        });
-      } catch (err) {
-        console.error("loadLikes error:", err);
-      }
-    }
+  } catch (err) {
+    // Fail-safe: اگر لایک‌ها نیومدند، فقط log کن و ادامه بده
+    const info = classifyError(err);
+    console.error("loadLikes failed:", info.kind, info.message, err);
+  }
+}
+
 
 
 
@@ -1155,14 +1274,14 @@
       statusText.textContent = 'Fill your profile and click "Find matches" to see your squadmates.';
 
       squadList.innerHTML = "";
-      squadStatus.textContent = "Mutual likes will appear here once you and other players add each other.";
+      setSquadStatus("Mutual likes will appear here once you and other players add each other.");
 
       swipeCard.innerHTML = "";
       swipeStatus.textContent = "Run a match search, then swipe through your top picks.";
       swipeSkipBtn.disabled = true;
       swipeLikeBtn.disabled = true;
 
-      profileStatus.textContent = 'New profile – fill in your details and click “Find matches”.';
+      setProfileStatus("New profile – fill in your details and click “Find matches”.");
     });
 
 
@@ -1172,11 +1291,12 @@
       squadList.innerHTML = "";
 
       if (!squadmates || squadmates.length === 0) {
-        squadStatus.textContent = "No mutual squadmates yet.";
+        setSquadStatus("No mutual squadmates yet.");
         return;
       }
 
-      squadStatus.textContent = `You have ${squadmates.length} squadmate(s).`;
+      setSquadStatus(`You have ${squadmates.length} squadmate(s).`);
+
 
       squadmates.forEach((row) => {
         const name = row.squadmate || row.squadMate || row.squadMateName || row.username || "Unknown";
@@ -1210,129 +1330,194 @@
     }
 
 // ---------- لود کردن My Squad از سرور ----------
-    async function loadSquad(username) {
+async function loadSquad(username) {
   if (!username) {
-    squadStatus.textContent = "Enter your PlayMate username above, then refresh.";
+    setSquadStatus("Enter your PlayMate username above, then refresh.");
     squadList.innerHTML = "";
     return;
   }
 
-      squadStatus.textContent = "Loading squadmates...";
-      squadList.innerHTML = "";
+  setSquadStatus("Loading squadmates...");
+  squadList.innerHTML = "";
 
-      try {
-    const res = await fetch('/api/my-squad?username=' + encodeURIComponent(username));
-    if (!res.ok) {
-      squadStatus.textContent = 'Server error: ' + res.status;
-      return;
-    }
+  try {
+    const data = await fetchJson(
+      "/api/my-squad?username=" + encodeURIComponent(username),
+      {},
+      12000
+    );
 
-        const data = await res.json();
-        const rawList = data.squadmates || [];
+    const rawList = (data && data.squadmates) ? data.squadmates : [];
 
-        // جلوگیری از تکراری‌ها (ShadowWolf فقط یک‌بار)
-        const uniqueList = [];
-        const seen = new Set();
-
-        for (const row of rawList) {
-          const mate = row.squadmate;
-          if (mate && !seen.has(mate)) {
-            seen.add(mate);
-            uniqueList.push(row);   // خود row رو نگه می‌داریم
-          }
-        }
-
-        // حالا فقط لیست یکتا رو رندر کن
-        renderSquad(uniqueList);
-      } catch (err) {
-        console.error(err);
-        squadStatus.textContent = "Error: " + err.message;
+    const uniqueList = [];
+    const seen = new Set();
+    for (const row of rawList) {
+      const mate = row.squadmate;
+      if (mate && !seen.has(mate)) {
+        seen.add(mate);
+        uniqueList.push(row);
       }
     }
 
-    // ---------- submit فرم: save profile + match + auto squad refresh ----------
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
+    renderSquad(uniqueList);
+  } catch (err) {
+    console.error(err);
+    const info = classifyError(err);
 
-      const payload = {
-        username: document.getElementById("username").value.trim(),
-        platform: document.getElementById("platform").value.trim() || null,
-        region: document.getElementById("region").value.trim(),
-        favorite_mode: document.getElementById("favorite_mode").value,
-        class_type: document.getElementById("class_type").value,
-        mic: document.getElementById("mic").value,
-        languages: document.getElementById("languages").value.trim(),
-      };
-
-      // ذخیره پروفایل در localStorage برای دفعات بعد
-            try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-        profileStatus.textContent = `Profile saved for "${payload.username}".`;
-      } catch (e) {
-        console.error("Error saving profile to storage:", e);
-      }
+    if (info.kind === "timeout") {
+      setSquadStatus("Squad request timed out. Please try again.");
+    } else if (info.kind === "network") {
+      setSquadStatus("Network error while loading squad. Please check your connection.");
+    } else if (err && err.httpStatus) {
+      setSquadStatus("Server error while loading squad (HTTP " + err.httpStatus + ").");
+    } else {
+      setSquadStatus("Error while loading squad: " + info.message);
+    }
+  }
+}
 
 
+  // ---------- submit فرم: save profile + match + auto squad refresh ----------
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
 
-      if (
-        !payload.username ||
-        !payload.region ||
-        !payload.favorite_mode ||
-        !payload.class_type ||
-        !payload.mic
-      ) {
-        alert("لطفاً فیلدهای الزامی را پر کن.");
-        return;
-      }
+  // جلوگیری از submit چندباره
+  if (isSubmitting) return;
+  lockSubmitUI();
 
-      statusText.textContent = "Saving your profile & searching...";
-      matchesList.innerHTML = "";
-      matchesCount.textContent = "";
+  try {
+    const payload = {
+      username: document.getElementById("username").value.trim(),
+      platform: document.getElementById("platform").value.trim() || null,
+      region: document.getElementById("region").value.trim(),
+      favorite_mode: document.getElementById("favorite_mode").value,
+      class_type: document.getElementById("class_type").value,
+      mic: document.getElementById("mic").value,
+      languages: document.getElementById("languages").value.trim(),
+    };
 
-            try {
-        // 1) ذخیره پروفایل
-        await fetch("/api/profile", {
+    // ذخیره پروفایل در localStorage برای دفعات بعد
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      setProfileStatus(`Profile saved for "${payload.username}".`);
+    } catch (e) {
+      console.error("Error saving profile to storage:", e);
+    }
+
+    if (
+      !payload.username ||
+      !payload.region ||
+      !payload.favorite_mode ||
+      !payload.class_type ||
+      !payload.mic
+    ) {
+      alert("لطفاً فیلدهای الزامی را پر کن.");
+      return; // finally اجرا می‌شود و دکمه آزاد می‌شود
+    }
+
+    // ---- منطق اصلی (همان قبلی شما) ----
+    setMatchesStatus("Saving your profile & searching...");
+    matchesList.innerHTML = "";
+    matchesCount.textContent = "";
+
+    // 1) ذخیره پروفایل (Fail-safe: خطا را نشان بده ولی ادامه بده)
+    let profileSaved = true;
+    try {
+      await fetchJson(
+        "/api/profile",
+        {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-        }).catch(() => {});
+        },
+        12000
+      );
+    } catch (err) {
+      profileSaved = false;
+      const info = classifyError(err);
 
-        // 2) لود کردن لایک‌های قبلی این کاربر
-        await loadLikes(payload.username);
+      if (info.kind === "timeout") {
+        setMatchesStatus("Profile save timed out. Continuing to match...");
+      } else if (info.kind === "network") {
+        setMatchesStatus("Network issue while saving profile. Continuing to match...");
+      } else if (err && err.httpStatus) {
+        setMatchesStatus(
+          `Server error while saving profile (HTTP ${err.httpStatus}). Continuing to match...`
+        );
+      } else {
+        setMatchesStatus("Profile save failed. Continuing to match...");
+      }
+      console.error("Profile save error:", err);
+    }
 
-        // 3) گرفتن مچ‌ها
-        const res = await fetch('/api/match', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(payload),
+    // 2) لود کردن لایک‌های قبلی (اگر شکست خورد، باز هم match را اجرا کن)
+    try {
+      await loadLikes(payload.username);
+    } catch (err) {
+      console.error("loadLikes failed (continuing):", err);
+    }
+
+    // 3) گرفتن مچ‌ها (این باید دقیق و fail-fast باشد)
+    let data;
+    try {
+      data = await fetchJson(
+        "/api/match",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+        15000
+      );
+    } catch (err) {
+      const info = classifyError(err);
+
+      if (info.kind === "timeout") {
+        setMatchesStatus("Match search timed out. Please try again.");
+      } else if (info.kind === "network") {
+        setMatchesStatus(
+          "Network error while searching matches. Check your connection and retry."
+        );
+      } else if (err && err.httpStatus) {
+        setMatchesStatus(`Server error while searching matches (HTTP ${err.httpStatus}).`);
+      } else {
+        setMatchesStatus("Unexpected error while searching matches.");
+      }
+
+      console.error("Match error:", err);
+      renderMatches([]);
+      initSwipe([]);
+      return; // finally اجرا می‌شود و دکمه آزاد می‌شود
+    }
+
+    const matches = data.matches || [];
+    if (!matches.length) {
+      setMatchesStatus("No matches found.");
+      renderMatches([]);
+      initSwipe([]);
+    } else {
+      if (!profileSaved) {
+        setMatchesStatus("Matches found (profile not saved). You can retry later.");
+      } else {
+        setMatchesStatus("Done. These are your best current matches.");
+      }
+      renderMatches(matches);
+      initSwipe(matches);
+    }
+
+    // 4) بعد از match، squad را هم رفرش کن
+    loadSquad(payload.username);
+
+  } catch (err) {
+    console.error(err);
+    setMatchesStatus(
+      "Unexpected client error: " + (err && err.message ? err.message : String(err))
+    );
+  } finally {
+    unlockSubmitUI();
+  }
 });
 
-
-        if (!res.ok) {
-          statusText.textContent = "Server error: " + res.status;
-          return;
-        }
-
-        const data = await res.json();
-        const matches = data.matches || [];
-
-        if (!matches.length) {
-          statusText.textContent = "No matches found.";
-          renderMatches([]);
-          initSwipe([]);
-        } else {
-          statusText.textContent = `Done. These are your best current matches.`;
-          renderMatches(matches);
-          initSwipe(matches);  // <- اینو اضافه کن
-        }
-
-        // 3) بعد از مچ، خودکار Squad رو هم آپدیت کن
-        loadSquad(payload.username);
-      } catch (err) {
-        console.error(err);
-        statusText.textContent = "Error: " + err.message;
-      }
-    });
 
     // ---------- کلیک روی Add to squad ----------
     // ---------- کلیک روی Add to squad ----------
@@ -1353,34 +1538,42 @@ matchesList.addEventListener("click", async (e) => {
   btn.textContent = "Added ✓";
 
   try {
-    const res = await fetch("/api/like", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from_user: fromUser,
-        to_user: toUser,
-        game: "battlefield",
-      }),
-    });
+  const data = await fetchJson("/api/like", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from_user: fromUser,
+      to_user: toUser,
+      game: "battlefield",
+    }),
+  }, 12000);
 
-    if (!res.ok) {
-      btn.disabled = false;
-      btn.textContent = oldText;
-      alert("Error " + res.status);
-      return;
-    }
-
-    // موفق بود → توی Set هم ثبتش کن
+  if (data && (data.status === "inserted" || data.status === "already_exists")) {
     likedUsers.add(toUser);
-
-    // بعد از لایک، squad رو دوباره لود کن (ممکنه mutual بشه)
     loadSquad(fromUser);
-  } catch (err) {
-    console.error(err);
-    btn.disabled = false;
-    btn.textContent = oldText;
-    alert("Network error");
+    return;
   }
+
+  // پاسخ غیرمنتظره
+  btn.disabled = false;
+  btn.textContent = oldText;
+  alert("Unexpected response from server.");
+
+} catch (err) {
+  console.error(err);
+  const info = classifyError(err);
+
+  // دکمه را برگردان
+  btn.disabled = false;
+  btn.textContent = oldText;
+
+  if (info.kind === "timeout") alert("Request timed out. Try again.");
+  else if (info.kind === "network") alert("Network error. Check connection and retry.");
+  else if (err && err.httpStatus) alert("Server error (HTTP " + err.httpStatus + ").");
+  else alert("Unexpected error.");
+}
+
+
 });
 
 

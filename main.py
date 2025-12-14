@@ -73,8 +73,7 @@ def health():
 
 @app.post("/api/profile")
 def create_profile(profile: GamerProfile):
-
-    result = supabase.table("profiles").insert({
+    payload = {
         "username": profile.username,
         "platform": profile.platform,
         "region": profile.region,
@@ -82,7 +81,14 @@ def create_profile(profile: GamerProfile):
         "class_type": profile.class_type,
         "mic": profile.mic,
         "languages": profile.languages,
-    }).execute()
+    }
+
+    result = (
+        supabase
+        .table("profiles")
+        .upsert(payload, on_conflict="username")
+        .execute()
+    )
 
     return {"status": "saved", "data": result.data}
 
