@@ -178,23 +178,30 @@ class LikeRequest(BaseModel):
 
 @app.post("/api/like")
 def add_like(like: LikeRequest):
-
     payload = {
         "from_user": like.from_user,
         "to_user": like.to_user,
         "game": like.game or "battlefield",
     }
 
-    try:
-        result = supabase.table("likes").insert(payload).execute()
-        return {"status": "inserted", "data": result.data}
-    except Exception as e:
-        # اگر بخاطر unique constraint خطا داد، یعنی قبلاً وجود داشته
-        msg = str(e).lower()
-        if "unique" in msg or "duplicate" in msg:
-            return {"status": "already_exists", "data": payload}
-        # هر خطای دیگه رو هم برگردونیم برای دیباگ
-        return {"status": "error", "error": str(e)}
+    # 1) اگر قبلاً وجود دارد، دوباره insert نکن
+    exists = (
+        supabase
+        .table("likes")
+        .select("id")
+        .eq("from_user", payload["from_user"])
+        .eq("to_user", payload["to_user"])
+        .eq("game", payload["game"])
+        .limit(1)
+        .execute()
+    )
+
+    if exists.data and len(exists.data) > 0:
+        return {"status": "already_exists", "data": payload}
+
+    # 2) اگر نبود، insert کن
+    result = supabase.table("likes").insert(payload).execute()
+    return {"status": "inserted", "data": result.data}
 
 from typing import List, Dict
 from fastapi import Query
