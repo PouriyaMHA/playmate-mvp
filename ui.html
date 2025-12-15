@@ -8,6 +8,37 @@
       box-sizing: border-box;
     }
 
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  color: #e5e7eb;
+  font-size: 14px;
+  line-height: 1.35;
+  z-index: 9999;
+  backdrop-filter: blur(10px);
+}
+
+.toast.hidden {
+  display: none;
+}
+
+.toast.error {
+  border-color: rgba(239, 68, 68, 0.55);
+}
+
+.toast.success {
+  border-color: rgba(34, 197, 94, 0.55);
+}
+
+
     body {
       margin: 0;
       padding: 0;
@@ -991,6 +1022,23 @@ function setMatchesStatus(text) {
   statusText.innerHTML = text;
 }
 
+let toastTimer = null;
+
+function showToast(message, type = "error", ms = 4500) {
+  const el = document.getElementById("toast");
+  if (!el) return;
+
+  el.textContent = message;
+  el.classList.remove("hidden", "error", "success");
+  el.classList.add(type);
+
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    el.classList.add("hidden");
+  }, ms);
+}
+
+
 
 // ---------- API helpers (Phase 2) ----------
 function classifyError(err) {
@@ -1379,7 +1427,8 @@ console.log("META regions:", (META.regions || []).length, "META languages:", (ME
 
         const name = document.createElement("div");
         name.className = "match-name";
-        name.textContent = m.username;
+        name.textContent = (m.profile && m.profile.display_username) ? m.profile.display_username : m.username;
+
 
         header.appendChild(name);
 
@@ -1551,7 +1600,11 @@ console.log("META regions:", (META.regions || []).length, "META languages:", (ME
       const left = document.createElement("div");
       const name = document.createElement("div");
       name.className = "swipe-name";
-      name.textContent = m.username;
+      name.textContent =
+  (m.profile && m.profile.display_username)
+    ? m.profile.display_username
+    : m.username;
+
 
       const small = document.createElement("div");
       small.className = "swipe-small";
@@ -1712,47 +1765,52 @@ setLanguagesChecked("");
 
 
     // ---------- رندر My Squad ----------
-    function renderSquad(squadmates) {
-      squadList.innerHTML = "";
+   function renderSquad(squadmates) {
+  squadList.innerHTML = "";
 
-      if (!squadmates || squadmates.length === 0) {
-        setSquadStatus("No mutual squadmates yet.");
-        return;
-      }
+  if (!squadmates || squadmates.length === 0) {
+    setSquadStatus("No mutual squadmates yet.");
+    return;
+  }
 
-      setSquadStatus(`You have ${squadmates.length} squadmate(s).`);
+  setSquadStatus(`You have ${squadmates.length} squadmate(s).`);
+
+  squadmates.forEach((row) => {
+    const name = row.display_username || row.username || "Unknown";
 
 
-      squadmates.forEach((row) => {
-        const name = row.squadmate || row.squadMate || row.squadMateName || row.username || "Unknown";
+    const ignText = row.in_game_username
+      ? ("In-game: " + row.in_game_username)
+      : "In-game username hidden";
 
-        const card = document.createElement("div");
-        card.className = "squad-card";
+    const card = document.createElement("div");
+    card.className = "squad-card";
 
-        const main = document.createElement("div");
-        main.className = "squad-main";
+    const main = document.createElement("div");
+    main.className = "squad-main";
 
-        const title = document.createElement("div");
-        title.className = "squad-name";
-        title.textContent = name;
+    const title = document.createElement("div");
+    title.className = "squad-name";
+    title.textContent = name;
 
-        const tag = document.createElement("div");
-        tag.className = "squad-tag";
-        tag.textContent = "Mutual like – you both added each other";
+    const tag = document.createElement("div");
+    tag.className = "squad-tag";
+    tag.textContent = ignText;
 
-        main.appendChild(title);
-        main.appendChild(tag);
+    main.appendChild(title);
+    main.appendChild(tag);
 
-        const pill = document.createElement("div");
-        pill.className = "squad-pill";
-        pill.textContent = "Ready to squad up";
+    const pill = document.createElement("div");
+    pill.className = "squad-pill";
+    pill.textContent = "Ready to squad up";
 
-        card.appendChild(main);
-        card.appendChild(pill);
+    card.appendChild(main);
+    card.appendChild(pill);
 
-        squadList.appendChild(card);
-      });
-    }
+    squadList.appendChild(card);
+  });
+}
+
 
 // ---------- لود کردن My Squad از سرور ----------
 async function loadSquad(username) {
@@ -1767,24 +1825,30 @@ async function loadSquad(username) {
 
   try {
     const data = await fetchJson(
-      "/api/my-squad?username=" + encodeURIComponent(username),
-      {},
-      12000
-    );
+  "/api/my-squad-details?username=" +
+    encodeURIComponent(username) +
+    "&game=battlefield",
+  {},
+  12000
+);
 
-    const rawList = (data && data.squadmates) ? data.squadmates : [];
+const rawList = data.squadmates || [];
 
-    const uniqueList = [];
-    const seen = new Set();
-    for (const row of rawList) {
-      const mate = row.squadmate;
-      if (mate && !seen.has(mate)) {
-        seen.add(mate);
-        uniqueList.push(row);
-      }
-    }
 
-    renderSquad(uniqueList);
+ const uniqueList = [];
+const seen = new Set();
+
+for (const row of rawList) {
+  const mate = row.username; // مهم
+  if (mate && !seen.has(mate)) {
+    seen.add(mate);
+    uniqueList.push(row);
+  }
+}
+
+renderSquad(uniqueList);
+
+
   } catch (err) {
     console.error(err);
     const info = classifyError(err);
@@ -1878,7 +1942,21 @@ form.addEventListener("submit", async (e) => {
       );
     } catch (err) {
       profileSaved = false;
-      const info = classifyError(err);
+      
+if (err && err.httpStatus === 409) {
+  const msg =
+    (err.data && (err.data.detail || err.data.error || err.data.message)) ||
+    "This Battlefield username is already used. Please choose another one.";
+
+showToast(msg, "error");
+setMatchesStatus(null);
+return;
+
+
+}
+
+const info = classifyError(err);
+
 
       if (info.kind === "timeout") {
         setMatchesStatus("Profile save timed out. Continuing to match...");
@@ -2030,8 +2108,8 @@ matchesList.addEventListener("click", async (e) => {
     // هنگام لود اولیه صفحه، swipe را با لیست خالی تنظیم کن
     initSwipe([]);
 
-
   });
 </script>
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 </body>
 </html>

@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.responses import HTMLResponse
+from fastapi import HTTPException
 from pydantic import BaseModel
 from pathlib import Path
 from supabase import create_client
 from dotenv import load_dotenv
+
 import os
 
 
@@ -66,6 +68,7 @@ def ui_redirect():
 
 @app.get("/profile-full")
 def profile_full(username: str):
+    username = (username or "").strip().lower()
     result = supabase.table("profiles").select("*").eq("username", username).execute()
     if not result.data:
         return {"error": "user not found"}
@@ -81,13 +84,24 @@ from datetime import datetime, timezone
 
 @app.post("/api/profile")
 def create_profile(profile: GamerProfile):
-    game = (profile.game or "battlefield").lower().strip()
+    game = (profile.game or "battlefield").strip().lower()
+
+    raw_username = (profile.username or "").strip()
+    username = raw_username.lower()
+    display_username = raw_username
+
+    in_game_username = profile.in_game_username
+    if in_game_username is not None:
+        in_game_username = in_game_username.strip()
+        if in_game_username == "":
+            in_game_username = None
 
     payload = {
-        "username": profile.username,
+        "username": username,
+        "display_username": display_username,
         "game": game,
 
-        "in_game_username": profile.in_game_username,
+        "in_game_username": in_game_username,
         "platform": profile.platform,
         "region": profile.region,
         "city": profile.city,
@@ -100,19 +114,37 @@ def create_profile(profile: GamerProfile):
         "profile_pic_url": profile.profile_pic_url,
         "wallpaper_url": profile.wallpaper_url,
         "game_meta": profile.game_meta or {},
-
-        "last_active": datetime.now(timezone.utc).isoformat(),
     }
 
-    # Upsert بر اساس (username, game)
-    result = (
-        supabase
-        .table("profiles")
-        .upsert(payload, on_conflict="username,game")
-        .execute()
-    )
+    try:
+        result = (
+            supabase
+            .table("profiles")
+            .upsert(payload, on_conflict="username,game")
+            .execute()
+        )
+    except Exception as e:
+        msg = str(e)
+        if ("profiles_game_ign_unique" in msg) or ("duplicate key value violates unique constraint" in msg):
+            raise HTTPException(
+                status_code=409,
+                detail="This Battlefield username is already used by another PlayMate user. Please choose a different one."
+            )
+        raise
+
+    # بعضی مواقع خطا داخل result میاد، نه exception
+    if getattr(result, "error", None):
+        msg = str(result.error)
+        if ("profiles_game_ign_unique" in msg) or ("duplicate key value violates unique constraint" in msg):
+            raise HTTPException(
+                status_code=409,
+                detail="This Battlefield username is already used by another PlayMate user. Please choose a different one."
+            )
+        raise HTTPException(status_code=500, detail="Profile save failed.")
 
     return {"status": "saved", "data": result.data}
+
+
 
 
 @app.get(f"{API_PREFIX}/profiles")
@@ -125,7 +157,6 @@ def list_profiles():
 def match_players(current: GamerProfile):
     game = (current.game or "battlefield").lower().strip()
 
-    # فقط پروفایل‌های همین بازی
     result = (
         supabase
         .table("profiles")
@@ -139,14 +170,15 @@ def match_players(current: GamerProfile):
     voice_set = {"voice", "both"}
 
     matches = []
+    current_username = (current.username or "").strip().lower()
+
     for p in players:
-        if p.get("username") == current.username:
+        if (p.get("username") or "").strip().lower() == current_username:
             continue
 
         score = 0
         reasons: list[str] = []
 
-        # الگوریتم فعلی فعلاً می‌ماند (Step 6 تغییرش می‌دهیم)
         if p.get("region") == current.region:
             score += 40
             reasons.append(f"Region match: {current.region}")
@@ -174,7 +206,6 @@ def match_players(current: GamerProfile):
         if score > 100:
             score = 100
 
-        # پروفایل طرف مقابل برای UI – ولی بدون in_game_username
         safe_profile = dict(p)
         safe_profile.pop("in_game_username", None)
 
@@ -188,40 +219,34 @@ def match_players(current: GamerProfile):
     matches.sort(key=lambda x: x["match_percent"], reverse=True)
 
     return {
-        "target_user": current.username,
+        "target_user": current_username,
         "game": game,
         "matches": matches[:10],
     }
 
-
 @app.get("/api/my-squad-details")
 def my_squad_details(username: str, game: str = "battlefield"):
-    game = (game or "battlefield").lower().strip()
+    username = (username or "").strip().lower()
+    game = (game or "battlefield").strip().lower()
 
-    # 1) mutuals از RPC
-    result = supabase.rpc("find_mutual_likes", {"user_input": username}).execute()
-    rows = result.data or []
+    mutual = supabase.rpc("find_mutual_likes", {"user_input": username}).execute()
+    rows = mutual.data or []
     mates = [r.get("squadmate") for r in rows if r.get("squadmate")]
 
     if not mates:
         return {"username": username, "game": game, "squadmates": []}
 
-    # 2) گرفتن پروفایل‌های همین game برای mutualها
     prof = (
         supabase
         .table("profiles")
-        .select("username,in_game_username,profile_pic_url,wallpaper_url,region,city,languages,mic,favorite_mode")
+        .select("username,display_username,in_game_username,profile_pic_url,wallpaper_url,region,city,languages,mic,favorite_mode")
         .eq("game", game)
         .in_("username", mates)
         .execute()
     )
 
-    # اینجا مجازیم in_game_username را بدهیم چون mutual هستند
-    return {
-        "username": username,
-        "game": game,
-        "squadmates": prof.data or []
-    }
+    return {"username": username, "game": game, "squadmates": prof.data or []}
+
 
 
 
@@ -235,10 +260,11 @@ class LikeRequest(BaseModel):
 @app.post("/api/like")
 def add_like(like: LikeRequest):
     payload = {
-        "from_user": like.from_user,
-        "to_user": like.to_user,
-        "game": like.game or "battlefield",
-    }
+    "from_user": (like.from_user or "").strip().lower(),
+    "to_user": (like.to_user or "").strip().lower(),
+    "game": (like.game or "battlefield").strip().lower(),
+}
+
 
     # 1) اگر قبلاً وجود دارد، دوباره insert نکن
     exists = (
@@ -285,6 +311,9 @@ def my_squad(username: str = Query(..., alias="username")):
 
 @app.get("/api/my-likes")
 def my_likes(username: str, game: str = "battlefield"):
+    username = (username or "").strip().lower()
+    game = (game or "battlefield").strip().lower()
+
     result = (
         supabase
         .table("likes")
@@ -293,11 +322,12 @@ def my_likes(username: str, game: str = "battlefield"):
         .eq("game", game)
         .execute()
     )
+
     rows = result.data or []
-    return {
-        "username": username,
-        "liked_users": [r["to_user"] for r in rows]
-    }
+    liked = [r.get("to_user") for r in rows if r.get("to_user")]
+
+    return {"liked_users": liked}
+
 @app.get(f"{API_PREFIX}/meta/{{game}}")
 
 def get_game_meta(game: str):
