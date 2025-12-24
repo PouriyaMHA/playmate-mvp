@@ -1,2115 +1,1970 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="UTF-8" />
-  <title>PlayMate BF - Matchmaking</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PlayMate BF | Find Matches</title>
   <style>
+    :root {
+      --bg-dark: #050a10;
+      --bg-panel: rgba(20, 30, 45, 0.6);
+      --bg-card: rgba(30, 45, 60, 0.7);
+      --neon-green: #00ffcc;
+      --neon-blue: #00aaff;
+      --neon-red: #ff3366;
+      --text-main: #ffffff;
+      --text-muted: #8ba2b5;
+      --border-glass: 1px solid rgba(255, 255, 255, 0.1);
+      --glow: 0 0 15px rgba(0, 255, 204, 0.2);
+      --font-main: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
     * {
       box-sizing: border-box;
-    }
-
-.toast {
-  position: fixed;
-  left: 50%;
-  bottom: 22px;
-  transform: translateX(-50%);
-  max-width: min(520px, calc(100vw - 32px));
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.92);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
-  color: #e5e7eb;
-  font-size: 14px;
-  line-height: 1.35;
-  z-index: 9999;
-  backdrop-filter: blur(10px);
-}
-
-.toast.hidden {
-  display: none;
-}
-
-.toast.error {
-  border-color: rgba(239, 68, 68, 0.55);
-}
-
-.toast.success {
-  border-color: rgba(34, 197, 94, 0.55);
-}
-
-
-    body {
       margin: 0;
       padding: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: radial-gradient(circle at top, #111827 0, #020617 40%, #000 100%);
-      color: #e5e7eb;
+      outline: none;
     }
 
-    .page {
-      max-width: 1100px;
-      margin: 32px auto;
-      padding: 0 16px 32px;
-    }
-
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 16px;
-    }
-
-    .logo-circle {
-      width: 32px;
-      height: 32px;
-      border-radius: 999px;
-      background: linear-gradient(135deg, #22c55e, #4ade80);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #020617;
-      font-weight: 800;
-      font-size: 14px;
-    }
-
-.lang-grid{
-  display:grid;
-  grid-template-columns: repeat(2, minmax(0,1fr));
-  gap:8px;
-  margin-bottom: 12px;
-}
-
-.lang-item{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  padding:8px 10px;
-  border:1px solid #1f2937;
-  border-radius:12px;
-  background:#020617;
-  cursor:pointer;
-  font-size:13px;
-  color:#e5e7eb;
-}
-
-.lang-item input{
-  width:auto;
-  margin:0;
-}
-
-
-
-
-
-    .header-title {
-      font-size: 26px;
-      font-weight: 700;
-    }
-
-    .header-sub {
-      margin-top: 2px;
-      font-size: 13px;
-      color: #9ca3af;
-    }
-
-    .layout {
-      display: flex;
-      gap: 20px;
-      margin-top: 20px;
-    }
-
-    .card {
-      background: rgba(15, 23, 42, 0.98);
-      border-radius: 18px;
-      padding: 18px 20px;
-      border: 1px solid #1f2933;
-      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
-    }
-
-    .card-left {
-      flex: 1.1;
-      min-width: 0;
-    }
-
-    .card-right {
-      flex: 1;
-      min-width: 0;
+    body {
+      background-color: var(--bg-dark);
+      background-image:
+        radial-gradient(circle at 10% 20%, rgba(0, 255, 204, 0.05) 0%, transparent 20%),
+        radial-gradient(circle at 90% 80%, rgba(0, 170, 255, 0.05) 0%, transparent 20%);
+      color: var(--text-main);
+      font-family: var(--font-main);
+      height: 100vh;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
-      max-height: 520px;
     }
 
-    .card-title {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 4px;
+    /* --- Layout --- */
+    .app-container {
+      display: grid;
+      grid-template-columns: 320px 1fr 300px;
+      gap: 20px;
+      padding: 20px;
+      height: 100%;
+      max-width: 1600px;
+      margin: 0 auto;
+      width: 100%;
     }
 
-    .card-sub {
-      font-size: 12px;
-      color: #9ca3af;
-      margin-bottom: 16px;
+    .panel {
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: var(--border-glass);
+      border-radius: 16px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    /* --- Typography & Commons --- */
+    h2 {
+      font-size: 1.2rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 20px;
+      color: var(--neon-green);
+      text-shadow: 0 0 5px rgba(0, 255, 204, 0.4);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding-bottom: 10px;
     }
 
     label {
       display: block;
-      margin-bottom: 6px;
-      font-size: 13px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 5px;
+      margin-top: 15px;
     }
 
-    .field-row {
-      display: flex;
-      gap: 10px;
-    }
-
-    .field-row > div {
-      flex: 1;
-    }
-
-    input, select {
+    input,
+    select {
       width: 100%;
-      padding: 8px 10px;
-      margin-bottom: 12px;
-      border-radius: 10px;
-      border: 1px solid #374151;
-      background: #020617;
-      color: #e5e7eb;
-      font-size: 13px;
-      outline: none;
-      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: white;
+      padding: 10px;
+      border-radius: 6px;
+      font-family: inherit;
+      transition: all 0.3s ease;
     }
 
-    input::placeholder {
-      color: #6b7280;
+    input:focus,
+    select:focus {
+      border-color: var(--neon-green);
+      box-shadow: 0 0 8px rgba(0, 255, 204, 0.2);
     }
 
-    input:focus, select:focus {
-      border-color: #6366f1;
-      box-shadow: 0 0 0 1px #6366f1;
-      background: #020617;
+    /* --- Left Panel: Profile --- */
+    .profile-status {
+      font-size: 0.8rem;
+      color: var(--neon-blue);
+      margin-bottom: 15px;
+      min-height: 1.2em;
+    }
+
+    .lang-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 5px;
+    }
+
+    .lang-pill {
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .lang-pill.active {
+      background: rgba(0, 255, 204, 0.2);
+      border-color: var(--neon-green);
+      color: var(--neon-green);
     }
 
     .btn-primary {
-      background: #22c55e;
-      border: none;
-      padding: 10px 24px;
-      border-radius: 999px;
-      color: #020617;
-      font-weight: 700;
-      font-size: 14px;
+      background: linear-gradient(135deg, rgba(0, 255, 204, 0.2), rgba(0, 170, 255, 0.2));
+      border: 1px solid var(--neon-green);
+      color: var(--neon-green);
+      padding: 12px;
+      border-radius: 8px;
       cursor: pointer;
-      box-shadow: 0 18px 40px rgba(22, 163, 74, 0.45);
-      transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-top: 25px;
+      width: 100%;
+      transition: all 0.3s;
     }
 
     .btn-primary:hover {
-      background: #16a34a;
-      transform: translateY(-1px);
-      box-shadow: 0 22px 50px rgba(22, 163, 74, 0.5);
+      background: var(--neon-green);
+      color: #000;
+      box-shadow: 0 0 15px var(--neon-green);
     }
 
-    .btn-primary:active {
-      transform: translateY(0);
-      box-shadow: 0 10px 25px rgba(22, 163, 74, 0.4);
+    .profile-link {
+      display: block;
+      text-align: center;
+      margin-top: 15px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.85rem;
     }
 
-     .btn-primary:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
-#profileResetBtn:disabled,
-#refreshSquadBtn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-
-
-
-    .tip {
-      margin-left: 12px;
-      font-size: 11px;
-      color: #9ca3af;
+    .profile-link:hover {
+      color: var(--neon-blue);
     }
 
-    .matches-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-    }
-
-    .matches-title {
-      font-size: 15px;
-      font-weight: 600;
-    }
-
-    .matches-count {
-      font-size: 12px;
-      color: #9ca3af;
-    }
-
-    .matches-status {
-      font-size: 12px;
-      color: #9ca3af;
-      margin-bottom: 8px;
-    }
-
-    .matches-list {
+    /* --- Center Panel: Match Card --- */
+    .match-area {
+      position: relative;
       flex: 1;
-      overflow-y: auto;
-      padding-right: 4px;
-      margin-top: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .empty-state {
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    .card-container {
+      width: 100%;
+      max-width: 450px;
+      height: 600px;
+      position: relative;
+      perspective: 1000px;
     }
 
     .match-card {
-      background: #020617;
-      border-radius: 14px;
-      padding: 10px 12px 10px;
-      border: 1px solid #1f2937;
-      margin-bottom: 10px;
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-      gap: 10px;
-      align-items: flex-start;
+      background: linear-gradient(160deg, #1a253a, #0d121c);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 30px;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+      position: absolute;
+      top: 0;
+      left: 0;
+      transition: transform 0.4s ease, opacity 0.4s ease;
+      backface-visibility: hidden;
     }
 
-    .avatar {
-      width: 32px;
-      height: 32px;
-      border-radius: 999px;
-      background: radial-gradient(circle at top, #22c55e, #4ade80);
+    .match-card.swipe-left {
+      transform: translateX(-150%) rotate(-20deg);
+      opacity: 0;
+    }
+
+    .match-card.swipe-right {
+      transform: translateX(150%) rotate(20deg);
+      opacity: 0;
+    }
+
+    .avatar-lg {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: linear-gradient(45deg, #333, #555);
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #020617;
-      font-weight: 800;
-      font-size: 14px;
+      font-size: 3rem;
+      font-weight: bold;
+      color: white;
+      border: 3px solid var(--neon-blue);
+      box-shadow: 0 0 20px rgba(0, 170, 255, 0.3);
+      margin-bottom: 20px;
     }
 
-    .match-main {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
+    .match-percent {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(0, 255, 204, 0.1);
+      color: var(--neon-green);
+      border: 1px solid var(--neon-green);
+      padding: 5px 10px;
+      border-radius: 12px;
+      font-weight: bold;
+      font-size: 0.9rem;
     }
 
-    .match-name-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
+    .player-name {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 10px;
     }
 
-    .match-name {
-      font-weight: 600;
-      font-size: 14px;
-    }
-
-    .badge-small {
-      font-size: 11px;
-      padding: 1px 7px;
-      border-radius: 999px;
-      background: #0b1120;
-      border: 1px solid #1f2937;
-      color: #9ca3af;
-    }
-
-    .match-badges {
+    .pill-container {
       display: flex;
       flex-wrap: wrap;
-      gap: 4px;
-    }
-
-    .badge {
-      font-size: 11px;
-      padding: 2px 7px;
-      border-radius: 999px;
-      background: #0f172a;
-      color: #e5e7eb;
-      border: 1px solid #1f2937;
-    }
-
-    .badge-soft {
-      background: #020617;
-      color: #9ca3af;
-    }
-
-    .match-score {
-      font-size: 14px;
-      font-weight: 700;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid #1f2937;
-      min-width: 52px;
-      text-align: center;
-    }
-
-    .match-score.good {
-      background: rgba(22, 163, 74, 0.1);
-      border-color: rgba(22, 163, 74, 0.5);
-      color: #4ade80;
-    }
-
-    .match-score.medium {
-      background: rgba(234, 179, 8, 0.1);
-      border-color: rgba(234, 179, 8, 0.6);
-      color: #eab308;
-    }
-
-    .match-score.low {
-      background: rgba(248, 113, 113, 0.08);
-      border-color: rgba(248, 113, 113, 0.5);
-      color: #f97373;
-    }
-
-    .reasons {
-      grid-column: 1 / span 3;
-      margin-top: 4px;
-      font-size: 11px;
-      color: #9ca3af;
-    }
-
-    .reasons-title {
-      font-weight: 600;
-      margin-bottom: 2px;
-      color: #e5e7eb;
-    }
-
-    .reasons ul {
-      margin: 0;
-      padding-left: 16px;
-    }
-
-    .reasons li {
-      margin-bottom: 2px;
-    }
-
-    .match-actions {
-      grid-column: 1 / span 3;
-      display: flex;
-      justify-content: flex-end;
-      margin-top: 6px;
-    }
-
-    .like-btn {
-      background: #22c55e;
-      border: none;
-      padding: 5px 12px;
-      border-radius: 999px;
-      color: #020617;
-      font-size: 11px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    .like-btn:hover {
-      background: #16a34a;
-    }
-
-    .like-btn:disabled {
-      opacity: 0.7;
-      cursor: default;
-    }
-    .squad-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: 16px;
-      margin-bottom: 6px;
-    }
-
-    .squad-title {
-      font-size: 14px;
-      font-weight: 600;
-    }
-
-    .squad-status {
-      font-size: 11px;
-      color: #9ca3af;
-      margin-bottom: 6px;
-    }
-
-    .squad-list {
-      max-height: 200px;
-      overflow-y: auto;
-      padding-right: 4px;
-    }
-
-    .squad-card {
-      background: #020617;
-      border-radius: 10px;
-      padding: 8px 10px;
-      border: 1px solid #1f2937;
-      margin-bottom: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+      justify-content: center;
       gap: 8px;
-      font-size: 12px;
+      margin-bottom: 20px;
     }
 
-    .squad-main {
+    .info-pill {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 0.8rem;
+      color: #ddd;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .match-reasons {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 10px;
+      padding: 15px;
+      margin-bottom: auto;
+    }
+
+    .match-reasons h4 {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+
+    .match-reasons ul {
+      list-style: none;
+    }
+
+    .match-reasons li {
+      font-size: 0.9rem;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+    }
+
+    .match-reasons li::before {
+      content: '•';
+      color: var(--neon-green);
+      margin-right: 8px;
+      font-size: 1.2rem;
+    }
+
+    .actions {
+      display: flex;
+      gap: 20px;
+      margin-top: 20px;
+      width: 100%;
+    }
+
+    .action-btn {
+      flex: 1;
+      padding: 15px;
+      border-radius: 50px;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      transition: transform 0.2s, background 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-skip {
+      background: rgba(255, 51, 102, 0.1);
+      border: 2px solid var(--neon-red);
+      color: var(--neon-red);
+    }
+
+    .btn-skip:hover {
+      background: var(--neon-red);
+      color: white;
+      transform: scale(1.05);
+    }
+
+    .btn-like {
+      background: rgba(0, 255, 204, 0.1);
+      border: 2px solid var(--neon-green);
+      color: var(--neon-green);
+    }
+
+    .btn-like:hover {
+      background: var(--neon-green);
+      color: black;
+      transform: scale(1.05);
+    }
+
+    /* --- Right Panel: Squad --- */
+    .squad-list {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 15px;
     }
 
-    .squad-name {
-      font-weight: 600;
-      font-size: 13px;
+    .squad-member {
+      display: flex;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 10px;
+      border-radius: 8px;
+      border-left: 3px solid transparent;
+      transition: background 0.2s;
     }
 
-    .squad-tag {
-      font-size: 11px;
-      color: #9ca3af;
+    .squad-member:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-left-color: var(--neon-blue);
     }
 
-    .squad-pill {
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 999px;
-      border: 1px solid #1f2937;
-      background: #020617;
-      color: #22c55e;
+    .sm-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #444;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      margin-right: 12px;
+      font-size: 0.9rem;
+    }
+
+    .sm-info {
+      flex: 1;
+    }
+
+    .sm-name {
+      font-weight: bold;
+      font-size: 0.95rem;
+      display: block;
+    }
+
+    .sm-ign {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      display: block;
+    }
+
+    .status-badge {
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      border-radius: 4px;
       white-space: nowrap;
     }
 
-    .squad-refresh-btn {
-      font-size: 11px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid #374151;
-      background: #020617;
-      color: #e5e7eb;
-      cursor: pointer;
+    .status-online {
+      color: var(--neon-green);
+      background: rgba(0, 255, 204, 0.1);
     }
 
-    .squad-refresh-btn:hover {
-      background: #111827;
+    .status-offline {
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.05);
     }
 
-	    .swipe-section {
-      margin-top: 18px;
-      padding-top: 12px;
-      border-top: 1px solid #111827;
-    }
-
-    .swipe-header {
+    /* --- Modal --- */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(5px);
       display: flex;
-      justify-content: space-between;
+      justify-content: center;
       align-items: center;
-      margin-bottom: 8px;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
     }
 
-    .swipe-title {
-      font-size: 14px;
-      font-weight: 600;
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: all;
     }
 
-    .swipe-status {
-      font-size: 11px;
-      color: #9ca3af;
+    .match-modal {
+      background: linear-gradient(135deg, #0d121c, #1a253a);
+      padding: 40px;
+      border-radius: 20px;
+      border: 2px solid var(--neon-green);
+      text-align: center;
+      max-width: 500px;
+      width: 90%;
+      box-shadow: 0 0 50px rgba(0, 255, 204, 0.3);
+      transform: scale(0.8);
+      transition: transform 0.3s;
     }
 
-    .swipe-card-box {
-      background: #020617;
-      border-radius: 12px;
-      border: 1px solid #1f2937;
-      padding: 10px 12px;
-      margin-bottom: 8px;
-      min-height: 72px;
+    .modal-overlay.active .match-modal {
+      transform: scale(1);
+    }
+
+
+
+    /* ✅ خود مودال بالاتر از fireworks */
+    .match-modal-fancy {
+      position: relative;
+      background: radial-gradient(circle at top, #0f172a, #0b1220);
+      border: 2px solid rgba(0, 255, 204, 0.7);
+      box-shadow: 0 0 60px rgba(0, 255, 204, 0.25);
+      overflow: hidden;
+      /* تا افکت‌ها بیرون نزنن */
+      position: relative;
+      z-index: 2;
+    }
+
+    /* --- Fireworks: thin rays + sparkles (no green rectangle) --- */
+    #match-modal::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: calc(50% - 360px);
+      /* بالای مودال */
+      width: 760px;
+      height: 260px;
+      transform: translateX(-50%);
+      pointer-events: none;
+      z-index: 1;
+      opacity: .95;
+      mix-blend-mode: screen;
+
+      /* 1) rays: repeating-conic = تیرهای باریک و زیاد */
+      background:
+        repeating-conic-gradient(from 200deg at 50% 92%,
+          rgba(52, 245, 197, .75) 0 1deg,
+          transparent 1deg 7deg),
+        repeating-conic-gradient(from 220deg at 50% 92%,
+          rgba(34, 211, 238, .55) 0 .8deg,
+          transparent .8deg 9deg);
+
+      /* 2) fade ماسک: فقط بالای مودال دیده بشه (مستطیل نشه) */
+      -webkit-mask-image: radial-gradient(circle at 50% 92%, #000 0 42%, transparent 70%);
+      mask-image: radial-gradient(circle at 50% 92%, #000 0 42%, transparent 70%);
+
+      filter: blur(.25px) drop-shadow(0 0 16px rgba(52, 245, 197, .35));
+      animation: fireworksPulse 1.8s ease-in-out infinite;
+    }
+
+    #match-modal::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: calc(50% - 360px);
+      /* دقیقاً هم‌محل ::before */
+      width: 760px;
+      height: 260px;
+      transform: translateX(-50%);
+      pointer-events: none;
+      z-index: 1;
+      opacity: .85;
+      mix-blend-mode: screen;
+
+      /* sparkles: جرقه‌های کوچک */
+      background:
+        radial-gradient(circle at 18% 35%, rgba(255, 255, 255, .35), transparent 28%),
+        radial-gradient(circle at 30% 22%, rgba(52, 245, 197, .45), transparent 30%),
+        radial-gradient(circle at 45% 30%, rgba(34, 211, 238, .32), transparent 30%),
+        radial-gradient(circle at 60% 20%, rgba(52, 245, 197, .35), transparent 32%),
+        radial-gradient(circle at 78% 34%, rgba(255, 255, 255, .25), transparent 30%),
+        radial-gradient(circle at 52% 42%, rgba(34, 211, 238, .20), transparent 34%);
+
+      -webkit-mask-image: radial-gradient(circle at 50% 92%, #000 0 40%, transparent 72%);
+      mask-image: radial-gradient(circle at 50% 92%, #000 0 40%, transparent 72%);
+
+      filter: blur(.35px) drop-shadow(0 0 10px rgba(52, 245, 197, .25));
+      animation: sparkleDrift 2.2s ease-in-out infinite;
+    }
+
+    @keyframes fireworksPulse {
+      0% {
+        transform: translateX(-50%) scale(.98);
+        opacity: .55;
+      }
+
+      50% {
+        transform: translateX(-50%) scale(1.03);
+        opacity: .98;
+      }
+
+      100% {
+        transform: translateX(-50%) scale(.98);
+        opacity: .65;
+      }
+    }
+
+    @keyframes sparkleDrift {
+      0% {
+        transform: translateX(-50%) translateY(0) scale(.98);
+        opacity: .55;
+      }
+
+      50% {
+        transform: translateX(-50%) translateY(-8px) scale(1.02);
+        opacity: .95;
+      }
+
+      100% {
+        transform: translateX(-50%) translateY(0) scale(.98);
+        opacity: .65;
+      }
+    }
+
+
+
+
+
+    .match-title {
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: var(--neon-green);
+      margin-bottom: 20px;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+    }
+
+    .match-avatars {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+
+    .modal-btn {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      border: none;
+    }
+
+    .btn-view-squad {
+      background: var(--neon-green);
+      color: #000;
+    }
+
+    .btn-keep-matching {
+      background: transparent;
+      border: 1px solid var(--text-muted);
+      color: var(--text-muted);
+    }
+
+    .btn-keep-matching:hover {
+      color: white;
+      border-color: white;
+    }
+
+    /* --- Toast --- */
+    .toast-container {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 10px;
+      z-index: 2000;
     }
 
-    .swipe-main-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .swipe-name {
-      font-weight: 600;
-      font-size: 14px;
-    }
-
-    .swipe-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-      margin-top: 4px;
-      font-size: 11px;
-    }
-
-    .swipe-small {
-      font-size: 11px;
-      color: #9ca3af;
-    }
-
-    .swipe-actions {
-      display: flex;
-      justify-content: space-between;
-      gap: 8px;
-      margin-top: 4px;
-    }
-
-    .swipe-btn-skip,
-    .swipe-btn-like {
-      flex: 1;
-      border-radius: 999px;
-      padding: 7px 10px;
-      font-size: 13px;
-      font-weight: 600;
+    .match-close {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(0, 0, 0, 0.25);
+      color: rgba(255, 255, 255, 0.85);
       cursor: pointer;
-      border: 1px solid #1f2937;
+      font-size: 18px;
+      line-height: 30px;
     }
 
-    .swipe-btn-skip {
-      background: #020617;
-      color: #e5e7eb;
+    .match-sub {
+      margin-top: -6px;
+      margin-bottom: 22px;
+      color: var(--text-muted);
+      font-size: 0.95rem;
     }
 
-    .swipe-btn-skip:hover {
-      background: #111827;
+    .match-highlight {
+      color: var(--neon-green);
+      font-weight: 700;
     }
 
-    .swipe-btn-like {
-      background: #22c55e;
-      color: #020617;
-      box-shadow: 0 12px 25px rgba(22, 163, 74, 0.35);
-      border-color: #16a34a;
+    .match-avatars.fancy {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      /* فقط دو ستون */
+      align-items: center;
+      column-gap: 18px;
+      margin: 18px 0 22px;
+      position: relative;
+      /* ✅ برای برق absolute */
     }
 
-    .swipe-btn-like:hover {
-      background: #16a34a;
+    .avatar-block {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      min-width: 0;
+      /* برای ellipsis */
+      position: relative;
+      z-index: 2;
+      /* روی برق بیاد */
     }
 
-    .swipe-empty {
-      font-size: 11px;
-      color: #6b7280;
-      padding: 4px 2px;
+    .avatar-name {
+      margin-top: 10px;
+      line-height: 1.1;
+      width: 100%;
+      max-width: 190px;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-	    .swipe-btn-skip:disabled,
-    .swipe-btn-like:disabled {
-      opacity: 0.4;
-      cursor: default;
-      box-shadow: none;
+    .avatar-ign {
+      margin-top: 6px;
+      width: 100%;
+      max-width: 190px;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-    .swipe-btn-skip:disabled {
-      background: #020617;
-      color: #6b7280;
+    /* ✅ برق دقیقاً وسط دو آواتار و وصل‌کننده */
+    .match-link {
+      position: absolute;
+      left: 50%;
+      top: 46px;
+      /* ✅ مرکز دایره‌ها؛ اگر avatar بزرگ/کوچک شد این عدد را فقط تنظیم کن */
+      transform: translateX(-50%);
+      width: 300px;
+      /* طول اتصال (به آواتارها برسد) */
+      height: 46px;
+      pointer-events: none;
+      z-index: 1;
     }
 
-    .swipe-btn-like:disabled {
-      background: #16a34a;
-      color: #022c22;
+    /* SVG برق */
+    .match-link .electric {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
     }
 
+    /* رشته‌ها */
+    .match-link .electric .e {
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
 
-    .match-card.top-pick {
-      border-color: rgba(34, 197, 94, 0.7);
-      box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.4), 0 16px 40px rgba(22, 163, 74, 0.4);
-      background: radial-gradient(circle at top left, rgba(34, 197, 94, 0.08), #020617);
+      /* برق باید پیوسته باشد */
+      stroke-width: 2.8;
+      opacity: .92;
+
+      /* مهم: به‌جای dash، جریان واقعی با فیلتر */
+      filter: url(#electricFlow);
+
+      /* فلیکر خیلی سبک */
+      animation: elecFlicker 220ms steps(2, end) infinite;
     }
 
-    .top-pick-badge {
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 999px;
-      background: rgba(34, 197, 94, 0.15);
-      border: 1px solid rgba(34, 197, 94, 0.7);
-      color: #bbf7d0;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+    /* رنگ/ضخامت‌ها (همون‌ها رو نگه می‌داریم ولی کمی طبیعی‌تر) */
+    .match-link .electric .e1 {
+      stroke: rgba(52, 245, 197, .95);
+      stroke-width: 3.4;
     }
 
+    .match-link .electric .e2 {
+      stroke: rgba(34, 211, 238, .78);
+      stroke-width: 2.5;
+      opacity: .75;
+    }
 
+    .match-link .electric .e3 {
+      stroke: rgba(255, 255, 255, .55);
+      stroke-width: 1.9;
+      opacity: .55;
+    }
 
-    @media (max-width: 900px) {
-      .layout {
-        flex-direction: column;
+    .match-link .electric .e4 {
+      stroke: rgba(52, 245, 197, .70);
+      stroke-width: 2.3;
+      opacity: .68;
+    }
+
+    @keyframes elecFlicker {
+      0% {
+        opacity: .55;
       }
-      .card-right {
-        max-height: none;
+
+      40% {
+        opacity: .95;
+      }
+
+      100% {
+        opacity: .70;
       }
     }
 
-/* ---------- Languages Dropdown (Multi Select) ---------- */
-.pm-dropdown {
-  position: relative;
-  width: 100%;
-}
 
-.pm-dropdown-btn {
-  width: 100%;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid #374151;
-  background: #020617;
-  color: #e5e7eb;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-  outline: none;
-}
+    /* جرقه سرها */
+    .match-link .spark {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      opacity: .95;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .85), transparent 55%),
+        radial-gradient(circle at 50% 50%, rgba(52, 245, 197, .35), transparent 62%),
+        conic-gradient(from 0deg, rgba(34, 211, 238, 0), rgba(52, 245, 197, .95), rgba(255, 255, 255, .55), rgba(34, 211, 238, 0));
+      filter: blur(.2px) drop-shadow(0 0 18px rgba(52, 245, 197, .85));
+      animation: sparkPulse 1.0s ease-in-out infinite;
+    }
 
-.pm-dropdown-btn:hover {
-  background: #111827;
-}
+    .match-link .spark-left {
+      left: -16px;
+    }
 
-.pm-dropdown-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  right: 0;
-  background: #020617;
-  border: 1px solid #374151;
-  border-radius: 12px;
-  padding: 8px;
-  max-height: 220px;
-  overflow-y: auto;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
-  display: none;
-  z-index: 50;
-}
+    .match-link .spark-right {
+      right: -16px;
+    }
 
-.pm-dropdown-menu.open {
-  display: block;
-}
+    @keyframes sparkPulse {
+      0% {
+        transform: translateY(-50%) scale(.85);
+        opacity: .25;
+      }
 
-.pm-lang-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 8px;
-  border-radius: 10px;
-  cursor: pointer;
-}
+      45% {
+        transform: translateY(-50%) scale(1.08);
+        opacity: 1;
+      }
 
-.pm-lang-row:hover {
-  background: #111827;
-}
-
-.pm-lang-row input[type="checkbox"] {
-  width: 14px;
-  height: 14px;
-}
-
-.pm-lang-row label {
-  margin: 0;          /* مهم: label کلی صفحه margin نگیرد */
-  font-size: 13px;
-  cursor: pointer;
-  flex: 1;
-}
+      100% {
+        transform: translateY(-50%) scale(.9);
+        opacity: .35;
+      }
+    }
 
 
+    .avatar-lg.me,
+    .avatar-lg.them {
+      position: relative;
+    }
+
+    .avatar-lg.me {
+      box-shadow: 0 0 24px rgba(34, 211, 238, .22);
+    }
+
+    .avatar-lg.them {
+      box-shadow: 0 0 24px rgba(52, 245, 197, .22);
+    }
+
+    .avatar-lg.me::after,
+    .avatar-lg.them::after {
+      content: "";
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      border: 2px solid rgba(52, 245, 197, .18);
+      opacity: .0;
+      animation: pulseRing 2.2s ease-in-out infinite;
+    }
+
+    .avatar-lg.me::after {
+      border-color: rgba(34, 211, 238, .18);
+    }
+
+    @keyframes pulseRing {
+      0% {
+        transform: scale(.92);
+        opacity: 0;
+      }
+
+      35% {
+        opacity: .65;
+      }
+
+      100% {
+        transform: scale(1.08);
+        opacity: 0;
+      }
+    }
 
 
+    .btn-view-squad {
+      box-shadow: 0 0 28px rgba(52, 245, 197, .22);
+      transition: transform .15s ease, box-shadow .15s ease;
+    }
+
+    .btn-view-squad:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 0 40px rgba(52, 245, 197, .32);
+    }
+
+    .btn-keep-matching {
+      opacity: .9;
+      transition: opacity .15s ease;
+    }
+
+    .btn-keep-matching:hover {
+      opacity: 1;
+    }
+
+
+    .avatar-name,
+    .match-highlight {
+      max-width: 160px;
+      display: inline-block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      vertical-align: bottom;
+    }
+
+    .btn-keep-matching {
+      background: rgba(255, 255, 255, 0.03);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+
+
+    .match-actions {
+      margin-top: 10px;
+    }
+
+
+    .toast {
+      background: #222;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      border-left: 4px solid #555;
+      animation: slideUp 0.3s ease;
+    }
+
+    .toast.success {
+      border-left-color: var(--neon-green);
+    }
+
+    .toast.error {
+      border-left-color: var(--neon-red);
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .app-container {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto;
+        overflow-y: auto;
+      }
+
+      .panel {
+        max-height: 80vh;
+      }
+
+      .card-container {
+        height: 500px;
+      }
+    }
   </style>
 </head>
+
 <body>
-<div class="page">
-  <header class="header">
-    <div class="logo-circle">PM</div>
-    <div>
-      <div class="header-title">PlayMate BF</div>
-      <div class="header-sub">
-        Find Battlefield teammates by region, mode, class, language and mic — then upgrade later for more games.
-      </div>
-    </div>
-  </header>
 
-  <div class="layout">
-    <!-- LEFT: PROFILE FORM -->
-    <div class="card card-left">
-      <div class="card-title">Your Battlefield profile</div>
-      <div class="card-sub">Fill this once, then we'll search for the best squadmates for you.</div>
-
-      <form id="matchForm">
-        <label for="username">PlayMate username</label>
-        <input id="username" placeholder="Pouriya" required />
-
-        <div class="small" id="profileStatus">
-          New profile – fill in your details and click “Find matches”.
-        </div>
-        <button type="button" id="profileResetBtn" style="margin: 6px 0 10px; font-size: 11px; padding: 4px 10px; border-radius: 999px; border: 1px solid #374151; background: #020617; color: #9ca3af; cursor: pointer;">
-          Reset profile
-        </button>
-
-
-        <div class="field-row">
-  <div>
-    <label for="region">Region</label>
-<select id="region" required>
-  <option value="">Select region...</option>
-</select>
-
-<label for="city">City</label>
-<select id="city" required disabled>
-  <option value="">Select city...</option>
-</select>
-
-
+  <div id="net-banner" style="
+  display:none;
+  position:fixed;
+  top:0;
+  left:0;
+  right:0;
+  z-index:9999;
+  background:#7c2d12;
+  color:#fff;
+  padding:8px 14px;
+  font-size:0.85rem;
+  align-items:center;
+  justify-content:space-between;
+">
+    <span>⚠ Connection issue. Some features may not work.</span>
+    <button id="net-retry" style="
+    background:#fff;
+    color:#7c2d12;
+    border:none;
+    padding:4px 10px;
+    border-radius:6px;
+    cursor:pointer;
+    font-size:0.8rem;
+  ">
+      Retry
+    </button>
   </div>
-</div>
-
-<div class="field-row">
-  <div>
-    <label for="platform">Platform (optional)</label>
-    <select id="platform">
-      <option value="">Any</option>
-      <option value="PC">PC</option>
-      <option value="PS5">PS5</option>
-      <option value="Xbox">Xbox</option>
-    </select>
-  </div>
-  <div>
-    <label for="in_game_username">Battlefield username (hidden until mutual)</label>
-    <input id="in_game_username" placeholder="e.g. BF_Pouriya" />
-  </div>
-</div>
 
 
-        <div class="field-row">
-          <div>
-            <label for="favorite_mode">Favorite mode</label>
-            <select id="favorite_mode" required>
-              <option value="">Select mode...</option>
-              <option value="Conquest">Conquest</option>
-              <option value="Rush">Rush</option>
-              <option value="Breakthrough">Breakthrough</option>
-              <option value="TDM">Team Deathmatch</option>
-	<option value="Redsec">Redsec</option>
-            </select>
-          </div>
-          <div>
-            <label for="class_type">Class</label>
-            <select id="class_type" required>
-              <option value="">Select class...</option>
-              <option value="assault">assault</option>
-              <option value="engineer">engineer</option>
-              <option value="support">support</option>
-              <option value="recon">recon</option>
-            </select>
-          </div>
-        </div>
+  <div class="app-container">
 
-        <div class="field-row">
-          <div>
-            <label for="mic">Mic / Chat</label>
-            <select id="mic" required>
-              <option value="">Select...</option>
-              <option value="voice">Voice</option>
-              <option value="text">Text</option>
-              <option value="both">Both</option>
-              <option value="none">None</option>
-            </select>
-          </div>
-          <div>
+    <div class="panel">
+      <h2>My Profile</h2>
+      <div id="profile-status" class="profile-status">New profile – fill in your details</div>
 
-<label for="languagesDropdownBtn">Languages</label>
+      <form id="profile-form">
+        <label>PlayMate Username</label>
+        <input type="text" id="username" placeholder="e.g. NeonSlayer" required>
 
-<div class="pm-dropdown" id="languagesDropdown">
-  <button type="button" id="languagesDropdownBtn" class="pm-dropdown-btn">
-    Select languages...
-  </button>
+        <label>Region</label>
+        <select id="region" class="glass-input" required>
+          <option value="">Select Region...</option>
+        </select>
 
-  <div id="languagesMulti" class="pm-dropdown-menu"></div>
-</div>
 
-<input type="hidden" id="languagesHidden" value="" />
+        <label>City / Sub-region</label>
+        <select id="city" class="glass-input" style="margin-top: 8px;" disabled>
+          <option value="">Select City...</option>
+        </select>
 
-<div class="small">
-  Select all languages you can speak. Matching will score higher if at least one overlaps.
-</div>
-          </div>
-        </div>
 
-        <div style="display:flex; align-items:center; margin-top:4px;">
-          <button type="submit" class="btn-primary" id="findMatchesBtn">Find matches</button>
+        <label>Platform</label>
+        <select id="platform">
+          <option value="PC">PC</option>
+          <option value="Xbox">Xbox</option>
+          <option value="PlayStation">PlayStation</option>
+        </select>
 
-          <div class="tip">
-            Tip: we’ll match on <span style="color:#22c55e;">region &amp; mode</span> first, then class, mic and languages.
-          </div>
-        </div>
+
+        <label>Battlefield Username (In-Game)</label>
+        <input type="text" id="in_game_username" placeholder="Origin/EA ID" required>
+
+        <label>Favorite Mode</label>
+        <select id="favorite_mode" class="glass-input" style="margin-bottom:8px;">
+          <option value="">Fav Mode...</option>
+        </select>
+
+
+        <label>Class / Role</label>
+        <select id="class_type">
+          <option value="Assault">Assault</option>
+          <option value="Medic">Medic</option>
+          <option value="Engineer">Engineer</option>
+          <option value="Recon">Recon</option>
+          <option value="Vehicle">Vehicle Main</option>
+        </select>
+
+        <label>Mic Preference</label>
+        <select id="mic">
+          <option value="voice">Voice</option>
+          <option value="both">Voice + Text</option>
+          <option value="none">No mic</option>
+        </select>
+
+
+        <label>Languages</label>
+        <div class="lang-grid" id="lang-container"></div>
+
+        <button type="submit" id="btn-find-matches" class="btn-primary">Find Matches</button>
       </form>
+
+      <a href="#" class="profile-link" id="view-profile-link" style="display:none;">View public profile →</a>
+
     </div>
 
-    <!-- RIGHT: MATCHES -->
-    <div class="card card-right">
-      <div class="matches-header">
-        <div class="matches-title">Matches</div>
-        <div class="matches-count" id="matchesCount">No matches yet</div>
-      </div>
-      <div class="matches-status" id="statusText">
-        Fill your profile and click <b>Find matches</b> to see your best Battlefield squadmates.
-      </div>
-      <div class="matches-list" id="matchesList"></div>
-	
-	      <!-- SWIPE MODE SECTION -->
-      <div class="swipe-section">
-        <div class="swipe-header">
-          <div class="swipe-title">Swipe mode (beta)</div>
-          <div class="swipe-status" id="swipeStatus">
-            Run a match search, then swipe through your top picks.
-          </div>
-        </div>
-        <div id="swipeCard"></div>
-        <div class="swipe-actions">
-          <button type="button" class="swipe-btn-skip" id="swipeSkipBtn">
-            Skip
-          </button>
-          <button type="button" class="swipe-btn-like" id="swipeLikeBtn">
-            Add to squad
-          </button>
+    <div class="panel match-area">
+      <div id="card-wrapper" class="card-container">
+        <div class="empty-state">
+          <h3>Ready to Deploy?</h3>
+          <p style="color: var(--text-muted); margin-top: 10px;">Update your profile and click "Find Matches" to scan
+            for squadmates.</p>
         </div>
       </div>
+    </div>
 
-
-      <!-- MY SQUAD SECTION -->
-      <div class="squad-header">
-        <div class="squad-title">My Squad (mutual likes)</div>
-        <button type="button" class="squad-refresh-btn" id="refreshSquadBtn">
-          Refresh
-        </button>
+    <div class="panel">
+      <h2>My Squad</h2>
+      <div id="squad-list" class="squad-list">
+        <div class="empty-state" style="font-size: 0.9rem;">No squadmates yet. Start matching!</div>
       </div>
-      <div class="squad-status" id="squadStatus">
-        Mutual likes will appear here once you and other players add each other.
-      </div>
-      <div class="squad-list" id="squadList"></div>
-
     </div>
   </div>
-</div>
+
+  <div class="modal-overlay" id="match-modal">
+    <div class="match-modal match-modal-fancy">
+      <button class="match-close" onclick="closeModal()">×</button>
+
+      <div class="match-title">IT'S A MATCH!</div>
+      <div class="match-sub">
+        Squadmate unlocked:
+        <span id="modal-them-name" class="match-highlight">User</span>
+
+      </div>
+
+      <div class="match-avatars fancy">
+        <div class="avatar-block">
+          <div class="avatar-lg me" id="modal-me-avatar">P</div>
+          <div class="avatar-name" id="modal-me-name">You</div>
+          <div class="avatar-ign" id="modal-me-ign">In-game: —</div>
+        </div>
+
+        <div class="match-link" aria-hidden="true">
+          <svg class="electric" viewBox="0 0 320 60" preserveAspectRatio="none">
+            <defs>
+              <!-- Glow نرم -->
+              <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+                <feGaussianBlur stdDeviation="2.4" result="b" />
+                <feMerge>
+                  <feMergeNode in="b" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+
+              <!-- Electric flow: turbulence + displacement -->
+              <filter id="electricFlow" x="-40%" y="-80%" width="180%" height="260%">
+                <feTurbulence type="fractalNoise" baseFrequency="0.012 0.18" numOctaves="2" seed="2" result="noise">
+                  <animate attributeName="baseFrequency" dur="600ms" values="0.010 0.16; 0.014 0.22; 0.010 0.16"
+                    repeatCount="indefinite" />
+                </feTurbulence>
+
+                <feDisplacementMap in="SourceGraphic" in2="noise" scale="14" xChannelSelector="R" yChannelSelector="G"
+                  result="warp" />
+
+                <!-- Glow داخلی -->
+                <feGaussianBlur in="warp" stdDeviation="2.2" result="glowBlur" />
+                <feColorMatrix in="glowBlur" type="matrix" values="
+      1 0 0 0 0
+      0 1 0 0 0
+      0 0 1 0 0
+      0 0 0 0.9 0" result="glow" />
+
+                <feMerge>
+                  <feMergeNode in="glow" />
+                  <feMergeNode in="warp" />
+                </feMerge>
+              </filter>
+
+            </defs>
 
 
-<script>
-  document.addEventListener("DOMContentLoaded", () => {
+            <!-- رشته‌های برق -->
+            <path class="e e1" d="M0,30 C40,18 70,40 110,30 C150,20 180,44 220,30 C255,20 285,38 320,30" />
+            <path class="e e2" d="M0,30 C35,10 75,48 115,30 C150,12 190,50 230,30 C265,12 290,46 320,30" />
+            <path class="e e3" d="M0,30 C45,24 70,34 110,30 C150,26 180,36 220,30 C255,26 285,34 320,30" />
+            <path class="e e4" d="M0,30 C55,8 85,52 125,30 C165,8 205,52 245,30 C275,12 300,44 320,30" />
+          </svg>
 
-      const STORAGE_KEY = "playmate_profile_v1";
-    const form = document.getElementById("matchForm");
-
-
-  if (!form) {
-    console.error('matchForm not found. Check <form id="matchForm">');
-    return;
-  }
-
-const findMatchesBtn = document.getElementById("findMatchesBtn");
-
-const GAME = "battlefield";
-
-const regionEl = document.getElementById("region");
-const cityEl = document.getElementById("city");
-const favoriteModeEl = document.getElementById("favorite_mode");
-
-const languagesMultiEl = document.getElementById("languagesMulti");
-const languagesHiddenEl = document.getElementById("languagesHidden");
-const languagesDropdownBtn = document.getElementById("languagesDropdownBtn");
-
-
-function openLanguagesDropdown() {
-  if (!languagesMultiEl) return;
-  languagesMultiEl.classList.add("open");
-}
-
-function closeLanguagesDropdown() {
-  if (!languagesMultiEl) return;
-  languagesMultiEl.classList.remove("open");
-}
-
-function toggleLanguagesDropdown() {
-  if (!languagesMultiEl) return;
-  languagesMultiEl.classList.toggle("open");
-}
-
-// کلیک روی دکمه dropdown
-if (languagesDropdownBtn) {
-  languagesDropdownBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    toggleLanguagesDropdown();
-  });
-}
-
-// کلیک بیرون dropdown => بسته شود
-document.addEventListener("click", (e) => {
-  const wrap = document.getElementById("languagesDropdown");
-  if (!wrap || !languagesMultiEl) return;
-
-  const clickedInside = wrap.contains(e.target);
-  if (!clickedInside) closeLanguagesDropdown();
-});
-
-
-if (!languagesMultiEl || !languagesHiddenEl) {
-  console.error(
-    "Languages elements missing. Check #languagesMulti and #languagesHidden in HTML."
-  );
-}
-
-let META = null;
-
-
-    const matchesList = document.getElementById("matchesList");
-    const statusText = document.getElementById("statusText");
-    const matchesCount = document.getElementById("matchesCount");
-    const profileStatus = document.getElementById("profileStatus");
-    const profileResetBtn = document.getElementById("profileResetBtn");
-
-let isSubmitting = false;
-
-const findMatchesBtnOriginalText = findMatchesBtn ? findMatchesBtn.textContent : "Find matches";
-
-function lockSubmitUI() {
-  isSubmitting = true;
-
-  if (findMatchesBtn) {
-    findMatchesBtn.disabled = true;
-    findMatchesBtn.textContent = "Searching...";
-  }
-
-  if (profileResetBtn) profileResetBtn.disabled = true;
-  if (refreshSquadBtn) refreshSquadBtn.disabled = true;
-}
-
-function unlockSubmitUI() {
-  isSubmitting = false;
-
-  if (findMatchesBtn) {
-    findMatchesBtn.disabled = false;
-    findMatchesBtn.textContent = findMatchesBtnOriginalText;
-  }
-
-  if (profileResetBtn) profileResetBtn.disabled = false;
-  if (refreshSquadBtn) refreshSquadBtn.disabled = false;
-}
-
-
-    // state برای swipe
-    let swipeMatches = [];
-    let swipeIndex = 0;
-
-    const swipeCard = document.getElementById("swipeCard");
-    const swipeStatus = document.getElementById("swipeStatus");
-    const swipeSkipBtn = document.getElementById("swipeSkipBtn");
-    const swipeLikeBtn = document.getElementById("swipeLikeBtn");
-
-    let likedUsers = new Set();
-
-    const squadList = document.getElementById("squadList");
-    const squadStatus = document.getElementById("squadStatus");
-    const refreshSquadBtn = document.getElementById("refreshSquadBtn");
+          <span class="spark spark-left"></span>
+          <span class="spark spark-right"></span>
+        </div>
 
 
 
-function setProfileStatus(text) {
-  profileStatus.textContent = text;
-}
+        <div class="avatar-block">
+          <div class="avatar-lg them" id="modal-them-avatar">B</div>
+          <div class="avatar-name" id="modal-them-name-2">User</div>
+          <div class="avatar-ign" id="modal-them-ign">In-game: —</div>
+        </div>
+      </div>
 
-function setSquadStatus(text) {
-  squadStatus.textContent = text;
-}
+      <div class="match-actions">
+        <button class="modal-btn btn-view-squad" onclick="goToSquad()">View Squad</button>
 
-function setMatchesStatus(text) {
-  statusText.innerHTML = text;
-}
+        <button class="modal-btn btn-keep-matching" onclick="closeModal()">Continue Matching</button>
+      </div>
+    </div>
+  </div>
 
-let toastTimer = null;
+  <div class="toast-container" id="toast-container"></div>
 
-function showToast(message, type = "error", ms = 4500) {
-  const el = document.getElementById("toast");
-  if (!el) return;
+  <script>
+    /* =========================================================
+       PlayMate BF — ui.html script (refactored for readability)
+       Logic unchanged; formatting + organization only.
+       ========================================================= */
 
-  el.textContent = message;
-  el.classList.remove("hidden", "error", "success");
-  el.classList.add(type);
+    /* -----------------------
+       GLOBALS / CONSTANTS
+    ------------------------*/
+    let lastSquadSignature = "";
 
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    el.classList.add("hidden");
-  }, ms);
-}
+    const API_BASE = "/api";     // Relative path
+    const GAME = "battlefield";
+    const REALTIME_INTERVAL_MS = 30000;
 
+    let META = null;
 
+    /* Realtime (single timer) */
+    let realtimeTimer = null;
 
-// ---------- API helpers (Phase 2) ----------
-function classifyError(err) {
-  const msg = (err && err.message) ? err.message : String(err || "");
-  const isAbort = err && (err.name === "AbortError");
-  const isNetwork = /network|failed to fetch|fetch|cors|timeout/i.test(msg) || isAbort;
-  return {
-    kind: isAbort ? "timeout" : (isNetwork ? "network" : "unknown"),
-    message: msg
-  };
-}
+    /* In-flight guards (Step 9E) */
+    const inFlight = {
+      ping: false,
+      squad: false,
+      match: false,
+      like: false,
+      save: false
+    };
 
-async function fetchJson(url, options = {}, timeoutMs = 12000) {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
+    /* -----------------------
+       STATE
+    ------------------------*/
+    const state = {
+      profile: {
+        username: "",
+        display_username: "",
+        region: "",
+        city: "",
+        platform: "PC",
+        in_game_username: "",
+        favorite_mode: "Conquest",
+        class_type: "Assault",
+        mic: "voice",
+        languages: []
+      },
+      matches: [],
+      currentMatchIndex: 0,
+      squad: [],
+      loading: false
+    };
 
-  try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
+    /* -----------------------
+       DOM ELEMENTS
+    ------------------------*/
+    const els = {
+      form: document.getElementById("profile-form"),
+      status: document.getElementById("profile-status"),
+      langContainer: document.getElementById("lang-container"),
+      cardWrapper: document.getElementById("card-wrapper"),
+      squadList: document.getElementById("squad-list"),
+      modal: document.getElementById("match-modal"),
+      viewProfileLink: document.getElementById("view-profile-link"),
 
-    // تلاش برای خواندن body (حتی در خطا)
-    let data = null;
-    try { data = await res.json(); } catch (_) { data = null; }
+      region: document.getElementById("region"),
+      city: document.getElementById("city"),
+      favoriteMode: document.getElementById("favorite_mode"),
+      platform: document.getElementById("platform"),
+      classType: document.getElementById("class_type"),
+      mic: document.getElementById("mic"),
+      ign: document.getElementById("in_game_username"),
+      username: document.getElementById("username"),
 
-    if (!res.ok) {
-      const detail =
-        (data && (data.detail || data.error || data.message)) ?
-        (data.detail || data.error || data.message) :
-        "HTTP " + res.status;
-      const err = new Error(detail);
-      err.httpStatus = res.status;
-      err.data = data;
-      throw err;
-    }
+      btnFind: document.getElementById("btn-find-matches")
+    };
 
-    return data;
-  } finally {
-    clearTimeout(id);
-  }
-}
-
-     function fillFormFromProfile(profile) {
-      if (!profile) return;
-
-      if (profile.username) {
-        document.getElementById("username").value = profile.username;
+    /* =========================================================
+       INIT
+    ========================================================= */
+    document.addEventListener("DOMContentLoaded", async () => {
+      try {
+        await loadMeta();
+        populateRegions();
+        populateFavoriteModes();
+        renderLanguagesFromMeta();
+      } catch (e) {
+        console.error(e);
+        showToast("Failed to load game meta", "error");
       }
-      if (profile.region) {
-  regionEl.value = profile.region;          // region = regionId مثل "na-west"
-  populateCitiesForRegion(regionEl.value);  // cities را بر اساس region پر کن
-}
-      if (profile.platform !== undefined) {
-        document.getElementById("platform").value = profile.platform || "";
-      }
-      if (profile.favorite_mode) {
-        document.getElementById("favorite_mode").value = profile.favorite_mode;
-      }
-      if (profile.class_type) {
-        document.getElementById("class_type").value = profile.class_type;
-      }
-      if (profile.mic) {
-        document.getElementById("mic").value = profile.mic;
-      }
-      if (profile.languages !== undefined) {
-  setLanguagesChecked(profile.languages);   // languages = "en,fa"
-}
-         if (profile.city) {
-  cityEl.value = profile.city;              // city = "Vancouver"
-}
-if (profile.in_game_username !== undefined) {
-  document.getElementById("in_game_username").value = profile.in_game_username || "";
-}
 
-  // languages: set checkboxes from stored "en,fa"
-  if (profile.languages && languagesMultiEl) {
-    const want = profile.languages.split(",").map((x) => x.trim()).filter(Boolean);
-    const set = new Set(want);
+      // Now that select options + language pills exist, restore works
+      loadProfileFromStorage();
 
-    const boxes = languagesMultiEl.querySelectorAll('input[type="checkbox"]');
-    boxes.forEach((cb) => {
-      cb.checked = set.has(cb.value);
+      if ((state.profile.username || "").trim()) startRealtime();
+
+      setupEventListeners();
+
+      // Restore language pills after pills created from meta
+      applyStoredLanguagesToPills();
+
+      // If region from storage set, rebuild city list
+      if (state.profile.region) {
+        els.region.dispatchEvent(new Event("change"));
+        if (state.profile.city) els.city.value = state.profile.city;
+      }
+
+      if (state.profile.username) refreshSquad();
     });
 
-    syncLanguagesHidden();
-  }
-
-    }
-  
-    // تلاش برای لود پروفایل ذخیره‌شده از localStorage
-        (async function init() {
-  // 1) meta first (dropdown ها باید قبل از set کردن value آماده باشند)
-  try {
-  await loadMeta();
-} catch (err) {
-  console.error("Meta load error:", err);
-
-  // Disable inputs to prevent broken submissions
-  if (regionEl) regionEl.disabled = true;
-  if (cityEl) cityEl.disabled = true;
-  if (favoriteModeEl) favoriteModeEl.disabled = true;
-
-  setMatchesStatus(
-    "Failed to load form options. Please refresh the page. " +
-    "If the issue persists, the server may be unavailable."
-  );
-}
-
-
-  // 2) load saved profile after meta
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const profile = JSON.parse(saved);
-      fillFormFromProfile(profile);
-
-      if (profile.username) {
-        setProfileStatus(
-          `Profile loaded for "${profile.username}". You can update fields or click "Find matches".`
-        );
-        loadLikes(profile.username);
-        loadSquad(profile.username);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        stopRealtime();
+      } else {
+        if ((state.profile.username || "").trim()) startRealtime();
       }
-    } else {
-      setProfileStatus('New profile — fill in your details and click "Find matches".');
-    }
-  } catch (e) {
-    console.error("Error loading profile from storage:", e);
-    setProfileStatus('New profile — fill in your details and click "Find matches".');
-  }
-})();
-
-
-
-function setSelectOptions(selectEl, options, placeholder) {
-  if (!selectEl) return;
-
-  selectEl.innerHTML = "";
-
-  const ph = document.createElement("option");
-  ph.value = "";
-  ph.textContent = placeholder || "Select...";
-  selectEl.appendChild(ph);
-
-  (options || []).forEach((opt) => {
-    const o = document.createElement("option");
-    o.value = opt.value;
-    o.textContent = opt.label;
-    selectEl.appendChild(o);
-  });
-}
-
-function buildLanguagesMulti(languages) {
-  if (!languagesMultiEl) return;
-
-  languagesMultiEl.innerHTML = "";
-
-  (languages || []).forEach((lang) => {
-    const row = document.createElement("div");
-    row.className = "pm-lang-row";
-
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.value = lang.code;
-
-    const lbl = document.createElement("label");
-    lbl.textContent = lang.label;
-
-    // کلیک روی ردیف => toggle checkbox (UX بهتر)
-    row.addEventListener("click", (e) => {
-      // اگر خود checkbox کلیک شد، دوباره toggle نکن
-      if (e.target === cb) return;
-      cb.checked = !cb.checked;
-      syncLanguagesHidden();
     });
 
-    cb.addEventListener("change", () => {
-      syncLanguagesHidden();
+    window.addEventListener("beforeunload", () => stopRealtime());
+
+    /* =========================================================
+       HELPERS
+    ========================================================= */
+    const netBanner = document.getElementById("net-banner");
+    const netRetryBtn = document.getElementById("net-retry");
+
+    function showNetError() {
+      if (netBanner) netBanner.style.display = "flex";
+    }
+
+    function hideNetError() {
+      if (netBanner) netBanner.style.display = "none";
+    }
+
+    netRetryBtn?.addEventListener("click", () => {
+      hideNetError();
+      findMatches();
+      refreshSquad();
     });
 
-    row.appendChild(cb);
-    row.appendChild(lbl);
-
-    languagesMultiEl.appendChild(row);
-  });
-
-  // بعد از ساختن لیست، متن دکمه را با وضعیت فعلی sync کن
-  syncLanguagesHidden();
-}
-
-function syncLanguagesHidden() {
-  if (!languagesMultiEl || !languagesHiddenEl) return;
-
-  const checked = [...languagesMultiEl.querySelectorAll('input[type="checkbox"]:checked')]
-    .map((x) => x.value);
-
-  languagesHiddenEl.value = checked.join(",");
-
-  // متن دکمه dropdown
-  if (languagesDropdownBtn) {
-    if (checked.length === 0) {
-      languagesDropdownBtn.textContent = "Select languages...";
-    } else if (checked.length <= 3) {
-      languagesDropdownBtn.textContent = checked.join(", ");
-    } else {
-      languagesDropdownBtn.textContent = `${checked.length} languages selected`;
+    function showToast(msg, type = "info") {
+      const toast = document.createElement("div");
+      toast.className = `toast ${type}`;
+      toast.textContent = msg;
+      document.getElementById("toast-container").appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
     }
-  }
-}
 
-function setLanguagesChecked(langStr) {
-  const set = new Set(
-    (langStr || "")
-      .split(",")
-      .map((x) => x.trim())
-      .filter(Boolean)
-  );
+    function getInitials(name) {
+      return name ? name.substring(0, 1).toUpperCase() : "?";
+    }
 
-  const boxes = languagesMultiEl.querySelectorAll("input[type=checkbox]");
-  boxes.forEach((b) => {
-    b.checked = set.has(b.value);
-  });
+    function computeSquadSignature(squad) {
+      // include last_active (affects UI status)
+      return (squad || [])
+        .map(m => `${(m.username || "").toLowerCase()}|${m.in_game_username || ""}|${m.last_active || ""}`)
+        .sort()
+        .join(";");
+    }
 
-  syncLanguagesHidden();
-}
+    function setLoading(isLoading, message = "Scanning for Operators...") {
+      state.loading = !!isLoading;
 
+      // Find Matches button
+      if (els.btnFind) els.btnFind.disabled = !!isLoading;
 
-function findRegionById(regionId) {
-  if (!META || !META.regions) return null;
-  return META.regions.find((r) => r.id === regionId) || null;
-}
+      // Match card buttons
+      const likeBtn = document.querySelector(".btn-like");
+      const skipBtn = document.querySelector(".btn-skip");
+      if (likeBtn) likeBtn.disabled = !!isLoading;
+      if (skipBtn) skipBtn.disabled = !!isLoading;
 
-function populateCitiesForRegion(regionId) {
-  const r = findRegionById(regionId);
-
-  if (!r) {
-    cityEl.disabled = true;
-    setSelectOptions(cityEl, [], "Select city...");
-    return;
-  }
-
-  const cityOptions = (r.cities || []).map((c) => ({ value: c, label: c }));
-  cityEl.disabled = false;
-  setSelectOptions(cityEl, cityOptions, "Select city...");
-}
-
-regionEl.addEventListener("change", () => {
-  populateCitiesForRegion(regionEl.value);
-});
-
-
-
-
-
-async function loadMeta() {
-  const res = await fetch(`/api/meta/${GAME}`, { cache: "no-store" });
-  if (!res.ok) throw new Error("Failed to load meta (HTTP " + res.status + ")");
-
-  const json = await res.json();
-  if (json && json.error) throw new Error(json.error);
-
-  META = json;
-
-  // Regions
-  const regionOptions = (META.regions || []).map((r) => ({
-    value: r.id,
-    label: r.label,
-  }));
-  setSelectOptions(regionEl, regionOptions, "Select region...");
-
-  // Favorite modes
-  const modeOptions = (META.favorite_modes || []).map((m) => ({
-    value: m,
-    label: m,
-  }));
-  setSelectOptions(favoriteModeEl, modeOptions, "Select mode...");
-
-  // Cities dependent
-  cityEl.disabled = true;
-  setSelectOptions(cityEl, [], "Select city...");
-
-  // Languages (objects)
-  buildLanguagesMulti(META.languages || []);
-
-console.log("META regions:", (META.regions || []).length, "META languages:", (META.languages || []).length);
-
-
-}
-
-(async () => {
-  try {
-    await loadMeta(); // <-- این باید حتماً اجرا شود
-  } catch (err) {
-    console.error("loadMeta failed:", err);
-    setMatchesStatus(
-      "Failed to load form options. Please refresh the page."
-    );
-  }
-
-  // بعد از meta، تازه localStorage را load کن
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const profile = JSON.parse(saved);
-      fillFormFromProfile(profile);
-
-      if (profile.username) {
-        setProfileStatus(
-          `Profile loaded for "${profile.username}". You can update fields or click "Find matches".`
-        );
-        loadLikes(profile.username);
-        loadSquad(profile.username);
+      // Center message area
+      if (els.cardWrapper && isLoading) {
+        els.cardWrapper.innerHTML = `
+      <div class="empty-state">
+        <div style="opacity:.85; font-weight:600;">${message}</div>
+        <div style="margin-top:10px; opacity:.6; font-size:.9rem;">Please wait…</div>
+      </div>
+    `;
       }
-    } else {
-      setProfileStatus('New profile — fill in your details and click "Find matches".');
-    }
-  } catch (e) {
-    console.error("Error loading profile from storage:", e);
-    setProfileStatus('New profile — fill in your details and click "Find matches".');
-  }
-})();
-
-
-
-
- function scoreClass(score) {
-      if (score >= 80) return "good";
-      if (score >= 50) return "medium";
-      return "low";
     }
 
-   async function loadLikes(username) {
-  likedUsers = new Set();
-  if (!username) return;
+    /* =========================================================
+       REALTIME (SINGLE TIMER) — Step 9E
+    ========================================================= */
+    function canRealtimeRun() {
+      const u = (state.profile.username || "").trim();
+      if (!u) return false;
+      if (document.visibilityState === "hidden") return false;
+      return true;
+    }
 
-  try {
-    const data = await fetchJson(
-      "/api/my-likes?username=" + encodeURIComponent(username),
-      {},
-      12000
-    );
+    async function realtimeTick({ silentSquad = true } = {}) {
+      if (!canRealtimeRun()) return;
 
-    const arr = (data && data.liked_users) ? data.liked_users : [];
-    arr.forEach((name) => {
-      if (name) likedUsers.add(name);
-    });
+      // 1) Ping (guard)
+      if (!inFlight.ping) {
+        inFlight.ping = true;
+        try {
+          const u = (state.profile.username || "").trim();
+          const res = await fetch(`${API_BASE}/ping?username=${encodeURIComponent(u)}&game=${GAME}`, { method: "POST" });
 
-  } catch (err) {
-    // Fail-safe: اگر لایک‌ها نیومدند، فقط log کن و ادامه بده
-    const info = classifyError(err);
-    console.error("loadLikes failed:", info.kind, info.message, err);
-  }
-}
-
-
-
-
-    // ---------- رندر مچ‌ها ----------
-    function renderMatches(matches) {
-      matchesList.innerHTML = "";
-
-      if (!matches || !matches.length) {
-        matchesCount.textContent = "No matches";
-        return;
+          // اگر ping ok بود، یعنی connection خوبه
+          if (res.ok) hideNetError();
+          else showNetError();
+        } catch {
+          // network/backend down
+          showNetError();
+        } finally {
+          inFlight.ping = false;
+        }
       }
 
-      matchesCount.textContent = `Found ${matches.length} matches`;
+      // 2) Squad refresh (let refreshSquad manage inFlight.squad)
+      try {
+        await refreshSquad({ silent: !!silentSquad });
 
-      // تعیین Top picks: ۳ تا اولی که حداقل ۶۰٪ باشن
-      const TOP_LIMIT = 3;
-      const MIN_TOP_SCORE = 60;
-      const topIndexes = [];
-      matches.forEach((m, idx) => {
-        if ((m.match_percent || 0) >= MIN_TOP_SCORE && topIndexes.length < TOP_LIMIT) {
-          topIndexes.push(idx);
-        }
-      });
+        // اگر refreshSquad بدون throw برگرده، یعنی ok
+        hideNetError();
+      } catch {
+        showNetError();
+      }
 
-      matches.forEach((m, index) => {
-        const p = m.profile || {};
-        const card = document.createElement("div");
-
-        const isTopPick = topIndexes.includes(index);
-        card.className = "match-card" + (isTopPick ? " top-pick" : "");
-
-        const header = document.createElement("div");
-        header.className = "match-name-row";
-
-        const name = document.createElement("div");
-        name.className = "match-name";
-        name.textContent = (m.profile && m.profile.display_username) ? m.profile.display_username : m.username;
+    }
 
 
-        header.appendChild(name);
+    function startRealtime() {
+      // prevent duplicate intervals
+      if (realtimeTimer) return;
 
-        // اگر Top pick است، badge اضافه کن
-        if (isTopPick) {
-          const topBadge = document.createElement("span");
-          topBadge.className = "top-pick-badge";
-          topBadge.textContent = "Top pick";
-          header.appendChild(topBadge);
-        } else {
-          const meta = document.createElement("div");
-          meta.className = "badge-small";
-          meta.textContent = p.platform ? p.platform : "Any platform";
-          header.appendChild(meta);
-        }
+      // immediate tick once
+      realtimeTick({ silentSquad: true });
 
-        const badges = document.createElement("div");
-        badges.className = "match-badges";
+      // single interval
+      realtimeTimer = setInterval(() => realtimeTick({ silentSquad: true }), REALTIME_INTERVAL_MS);
+    }
 
-        if (p.region) {
-          const b = document.createElement("span");
-          b.className = "badge";
-          b.textContent = `Region: ${p.region}`;
-          badges.appendChild(b);
-        }
-        if (p.favorite_mode) {
-          const b = document.createElement("span");
-          b.className = "badge";
-          b.textContent = `Mode: ${p.favorite_mode}`;
-          badges.appendChild(b);
-        }
-        if (p.class_type) {
-          const b = document.createElement("span");
-          b.className = "badge";
-          b.textContent = `Class: ${p.class_type}`;
-          badges.appendChild(b);
-        }
-        if (p.mic) {
-          const b = document.createElement("span");
-          b.className = "badge badge-soft";
-          b.textContent = `Mic: ${p.mic}`;
-          badges.appendChild(b);
-        }
-        if (p.languages) {
-          const b = document.createElement("span");
-          b.className = "badge badge-soft";
-          b.textContent = `Lang: ${p.languages}`;
-          badges.appendChild(b);
-        }
+    function stopRealtime() {
+      if (realtimeTimer) {
+        clearInterval(realtimeTimer);
+        realtimeTimer = null;
+      }
 
-        const score = document.createElement("div");
-        score.className = "match-score " + scoreClass(m.match_percent || 0);
-        score.textContent = `${m.match_percent ?? 0}%`;
+      // reset guards (safe)
+      inFlight.ping = false;
+      inFlight.squad = false;
+    }
 
-        const headerRow = document.createElement("div");
-        headerRow.style.display = "flex";
-        headerRow.style.justifyContent = "space-between";
-        headerRow.style.alignItems = "center";
-        headerRow.appendChild(header);
-        headerRow.appendChild(score);
+    // // Legacy wrapper: keep for backward compatibility
+    // function setupHeartbeat() {
+    //   startRealtime();
+    // }
 
-        const reasonsBox = document.createElement("div");
-        reasonsBox.className = "reasons";
 
-        const title = document.createElement("div");
-        title.className = "reasons-title";
-        title.textContent = "Why this match:";
+    /* =========================================================
+       PROFILE
+    ========================================================= */
+    function setupEventListeners() {
+      // Region -> City
+      els.region.addEventListener("change", () => {
+        els.city.innerHTML = `<option value="">Select City...</option>`;
+        els.city.disabled = true;
 
-        const ul = document.createElement("ul");
-        (m.reasons || []).forEach((r) => {
-          const li = document.createElement("li");
-          li.textContent = r;
-          ul.appendChild(li);
+        const regionData = (META?.regions || []).find(r => r.id === els.region.value);
+        if (!regionData) return;
+
+        els.city.disabled = false;
+        (regionData.cities || []).forEach(c => {
+          const opt = document.createElement("option");
+          opt.value = c;
+          opt.textContent = c;
+          els.city.appendChild(opt);
         });
+      });
 
-        reasonsBox.appendChild(title);
-        reasonsBox.appendChild(ul);
-
-        const actions = document.createElement("div");
-        actions.className = "match-actions";
-
-        const likeBtn = document.createElement("button");
-        likeBtn.className = "like-btn";
-        likeBtn.dataset.username = m.username;
-
-        const isLiked = likedUsers.has(m.username);
-        if (isLiked) {
-          likeBtn.textContent = "Added ✓";
-          likeBtn.disabled = true;
-        } else {
-          likeBtn.textContent = "Add to squad";
-          likeBtn.disabled = false;
-        }
-
-        actions.appendChild(likeBtn);
-
-        card.appendChild(headerRow);
-        card.appendChild(badges);
-        card.appendChild(reasonsBox);
-        card.appendChild(actions);
-
-        matchesList.appendChild(card);
+      // Form submit -> Save + Match
+      els.form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        await saveProfile();
+        findMatches();
       });
     }
 
-
-        function initSwipe(matches) {
-      const raw = matches || [];
-
-      // ۱) فقط کسایی که already liked نیستن
-      let filtered = raw.filter((m) => !likedUsers.has(m.username));
-
-      // ۲) فقط مچ‌های قوی‌تر (مثلاً ۵۰٪ به بالا)
-      filtered = filtered.filter((m) => (m.match_percent || 0) >= 50);
-
-      swipeMatches = filtered;
-      swipeIndex = 0;
-
-      // اگر هیچ مچ قوی‌ای نبود، وضعیت رو تو swipeStatus توضیح بده
-      if (!swipeMatches.length) {
-        swipeStatus.textContent = "No strong matches to swipe. Try changing region/mode.";
-        swipeCard.innerHTML = "";
-        swipeSkipBtn.disabled = true;
-        swipeLikeBtn.disabled = true;
-        return;
-      }
-
-      // در غیر این صورت کارت اول رو رندر کن
-      renderSwipeCard();
+    function updateStateLangs() {
+      updateStateLangsFromPills(); // alias
     }
 
-
-    function renderSwipeCard() {
-      swipeCard.innerHTML = "";
-
-      // 1) اصلاً مچی برای swipe نداریم
-      if (!swipeMatches.length) {
-        swipeStatus.textContent = "No matches to swipe. Run a search first.";
-        swipeSkipBtn.disabled = true;
-        swipeLikeBtn.disabled = true;
-        // کارت خالی بماند (هیچ div داخل swipeCard نگذار)
-        return;
-      }
-
-      // 2) به انتهای deck رسیدیم
-      if (swipeIndex >= swipeMatches.length) {
-        swipeStatus.textContent = "You reached the end of your current swipe deck.";
-        swipeSkipBtn.disabled = true;
-        swipeLikeBtn.disabled = true;
-        // باز هم کارت خالی، فقط متن بالا
-        return;
-      }
-
-      // 3) حالت عادی: کارت داریم
-      swipeSkipBtn.disabled = false;
-      swipeLikeBtn.disabled = false;
-
-      const m = swipeMatches[swipeIndex];
-      const p = m.profile || {};
-
-      swipeStatus.textContent = `Card ${swipeIndex + 1} of ${swipeMatches.length}`;
-
-      const box = document.createElement("div");
-      box.className = "swipe-card-box";
-
-      const mainRow = document.createElement("div");
-      mainRow.className = "swipe-main-row";
-
-      const left = document.createElement("div");
-      const name = document.createElement("div");
-      name.className = "swipe-name";
-      name.textContent =
-  (m.profile && m.profile.display_username)
-    ? m.profile.display_username
-    : m.username;
-
-
-      const small = document.createElement("div");
-      small.className = "swipe-small";
-      small.textContent = `Match score: ${m.match_percent ?? 0}%`;
-
-      left.appendChild(name);
-      left.appendChild(small);
-
-      const right = document.createElement("div");
-      right.className = "match-score " + scoreClass(m.match_percent || 0);
-      right.textContent = `${m.match_percent ?? 0}%`;
-
-      mainRow.appendChild(left);
-      mainRow.appendChild(right);
-
-      const tags = document.createElement("div");
-      tags.className = "swipe-tags";
-
-      const tagItems = [
-        p.region ? `Region: ${p.region}` : null,
-        p.favorite_mode ? `Mode: ${p.favorite_mode}` : null,
-        p.class_type ? `Class: ${p.class_type}` : null,
-        p.mic ? `Mic: ${p.mic}` : null,
-        p.languages ? `Lang: ${p.languages}` : null,
-      ].filter(Boolean);
-
-      tagItems.forEach((t) => {
-        const span = document.createElement("span");
-        span.className = "badge badge-soft";
-        span.textContent = t;
-        tags.appendChild(span);
-      });
-
-      const why = document.createElement("div");
-      why.className = "swipe-small";
-      if (m.reasons && m.reasons.length) {
-        why.textContent = "Why this match: " + m.reasons.join(" • ");
-      }
-
-      box.appendChild(mainRow);
-      box.appendChild(tags);
-      box.appendChild(why);
-
-      swipeCard.appendChild(box);
-    }
-
-
-
-    // کلیک روی Skip در swipe mode
-    swipeSkipBtn.addEventListener("click", () => {
-      if (!swipeMatches.length) return;
-      swipeIndex += 1;
-      renderSwipeCard();
-    });
-
-    // کلیک روی Add to squad در swipe mode
-    swipeLikeBtn.addEventListener("click", async () => {
-      if (!swipeMatches.length) return;
-      if (swipeIndex >= swipeMatches.length) return;
-
-      const current = swipeMatches[swipeIndex];
-      const toUser = current.username;
-      const fromUser = document.getElementById("username").value.trim();
-
-      if (!fromUser) {
-        alert("اول PlayMate username خودت را در فرم بالا بنویس.");
-        return;
-      }
-
-      swipeLikeBtn.disabled = true;
+    function loadProfileFromStorage() {
+      const stored = localStorage.getItem("playmate_profile");
+      if (!stored) return;
 
       try {
-        const res = await fetch("/api/like", {
+        const data = JSON.parse(stored);
+
+        // state
+        state.profile = { ...state.profile, ...data };
+
+        // DOM
+        els.username.value = data.display_username || data.username || "";
+        els.ign.value = data.in_game_username || "";
+        els.region.value = data.region || "";
+        els.city.value = data.city || "";
+        els.platform.value = data.platform || "PC";
+        els.favoriteMode.value = data.favorite_mode || "Conquest";
+        els.classType.value = data.class_type || "Assault";
+        els.mic.value = data.mic || "voice";
+
+        // langs (string "en,fa" or array)
+        if (data.languages) {
+          if (Array.isArray(data.languages)) state.profile.languages = data.languages;
+          else state.profile.languages = String(data.languages).split(",").map(x => x.trim()).filter(Boolean);
+
+          applyStoredLanguagesToPills();
+        }
+
+        els.status.textContent = `Profile loaded for '${data.display_username || data.username || ""}'`;
+        updateProfileLink(data.username);
+      } catch (e) {
+        console.error("Error parsing profile", e);
+      }
+    }
+
+    async function saveProfile() {
+      // state <- DOM
+      state.profile.display_username = els.username.value;
+      state.profile.username = state.profile.display_username.toLowerCase();
+      state.profile.in_game_username = els.ign.value;
+      state.profile.region = els.region.value;
+      state.profile.city = els.city.value;
+      state.profile.platform = els.platform.value;
+      state.profile.favorite_mode = els.favoriteMode.value;
+      state.profile.class_type = els.classType.value;
+      state.profile.mic = els.mic.value;
+      updateStateLangs();
+
+      // payload
+      const payload = {
+        username: state.profile.username,
+        display_username: state.profile.display_username,
+        game: GAME,
+        region: state.profile.region,
+        city: state.profile.city,
+        platform: state.profile.platform,
+        favorite_mode: state.profile.favorite_mode,
+        class_type: state.profile.class_type,
+        mic: state.profile.mic,
+        languages: (state.profile.languages || []).join(","), // "en,fa"
+        in_game_username: state.profile.in_game_username,
+        profile_pic_url: null,
+        wallpaper_url: null,
+        game_meta: {}
+      };
+
+      try {
+        const res = await fetch(`${API_BASE}/profile`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.status === 409) {
+          showToast("This Battlefield username is already used by another PlayMate user.", "error");
+          throw new Error("Conflict");
+        }
+        if (!res.ok) throw new Error("Save failed");
+
+        // store local only after success
+        localStorage.setItem("playmate_profile", JSON.stringify(payload));
+        updateProfileLink(state.profile.username);
+
+        els.status.textContent = "Profile saved successfully!";
+        showToast("Profile saved!", "success");
+
+        startRealtime();
+      } catch (err) {
+        console.error(err);
+        if (err.message !== "Conflict") showToast("Failed to save profile", "error");
+      }
+    }
+
+    function updateProfileLink(username) {
+      const a = els.viewProfileLink;
+      if (!a) return;
+
+      const u = (username || "").trim().toLowerCase();
+      if (!u) {
+        a.href = "#";
+        a.style.display = "none";
+        a.onclick = null;
+        return;
+      }
+
+      a.href = "/profile?username=" + encodeURIComponent(u);
+      a.style.display = "block";
+      a.onclick = null;
+    }
+
+    /* =========================================================
+       MATCHING
+    ========================================================= */
+    async function findMatches() {
+      if (state.loading) return;
+      if (inFlight.match) return;
+
+      inFlight.match = true;
+      try {
+        setLoading(true, "Scanning for Operators...");
+
+        const res = await fetch(`${API_BASE}/match`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            from_user: fromUser,
-            to_user: toUser,
-            game: "battlefield",
-          }),
+            username: state.profile.username,
+            game: GAME,
+            region: els.region.value,
+            city: els.city.value,
+            favorite_mode: els.favoriteMode.value,
+            class_type: els.classType.value,
+            mic: els.mic.value,
+            languages: (state.profile.languages || []).join(","),
+            platform: els.platform.value || null,
+            in_game_username: (els.ign.value || "").trim() || null,
+            profile_pic_url: null,
+            wallpaper_url: null,
+            game_meta: {}
+          })
         });
 
         if (!res.ok) {
-          alert("Error " + res.status);
-          swipeLikeBtn.disabled = false;
+          let msg = `match failed: ${res.status}`;
+          try {
+            const j = await res.json();
+            if (j?.detail) msg = (typeof j.detail === "string") ? j.detail : JSON.stringify(j.detail);
+          } catch { }
+          throw new Error(msg);
+        }
+
+        const data = await res.json();
+        state.matches = data.matches || [];
+        state.currentMatchIndex = 0;
+
+        if (!state.matches.length) {
+          setLoading(false);
+          els.cardWrapper.innerHTML = `
+    <div class="empty-state">
+      <div style="font-weight:700; opacity:.9;">No matches found</div>
+      <div style="margin-top:10px; opacity:.65; font-size:.95rem;">
+        Try changing Region, Favorite Mode, Class, or Languages, then scan again.
+      </div>
+
+      <div style="margin-top:16px;">
+        <button class="btn-primary" type="button" onclick="findMatches()">Scan again</button>
+      </div>
+    </div>
+  `;
           return;
         }
 
-        likedUsers.add(toUser);
 
-        // بعد از لایک، رفرش Squad و برو کارت بعدی
-        loadSquad(fromUser);
 
-        swipeIndex += 1;
-        renderSwipeCard();
+        setLoading(false);
+        renderCard();
       } catch (err) {
         console.error(err);
-        alert("Network error");
-        swipeLikeBtn.disabled = false;
+        showNetError();
+        setLoading(false);
+        showToast(err.message || "Could not fetch matches", "error");
+      } finally {
+        inFlight.match = false;
       }
-    });
+    }
 
-    profileResetBtn.addEventListener("click", () => {
-      // پاک کردن localStorage
+    function renderCard() {
+      if (state.loading) return;
+
+      if (!state.matches || state.currentMatchIndex >= state.matches.length) {
+        els.cardWrapper.innerHTML = `
+    <div class="empty-state">
+      <div style="font-weight:700; opacity:.9;">No more matches</div>
+      <div style="margin-top:10px; opacity:.65; font-size:.95rem;">
+        Update your profile filters and click <b>Find Matches</b> again.
+      </div>
+
+      <div style="margin-top:16px;">
+        <button class="btn-primary" type="button" onclick="findMatches()">Scan again</button>
+      </div>
+    </div>
+  `;
+        return;
+      }
+
+
+
+      const match = state.matches[state.currentMatchIndex];
+      const p = match.profile;
+
+      els.cardWrapper.innerHTML = `
+    <div class="match-card" id="active-card">
+      <div class="match-percent">${match.match_percent}% Match</div>
+      <div class="avatar-lg">${getInitials(match.username)}</div>
+      <div class="player-name">${p.display_username}</div>
+
+      <div class="pill-container">
+        <span class="info-pill">${p.region}</span>
+        <span class="info-pill">${p.platform}</span>
+        <span class="info-pill" style="color:var(--neon-green)">${p.class_type}</span>
+        <span class="info-pill">${p.mic}</span>
+      </div>
+
+      <div class="match-reasons">
+        <h4>Why this match:</h4>
+        <ul>${match.reasons.map(r => `<li>${r}</li>`).join("")}</ul>
+      </div>
+
+      <div class="actions">
+        <button class="action-btn btn-skip" onclick="handleSkip()">✕</button>
+        <button class="action-btn btn-like" onclick="handleLike()">💚</button>
+      </div>
+    </div>
+  `;
+    }
+
+    function handleSkip() {
+      if (state.loading) return;
+
+      const card = document.getElementById("active-card");
+      if (!card) return;
+
+      card.classList.add("swipe-left");
+      setTimeout(() => {
+        state.currentMatchIndex++;
+        renderCard();
+      }, 300);
+    }
+
+    async function handleLike() {
+      if (state.loading) return;
+      if (inFlight.like) return;
+
+      inFlight.like = true;
+
+      const likeBtn = document.querySelector(".btn-like");
+      const skipBtn = document.querySelector(".btn-skip");
+      likeBtn?.setAttribute("disabled", true);
+      skipBtn?.setAttribute("disabled", true);
+
+      const card = document.getElementById("active-card");
+      const matchUser = state.matches[state.currentMatchIndex];
+
+      // Guard: اگر کارت/یوزر نداریم، قفل نکن
+      if (!matchUser) {
+        likeBtn?.removeAttribute("disabled");
+        skipBtn?.removeAttribute("disabled");
+        inFlight.like = false;
+        return;
+      }
+
+      // Optimistic UI
+      if (card) card.classList.add("swipe-right");
+
       try {
-        localStorage.removeItem(STORAGE_KEY);
-      } catch (e) {
-        console.error("Error clearing storage:", e);
-      }
-
-      // خالی کردن فرم
-document.getElementById("username").value = "";
-document.getElementById("region").value = "";
-document.getElementById("city").value = "";
-document.getElementById("platform").value = "";
-document.getElementById("in_game_username").value = "";
-document.getElementById("favorite_mode").value = "";
-document.getElementById("class_type").value = "";
-document.getElementById("mic").value = "";
-document.getElementById("languages").value = "";
-document.getElementById("username").value = "";
-document.getElementById("in_game_username").value = "";
-document.getElementById("platform").value = "";
-
-regionEl.value = "";
-populateCitiesForRegion("");   // city را disable + خالی می‌کند
-cityEl.value = "";
-
-favoriteModeEl.value = "";
-document.getElementById("class_type").value = "";
-document.getElementById("mic").value = "";
-
-// languages: همه unchecked + hidden پاک
-setLanguagesChecked("");
-
-
-      // پاک کردن state ها
-      likedUsers = new Set();
-      swipeMatches = [];
-      swipeIndex = 0;
-
-      // پاک کردن UIهای وابسته
-      matchesList.innerHTML = "";
-      matchesCount.textContent = "No matches yet";
-      setMatchesStatus('Fill your profile and click <b>Find matches</b> to see your squadmates.');
-
-      squadList.innerHTML = "";
-      setSquadStatus("Mutual likes will appear here once you and other players add each other.");
-
-      swipeCard.innerHTML = "";
-      swipeStatus.textContent = "Run a match search, then swipe through your top picks.";
-      swipeSkipBtn.disabled = true;
-      swipeLikeBtn.disabled = true;
-
-      setProfileStatus("New profile – fill in your details and click “Find matches”.");
-    });
-
-
-
-    // ---------- رندر My Squad ----------
-   function renderSquad(squadmates) {
-  squadList.innerHTML = "";
-
-  if (!squadmates || squadmates.length === 0) {
-    setSquadStatus("No mutual squadmates yet.");
-    return;
-  }
-
-  setSquadStatus(`You have ${squadmates.length} squadmate(s).`);
-
-  squadmates.forEach((row) => {
-    const name = row.display_username || row.username || "Unknown";
-
-
-    const ignText = row.in_game_username
-      ? ("In-game: " + row.in_game_username)
-      : "In-game username hidden";
-
-    const card = document.createElement("div");
-    card.className = "squad-card";
-
-    const main = document.createElement("div");
-    main.className = "squad-main";
-
-    const title = document.createElement("div");
-    title.className = "squad-name";
-    title.textContent = name;
-
-    const tag = document.createElement("div");
-    tag.className = "squad-tag";
-    tag.textContent = ignText;
-
-    main.appendChild(title);
-    main.appendChild(tag);
-
-    const pill = document.createElement("div");
-    pill.className = "squad-pill";
-    pill.textContent = "Ready to squad up";
-
-    card.appendChild(main);
-    card.appendChild(pill);
-
-    squadList.appendChild(card);
-  });
-}
-
-
-// ---------- لود کردن My Squad از سرور ----------
-async function loadSquad(username) {
-  if (!username) {
-    setSquadStatus("Enter your PlayMate username above, then refresh.");
-    squadList.innerHTML = "";
-    return;
-  }
-
-  setSquadStatus("Loading squadmates...");
-  squadList.innerHTML = "";
-
-  try {
-    const data = await fetchJson(
-  "/api/my-squad-details?username=" +
-    encodeURIComponent(username) +
-    "&game=battlefield",
-  {},
-  12000
-);
-
-const rawList = data.squadmates || [];
-
-
- const uniqueList = [];
-const seen = new Set();
-
-for (const row of rawList) {
-  const mate = row.username; // مهم
-  if (mate && !seen.has(mate)) {
-    seen.add(mate);
-    uniqueList.push(row);
-  }
-}
-
-renderSquad(uniqueList);
-
-
-  } catch (err) {
-    console.error(err);
-    const info = classifyError(err);
-
-    if (info.kind === "timeout") {
-      setSquadStatus("Squad request timed out. Please try again.");
-    } else if (info.kind === "network") {
-      setSquadStatus("Network error while loading squad. Please check your connection.");
-    } else if (err && err.httpStatus) {
-      setSquadStatus("Server error while loading squad (HTTP " + err.httpStatus + ").");
-    } else {
-      setSquadStatus("Error while loading squad: " + info.message);
-    }
-  }
-}
-
-
-  // ---------- submit فرم: save profile + match + auto squad refresh ----------
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
-
-  // جلوگیری از submit چندباره
-  if (isSubmitting) return;
-  lockSubmitUI();
-
-  try {
-   const payload = {
-  username: document.getElementById("username").value.trim(),
-  game: "battlefield",
-
-  in_game_username: document.getElementById("in_game_username").value.trim() || null,
-  platform: document.getElementById("platform").value.trim() || null,
-
-  // dropdown values
-  region: regionEl.value.trim(),
-  city: cityEl.value.trim(),
-
-  favorite_mode: favoriteModeEl.value,
-  class_type: document.getElementById("class_type").value,
-  mic: document.getElementById("mic").value,
-
-  // synced from multi-select
-  languages: (languagesHiddenEl ? languagesHiddenEl.value : "").trim(),
-
-  // reserved for profile page later
-  profile_pic_url: null,
-  wallpaper_url: null,
-  game_meta: {},
-};
-
-
-
-    // ذخیره پروفایل در localStorage برای دفعات بعد
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-      setProfileStatus(`Profile saved for "${payload.username}".`);
-    } catch (e) {
-      console.error("Error saving profile to storage:", e);
-    }
-
-    if (
-  !payload.username ||
-  !payload.region ||
-  !payload.city ||
-  !payload.favorite_mode ||
-  !payload.class_type ||
-  !payload.mic ||
-  !payload.languages
-) {
-  alert("Please fill in all required fields before continuing.");
-  return;
-}
-
-
-    // ---- منطق اصلی (همان قبلی شما) ----
-    setMatchesStatus("Saving your profile & searching...");
-    matchesList.innerHTML = "";
-    matchesCount.textContent = "";
-
-    // 1) ذخیره پروفایل (Fail-safe: خطا را نشان بده ولی ادامه بده)
-    let profileSaved = true;
-    try {
-      await fetchJson(
-        "/api/profile",
-        {
+        const res = await fetch(`${API_BASE}/like`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        },
-        12000
-      );
-    } catch (err) {
-      profileSaved = false;
-      
-if (err && err.httpStatus === 409) {
-  const msg =
-    (err.data && (err.data.detail || err.data.error || err.data.message)) ||
-    "This Battlefield username is already used. Please choose another one.";
+          body: JSON.stringify({
+            from_user: state.profile.username,
+            to_user: matchUser.username,
+            game: GAME
+          })
+        });
 
-showToast(msg, "error");
-setMatchesStatus(null);
-return;
+        let data = null;
+        try {
+          data = await res.json();
+        } catch {
+          data = null;
+        }
+
+        if (!res.ok) {
+          const msg =
+            (data?.detail && (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail))) ||
+            `Like failed: ${res.status}`;
+          showToast(msg, "error");
+          return;
+        }
+
+        // mutual
+        if (data?.mutual === true || data?.status === "mutual") {
+          await refreshSquad();
+
+          const mate = (state.squad || []).find(
+            m => (m.username || "").toLowerCase() === (matchUser.username || "").toLowerCase()
+          );
+
+          if (mate) triggerMatchModal(mate);
+          else showToast("Matched, but could not load squadmate details yet.", "info");
+        } else {
+          await refreshSquad();
+        }
+      } catch (err) {
+        console.error("Like failed", err);
+        showNetError();
+        showToast("Connection error sending like", "error");
+      }
+
+      setTimeout(() => {
+        state.currentMatchIndex++;
+        likeBtn?.removeAttribute("disabled");
+        skipBtn?.removeAttribute("disabled");
+        inFlight.like = false;
+        renderCard();
+      }, 300);
+    }
 
 
-}
+    /* =========================================================
+       SQUAD + STATUS
+    ========================================================= */
+    async function refreshSquad(opts = {}) {
+      const silent = !!opts.silent;
+      if (!state.profile.username) return;
 
-const info = classifyError(err);
+      // Step 9E: prevent duplicate fetch/race
+      if (inFlight.squad) return;
 
-
-      if (info.kind === "timeout") {
-        setMatchesStatus("Profile save timed out. Continuing to match...");
-      } else if (info.kind === "network") {
-        setMatchesStatus("Network issue while saving profile. Continuing to match...");
-      } else if (err && err.httpStatus) {
-        setMatchesStatus(
-          `Server error while saving profile (HTTP ${err.httpStatus}). Continuing to match...`
+      inFlight.squad = true;
+      try {
+        const res = await fetch(
+          `${API_BASE}/my-squad-details?username=${encodeURIComponent(state.profile.username)}&game=${GAME}`
         );
-      } else {
-        setMatchesStatus("Profile save failed. Continuing to match...");
+        if (!res.ok) throw new Error(`squad failed: ${res.status}`);
+
+        const data = await res.json();
+        const newSquad = data.squadmates || [];
+
+        const sig = computeSquadSignature(newSquad);
+        if (sig === lastSquadSignature) return;
+
+        lastSquadSignature = sig;
+        state.squad = newSquad;
+
+        renderSquadList({ silent });
+      } catch (err) {
+        console.error("Squad fetch error", err);
+        showNetError();
+      } finally {
+        inFlight.squad = false;
       }
-      console.error("Profile save error:", err);
     }
 
-    // 2) لود کردن لایک‌های قبلی (اگر شکست خورد، باز هم match را اجرا کن)
-    try {
-      await loadLikes(payload.username);
-    } catch (err) {
-      console.error("loadLikes failed (continuing):", err);
-    }
 
-    // 3) گرفتن مچ‌ها (این باید دقیق و fail-fast باشد)
-    let data;
-    try {
-      data = await fetchJson(
-        "/api/match",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        },
-        15000
-      );
-    } catch (err) {
-      const info = classifyError(err);
+    function renderSquadList({ silent = false } = {}) {
+      // silent فعلاً استفاده نمی‌شود، ولی امضا درست است
+      els.squadList.innerHTML = "";
 
-      if (info.kind === "timeout") {
-        setMatchesStatus("Match search timed out. Please try again.");
-      } else if (info.kind === "network") {
-        setMatchesStatus(
-          "Network error while searching matches. Check your connection and retry."
-        );
-      } else if (err && err.httpStatus) {
-        setMatchesStatus(`Server error while searching matches (HTTP ${err.httpStatus}).`);
-      } else {
-        setMatchesStatus("Unexpected error while searching matches.");
+      if (!state.squad || state.squad.length === 0) {
+        els.squadList.innerHTML =
+          '<div class="empty-state" style="font-size: 0.9rem;">No squadmates yet. Start matching!</div>';
+        return;
       }
 
-      console.error("Match error:", err);
-      renderMatches([]);
-      initSwipe([]);
-      return; // finally اجرا می‌شود و دکمه آزاد می‌شود
+      state.squad.forEach(mate => {
+        const label = formatLastSeen(mate.last_active);
+
+        const statusHtml =
+          label === "Online"
+            ? '<span class="status-badge status-online">Online</span>'
+            : `<span class="status-badge status-offline">${label}</span>`;
+
+        const item = document.createElement("div");
+        item.className = "squad-member";
+        item.innerHTML = `
+      <div class="sm-avatar">${getInitials(mate.display_username)}</div>
+      <div class="sm-info">
+        <span class="sm-name">${mate.display_username || mate.username || ""}</span>
+        <span class="sm-ign">In-game: ${mate.in_game_username || ""}</span>
+      </div>
+      ${statusHtml}
+    `;
+        els.squadList.appendChild(item);
+      });
     }
 
-    const matches = data.matches || [];
-    if (!matches.length) {
-      setMatchesStatus("No matches found.");
-      renderMatches([]);
-      initSwipe([]);
-    } else {
-      if (!profileSaved) {
-        setMatchesStatus("Matches found (profile not saved). You can retry later.");
-      } else {
-        setMatchesStatus("Done. These are your best current matches.");
-      }
-      renderMatches(matches);
-      initSwipe(matches);
+    function formatLastSeen(lastActiveIso) {
+      if (!lastActiveIso) return "Last seen: unknown";
+
+      const lastMs = new Date(lastActiveIso).getTime();
+      if (!Number.isFinite(lastMs)) return "Last seen: unknown";
+
+      const diffSec = Math.floor((Date.now() - lastMs) / 1000);
+
+      if (diffSec < 0) return "Last seen: now";
+      if (diffSec <= 60) return "Online";
+
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) return `Last seen ${diffMin}m ago`;
+
+      const diffHr = Math.floor(diffMin / 60);
+      if (diffHr < 24) return `Last seen ${diffHr}h ago`;
+
+      const diffDay = Math.floor(diffHr / 24);
+      if (diffDay < 30) return `Last seen ${diffDay}d ago`;
+
+      const diffYr = Math.floor(diffDay / 365);
+      if (diffYr >= 1) return `Last seen ${diffYr}y ago`;
+
+      const diffMon = Math.floor(diffDay / 30);
+      return `Last seen ${diffMon}mo ago`;
     }
 
-    // 4) بعد از match، squad را هم رفرش کن
-    loadSquad(payload.username);
+    /* =========================================================
+       MODAL
+    ========================================================= */
+    function goToSquad() {
+      closeModal();
+      const panel =
+        document.querySelector(".panel-squad") ||
+        document.getElementById("squad-panel") ||
+        document.getElementById("squad-list");
+      if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
 
-  } catch (err) {
-    console.error(err);
-    setMatchesStatus(
-      "Unexpected client error: " + (err && err.message ? err.message : String(err))
-    );
-  } finally {
-    unlockSubmitUI();
-  }
-});
+    function triggerMatchModal(mate) {
+      const meDisplay = state.profile.display_username || state.profile.username || "You";
+      const meIGN = state.profile.in_game_username || "—";
 
+      const mateDisplay = mate?.display_username || mate?.username || "User";
+      const mateIGN = mate?.in_game_username || "—";
 
-    // ---------- کلیک روی Add to squad ----------
-    // ---------- کلیک روی Add to squad ----------
-matchesList.addEventListener("click", async (e) => {
-  const btn = e.target.closest(".like-btn");
-  if (!btn) return;
+      document.getElementById("modal-me-avatar").textContent = getInitials(meDisplay);
+      document.getElementById("modal-them-avatar").textContent = getInitials(mateDisplay);
 
-  const toUser = btn.dataset.username;
-  const fromUser = document.getElementById("username").value.trim();
+      document.getElementById("modal-them-name").textContent = mateDisplay;
+      document.getElementById("modal-me-name").textContent = meDisplay;
+      document.getElementById("modal-me-ign").textContent = `In-game: ${meIGN}`;
 
-  if (!fromUser) {
-    alert("اول PlayMate username خودت را در فرم بالا بنویس.");
-    return;
-  }
+      document.getElementById("modal-them-name-2").textContent = mateDisplay;
+      document.getElementById("modal-them-ign").textContent = `In-game: ${mateIGN}`;
 
-  btn.disabled = true;
-  const oldText = btn.textContent;
-  btn.textContent = "Added ✓";
+      els.modal.classList.add("active");
+    }
 
-  try {
-  const data = await fetchJson("/api/like", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from_user: fromUser,
-      to_user: toUser,
-      game: "battlefield",
-    }),
-  }, 12000);
+    window.closeModal = function () {
+      els.modal.classList.remove("active");
+    };
 
-  if (data && (data.status === "inserted" || data.status === "already_exists")) {
-    likedUsers.add(toUser);
-    loadSquad(fromUser);
-    return;
-  }
+    /* =========================================================
+       META (REGION/MODE/LANG)
+    ========================================================= */
+    async function loadMeta() {
+      const res = await fetch(`${API_BASE}/meta/${GAME}`);
+      if (!res.ok) throw new Error(`meta failed: ${res.status}`);
+      META = await res.json();
+    }
 
-  // پاسخ غیرمنتظره
-  btn.disabled = false;
-  btn.textContent = oldText;
-  alert("Unexpected response from server.");
+    function populateRegions() {
+      els.region.innerHTML = `<option value="">Select Region...</option>`;
+      (META?.regions || []).forEach(r => {
+        const opt = document.createElement("option");
+        opt.value = r.id;          // e.g. na-west
+        opt.textContent = r.label; // e.g. North America West
+        els.region.appendChild(opt);
+      });
 
-} catch (err) {
-  console.error(err);
-  const info = classifyError(err);
+      els.city.innerHTML = `<option value="">Select City...</option>`;
+      els.city.disabled = true;
+    }
 
-  // دکمه را برگردان
-  btn.disabled = false;
-  btn.textContent = oldText;
+    function populateFavoriteModes() {
+      els.favoriteMode.innerHTML = `<option value="">Fav Mode...</option>`;
+      (META?.favorite_modes || []).forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m;
+        opt.textContent = m;
+        els.favoriteMode.appendChild(opt);
+      });
+    }
 
-  if (info.kind === "timeout") alert("Request timed out. Try again.");
-  else if (info.kind === "network") alert("Network error. Check connection and retry.");
-  else if (err && err.httpStatus) alert("Server error (HTTP " + err.httpStatus + ").");
-  else alert("Unexpected error.");
-}
+    function renderLanguagesFromMeta() {
+      els.langContainer.innerHTML = "";
+      (META?.languages || []).forEach(l => {
+        const pill = document.createElement("div");
+        pill.className = "lang-pill";
+        pill.dataset.code = l.code;
+        pill.textContent = l.label;
 
+        pill.addEventListener("click", () => {
+          pill.classList.toggle("active");
+          updateStateLangsFromPills();
+        });
 
-});
+        els.langContainer.appendChild(pill);
+      });
+    }
 
+    function updateStateLangsFromPills() {
+      const active = Array.from(els.langContainer.querySelectorAll(".lang-pill.active"));
+      state.profile.languages = active.map(el => el.dataset.code);
+    }
 
-    // ---------- کلیک روی دکمه Refresh My Squad ----------
-    refreshSquadBtn.addEventListener("click", () => {
-      const username = document.getElementById("username").value.trim();
-      loadSquad(username);
-    });
-
-    // هنگام لود اولیه صفحه، swipe را با لیست خالی تنظیم کن
-    initSwipe([]);
-
-  });
-</script>
-<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+    function applyStoredLanguagesToPills() {
+      const codes = new Set(state.profile.languages || []);
+      els.langContainer.querySelectorAll(".lang-pill").forEach(p => {
+        if (codes.has(p.dataset.code)) p.classList.add("active");
+        else p.classList.remove("active");
+      });
+    }
+  </script>
 </body>
+
 </html>
