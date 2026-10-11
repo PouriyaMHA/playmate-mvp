@@ -481,6 +481,51 @@ def my_squad_details(
     return {"username": my_username, "game": game, "squadmates": prof.data or []}
 
 
+@app.get(f"{API_PREFIX}/pending-likes")
+def pending_likes(game: str = "battlefield", user_id: str = Depends(get_current_user_id)):
+    """People I liked who haven't liked me back yet (no in_game_username: not mutual)."""
+    game = (game or "battlefield").strip().lower()
+
+    out_res = (
+        supabase.table("likes")
+        .select("to_user_id, created_at")
+        .eq("from_user_id", user_id)
+        .eq("game", game)
+        .execute()
+    )
+    liked_at = {str(r["to_user_id"]): r.get("created_at") for r in (out_res.data or []) if r.get("to_user_id")}
+    if not liked_at:
+        return {"game": game, "pending": []}
+
+    in_res = (
+        supabase.table("likes")
+        .select("from_user_id")
+        .eq("to_user_id", user_id)
+        .eq("game", game)
+        .in_("from_user_id", list(liked_at))
+        .execute()
+    )
+    mutual_ids = {str(r["from_user_id"]) for r in (in_res.data or []) if r.get("from_user_id")}
+    pending_ids = [uid for uid in liked_at if uid not in mutual_ids]
+    if not pending_ids:
+        return {"game": game, "pending": []}
+
+    prof = (
+        supabase.table("profiles")
+        .select("user_id,username,display_username,region,favorite_mode,class_type,last_active")
+        .eq("game", game)
+        .in_("user_id", pending_ids)
+        .execute()
+    )
+    pending = []
+    for p in prof.data or []:
+        uid = str(p.pop("user_id"))
+        pending.append({**p, "liked_at": liked_at.get(uid)})
+    pending.sort(key=lambda x: x.get("liked_at") or "", reverse=True)
+
+    return {"game": game, "pending": pending}
+
+
 # ----------------- Public: profile squad (mutual) -----------------
 @app.get("/profile-squad")
 def profile_squad(username: str = Query(...), game: str = "battlefield"):
