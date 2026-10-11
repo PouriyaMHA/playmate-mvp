@@ -287,6 +287,7 @@ function setLockedUsername(displayUsername) {
   localStorage.setItem("pm_username_locked", "1");
 
   if (els.pmUsernameDisplay) els.pmUsernameDisplay.textContent = d;
+  paintAvatar(document.getElementById("me-avatar"), d);
   if (els.usernameHidden) els.usernameHidden.value = d;
 
   updateProfileLink(state.profile.username);
@@ -329,8 +330,47 @@ function showToast(msg, type = "info") {
   setTimeout(() => toast.remove(), 3000);
 }
 
+function initialOf(name) {
+  return name ? String(name).trim().substring(0, 1).toUpperCase() || "?" : "?";
+}
+
+// HTML-safe initial (for innerHTML templates)
 function getInitials(name) {
-  return name ? esc(name.substring(0, 1).toUpperCase()) : "?";
+  return esc(initialOf(name));
+}
+
+// Stable colour per player, so avatars are told apart at a glance
+function avatarHue(name) {
+  let h = 0;
+  for (const ch of String(name || "").toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return h;
+}
+
+function paintAvatar(el, name) {
+  if (!el) return;
+  el.textContent = initialOf(name);
+  el.style.setProperty("--hue", avatarHue(name));
+}
+
+function svgIcon(id) {
+  return `<svg class="icon"><use href="#i-${id}"/></svg>`;
+}
+
+const MIC_LABELS = { voice: "Voice", both: "Voice + Text", none: "No mic" };
+
+function langLabels(codes) {
+  const map = Object.fromEntries((META?.languages || []).map(l => [l.code, l.label]));
+  return String(codes || "").split(",").map(c => c.trim()).filter(Boolean).map(c => map[c] || c).join(", ");
+}
+
+// online (<=60s), away (<=10min), offline
+function presenceOf(lastActiveIso) {
+  const t = lastActiveIso ? new Date(lastActiveIso).getTime() : NaN;
+  if (!Number.isFinite(t)) return "offline";
+  const sec = (Date.now() - t) / 1000;
+  if (sec <= 60) return "online";
+  if (sec <= 600) return "away";
+  return "offline";
 }
 
 // Escape anything user-provided before it goes into innerHTML (prevents XSS)
@@ -454,8 +494,9 @@ function setLoading(isLoading, message = "Scanning for Operators...") {
   if (els.cardWrapper && isLoading) {
     els.cardWrapper.innerHTML = `
   <div class="empty-state">
-    <div style="opacity:.85; font-weight:600;">${esc(message)}</div>
-    <div style="margin-top:10px; opacity:.6; font-size:.9rem;">Please wait…</div>
+    <div class="scan-pulse"></div>
+    <h3>${esc(message)}</h3>
+    <p>Finding players that fit how you play…</p>
   </div>
 `;
   }
@@ -599,8 +640,30 @@ function setupEventListeners() {
   // Looking for a squad now
   els.btnLooking?.addEventListener("click", toggleLooking);
 
+  // Manual squad refresh
+  const refreshBtn = document.getElementById("btn-refresh-squad");
+  refreshBtn?.addEventListener("click", async () => {
+    refreshBtn.classList.add("spinning");
+    try {
+      await refreshSquad({ silent: false });
+      await refreshPending();
+    } catch { } finally {
+      refreshBtn.classList.remove("spinning");
+    }
+  });
+
+  // Keyboard: ← skip, → like, Esc closes the modal
+  document.addEventListener("keydown", (e) => {
+    if (e.target instanceof Element && e.target.closest("input, select, textarea")) return;
+    if (e.key === "Escape" && els.modal.classList.contains("active")) return closeModal();
+    if (els.modal.classList.contains("active") || !document.getElementById("active-card")) return;
+    if (e.key === "ArrowLeft") handleSkip();
+    if (e.key === "ArrowRight") handleLike();
+  });
+
   // Copy / block / report buttons (match card + squad list)
   document.addEventListener("click", (e) => {
+    if (!(e.target instanceof Element)) return;
     const copyBtn = e.target.closest("[data-copy]");
     if (copyBtn) return copyText(copyBtn.dataset.copy, copyBtn.dataset.copyLabel || "Text");
 
@@ -877,12 +940,10 @@ async function findMatches() {
       setLoading(false);
       els.cardWrapper.innerHTML = `
 <div class="empty-state">
-  <div style="font-weight:700; opacity:.9;">No matches found</div>
-  <div style="margin-top:10px; opacity:.65; font-size:.95rem;">
-    Try changing Region, Favorite Mode, Class, or Languages, then scan again.
-  </div>
-
-  <div style="margin-top:16px;">
+  <h3>No matches yet</h3>
+  <p>Nobody new fits right now. Try another region, mode or language — or turn on
+    <b>Looking for a squad</b> so others find you.</p>
+  <div style="margin-top:18px;">
     <button class="btn-primary" type="button" onclick="findMatches()">Scan again</button>
   </div>
 </div>
@@ -910,12 +971,9 @@ function renderCard() {
   if (!state.matches || state.currentMatchIndex >= state.matches.length) {
     els.cardWrapper.innerHTML = `
 <div class="empty-state">
-  <div style="font-weight:700; opacity:.9;">No more matches</div>
-  <div style="margin-top:10px; opacity:.65; font-size:.95rem;">
-    Update your profile filters and click <b>Find Matches</b> again.
-  </div>
-
-  <div style="margin-top:16px;">
+  <h3>You're all caught up</h3>
+  <p>You've seen everyone for now. Check back later or change your preferences.</p>
+  <div style="margin-top:18px;">
     <button class="btn-primary" type="button" onclick="findMatches()">Scan again</button>
   </div>
 </div>
@@ -928,38 +986,68 @@ function renderCard() {
   const match = state.matches[state.currentMatchIndex];
   const p = match.profile;
 
-  const micLabel = { voice: "Voice", both: "Voice + Text", none: "No mic" }[p.mic] || p.mic;
+  const name = p.display_username || match.username;
+  const pct = Math.max(0, Math.min(100, Number(match.match_percent) || 0));
+  const circ = 2 * Math.PI * 34;
+  const langs = langLabels(p.languages);
+  const remaining = state.matches.length - state.currentMatchIndex;
 
   els.cardWrapper.innerHTML = `
-<div class="match-card" id="active-card">
-  <div class="match-percent">${Number(match.match_percent) || 0}% Match</div>
-  <div class="avatar-lg">${getInitials(p.display_username || match.username)}</div>
-  <div class="player-name">${esc(p.display_username || match.username)}</div>
-  ${match.looking_now ? '<div style="margin-top:6px;"><span class="looking-badge">🟢 Looking now</span></div>' : ""}
+<div class="card-stack">
+  <div class="match-card" id="active-card">
+    <div class="card-avatar"><div class="avatar-face" style="--hue:${avatarHue(name)}">${getInitials(name)}</div></div>
 
-  <div class="pill-container">
-    <span class="info-pill">${esc(regionLabel(p.region))}</span>
-    ${p.platform ? `<span class="info-pill">${esc(p.platform)}</span>` : ""}
-    <span class="info-pill" style="color:var(--neon-green)">${esc(p.class_type)}</span>
-    <span class="info-pill">${esc(micLabel)}</span>
-  </div>
+    <div class="match-percent" title="Match score">
+      <svg viewBox="0 0 80 80">
+        <circle class="ring-bg" cx="40" cy="40" r="34" fill="none" stroke-width="6"/>
+        <circle class="ring-fg" cx="40" cy="40" r="34" fill="none" stroke-width="6"
+          stroke-dasharray="${circ}" stroke-dashoffset="${circ * (1 - pct / 100)}"/>
+      </svg>
+      <div class="pct-label"><span class="pct-value">${pct}%</span><span class="pct-text">MATCH</span></div>
+    </div>
 
-  <div class="match-reasons">
-    <h4>Why this match:</h4>
-    <ul>${(match.reasons || []).map(r => `<li>${esc(r)}</li>`).join("")}</ul>
-  </div>
+    <div class="card-brand"><svg><use href="#i-logo"/></svg>PlayMate</div>
+    <div class="player-name">${esc(name)}</div>
+    ${match.looking_now ? '<div style="margin-top:8px;"><span class="looking-badge">● Looking for a squad now</span></div>' : ""}
 
-  <div class="actions">
-    <button class="action-btn btn-skip" onclick="handleSkip()">✕</button>
-    <button class="action-btn btn-like" onclick="handleLike()">💚</button>
-  </div>
+    <div class="pill-container">
+      <span class="info-pill">${svgIcon("globe")}Region: <b>${esc(regionLabel(p.region))}</b></span>
+      ${p.favorite_mode ? `<span class="info-pill">${svgIcon("flag")}Mode: <b>${esc(p.favorite_mode)}</b></span>` : ""}
+      <span class="info-pill">${svgIcon("class")}Class: <b>${esc(p.class_type)}</b></span>
+      <span class="info-pill">${svgIcon("mic")}Mic: <b>${esc(MIC_LABELS[p.mic] || p.mic)}</b></span>
+      ${p.platform ? `<span class="info-pill">${svgIcon("monitor")}<b>${esc(p.platform)}</b></span>` : ""}
+      ${langs ? `<span class="info-pill">${svgIcon("chat")}Languages: <b>${esc(langs)}</b></span>` : ""}
+    </div>
 
-  <div class="card-safety">
-    <button type="button" data-block-user="${esc(match.username)}">Block</button>
-    ·
-    <button type="button" data-report-user="${esc(match.username)}">Report</button>
+    <details class="match-reasons" open>
+      <summary>Why this match</summary>
+      <ul>${(match.reasons || []).map(r => `<li>${esc(r)}</li>`).join("")}</ul>
+    </details>
+
+    <div class="ign-row">
+      <div class="ign-label">In-game username</div>
+      <div class="ign-hidden">HIDDEN UNTIL MUTUAL LIKE</div>
+    </div>
   </div>
 </div>
+
+<div class="actions">
+  <div class="action-wrap">
+    <button class="action-btn btn-skip" onclick="handleSkip()" aria-label="Skip" title="Skip (←)">${svgIcon("x")}</button>
+    Skip
+  </div>
+  <div class="action-wrap">
+    <button class="action-btn btn-like" onclick="handleLike()" aria-label="Add to squad" title="Add to squad (→)">${svgIcon("heart")}</button>
+    Add to squad
+  </div>
+</div>
+
+<div class="card-safety">
+  <button type="button" data-block-user="${esc(match.username)}">Block</button>
+  ·
+  <button type="button" data-report-user="${esc(match.username)}">Report</button>
+</div>
+<div class="deck-counter">${remaining} player${remaining === 1 ? "" : "s"} left in this scan</div>
   `;
 }
 
@@ -1167,38 +1255,42 @@ function renderSquadList({ silent = false } = {}) {
   // silent فعلاً استفاده نمی‌شود، ولی امضا درست است
   els.squadList.innerHTML = "";
 
+  const countEl = document.getElementById("squad-count");
+  if (countEl) countEl.textContent = state.squad?.length ? `(${state.squad.length})` : "";
+
   if (!state.squad || state.squad.length === 0) {
     els.squadList.innerHTML =
-      '<div class="empty-state" style="font-size: 0.9rem;">No squadmates yet. Start matching!</div>';
+      '<div class="squad-empty">No squadmates yet. When you and another player both like each other, they show up here.</div>';
     return;
   }
 
   state.squad.forEach(mate => {
     const label = formatLastSeen(mate.last_active);
 
-    const statusHtml = mate.looking_now
-      ? '<span class="looking-badge">🟢 Looking now</span>'
-      : label === "Online"
-        ? '<span class="status-badge status-online">Online</span>'
-        : `<span class="status-badge status-offline">${esc(label)}</span>`;
+    const presence = presenceOf(mate.last_active);
+    const statusText = mate.looking_now
+      ? "Looking for a squad"
+      : presence === "online" ? "Online" : presence === "away" ? "Away · " + label.replace("Last seen ", "") : label;
 
     const ign = mate.in_game_username || "";
     const discord = mate.discord_username || "";
+    const name = mate.display_username || mate.username || "";
 
     const item = document.createElement("div");
     item.className = "squad-member";
     item.innerHTML = `
-  <div class="sm-avatar">${getInitials(mate.display_username || mate.username)}</div>
+  <span class="status-dot ${mate.looking_now ? "online" : presence}"></span>
+  <div class="sm-avatar avatar-face" style="--hue:${avatarHue(name)}">${getInitials(name)}</div>
   <div class="sm-info">
-    <span class="sm-name">${esc(mate.display_username || mate.username || "")}</span>
-    <span class="sm-ign">In-game: ${esc(ign || "—")}${discord ? ` · Discord: ${esc(discord)}` : ""}</span>
+    <span class="sm-name">${esc(name)}</span>
+    <span class="sm-status ${mate.looking_now ? "online" : presence}">${esc(statusText)}</span>
+    <span class="sm-ign">In-game: <b>${esc(ign || "—")}</b>${discord ? `<br>Discord: <b>${esc(discord)}</b>` : ""}</span>
     <div class="sm-actions">
-      ${ign ? `<button type="button" class="sm-btn" data-copy="${esc(ign)}" data-copy-label="In-game name">Copy in-game name</button>` : ""}
+      ${ign ? `<button type="button" class="sm-btn" data-copy="${esc(ign)}" data-copy-label="In-game name">Copy in-game</button>` : ""}
       ${discord ? `<button type="button" class="sm-btn" data-copy="${esc(discord)}" data-copy-label="Discord">Copy Discord</button>` : ""}
       <button type="button" class="sm-btn danger" data-block-user="${esc(mate.username)}">Block</button>
     </div>
   </div>
-  ${statusHtml}
 `;
     els.squadList.appendChild(item);
   });
@@ -1239,14 +1331,13 @@ function renderPendingList(list) {
     const item = document.createElement("div");
     item.className = "squad-member pending";
     item.innerHTML = `
-  <div class="sm-avatar"></div>
+  <div class="sm-avatar avatar-face"></div>
   <div class="sm-info">
     <span class="sm-name"></span>
-    <span class="sm-ign">In-game: Hidden until match</span>
+    <span class="sm-status">Waiting for them to like you back</span>
   </div>
-  <span class="status-badge status-pending">Waiting</span>
 `;
-    item.querySelector(".sm-avatar").textContent = getInitials(name);
+    paintAvatar(item.querySelector(".sm-avatar"), name);
     item.querySelector(".sm-name").textContent = name;
     els.pendingList.appendChild(item);
   });
@@ -1307,15 +1398,15 @@ function triggerMatchModal(mate, opts = {}) {
   if (titleEl && subEl) {
     if (kind === "like") {
       titleEl.textContent = "LIKE SENT";
-      subEl.innerHTML = `You liked <span id="modal-them-name" style="color:#fff; font-weight:600;">${esc(mateDisplay)}</span>. If they like you back, you’ll match.`;
+      subEl.innerHTML = `You liked <span id="modal-them-name" style="color:#fff; font-weight:700;">${esc(mateDisplay)}</span>. If they like you back, you'll match.`;
     } else {
       titleEl.textContent = "IT'S A MATCH!";
-      subEl.innerHTML = `You're now squadmates with <span id="modal-them-name" style="color:#fff; font-weight:600;">${esc(mateDisplay)}</span>! Find them in My Squad to copy their in-game name.`;
+      subEl.innerHTML = `You're now squadmates with <span id="modal-them-name" style="color:#fff; font-weight:700;">${esc(mateDisplay)}</span>!`;
     }
   }
 
-  document.getElementById("modal-me-avatar").textContent = getInitials(meDisplay);
-  document.getElementById("modal-them-avatar").textContent = getInitials(mateDisplay);
+  paintAvatar(document.getElementById("modal-me-avatar"), meDisplay);
+  paintAvatar(document.getElementById("modal-them-avatar"), mateDisplay);
 
   // (این span را بالا در innerHTML ساختیم؛ حالا مطمئن می‌شویم درست set می‌شود)
   const themName = document.getElementById("modal-them-name");
@@ -1327,6 +1418,8 @@ function triggerMatchModal(mate, opts = {}) {
   document.getElementById("modal-them-name-2").textContent = mateDisplay;
   document.getElementById("modal-them-ign").textContent = `In-game: ${mateIGN}`;
 
+  // "like sent" has no energy link yet; a match does
+  els.modal.classList.toggle("is-like", kind === "like");
   els.modal.classList.add("active");
 }
 
