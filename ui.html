@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PlayMate | Find Matches</title>
-  <link rel="stylesheet" href="/static/css/ui.css?v=5">
+  <link rel="stylesheet" href="/static/css/ui.css?v=6">
 </head>
 
 <body>
@@ -235,10 +235,16 @@
   <!-- IT'S A MATCH -->
   <div class="modal-overlay" id="match-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="match-modal">
-      <div class="modal-sparks" aria-hidden="true">
-        <span style="--a:-62deg"></span><span style="--a:-45deg"></span><span style="--a:-28deg"></span>
-        <span style="--a:-12deg"></span><span style="--a:0deg"></span><span style="--a:12deg"></span>
-        <span style="--a:28deg"></span><span style="--a:45deg"></span><span style="--a:62deg"></span>
+      <div class="fireworks-container" aria-hidden="true">
+        <div class="burst-ray" style="--tr: rotate(-40deg) translateY(-20px);"></div>
+        <div class="burst-ray" style="--tr: rotate(-20deg) translateY(-40px);"></div>
+        <div class="burst-ray" style="--tr: rotate(0deg) translateY(-50px);"></div>
+        <div class="burst-ray" style="--tr: rotate(20deg) translateY(-40px);"></div>
+        <div class="burst-ray" style="--tr: rotate(40deg) translateY(-20px);"></div>
+
+        <div class="spark-dot" style="left: 30%; top: 40%; animation-delay: 0.5s"></div>
+        <div class="spark-dot" style="left: 70%; top: 20%; animation-delay: 1.2s"></div>
+        <div class="spark-dot" style="left: 50%; top: 10%; animation-delay: 2.0s"></div>
       </div>
 
       <button class="modal-close" onclick="closeModal()" aria-label="Close">×</button>

@@ -1200,45 +1200,99 @@ input::placeholder {
   }
 }
 
-/* sparks bursting above the modal */
-.modal-sparks {
+/* fireworks above the modal (kept from the original design) */
+.fireworks-container {
+  position: absolute;
+  top: -190px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 400px;
+  height: 300px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.burst-ray {
   position: absolute;
   left: 50%;
-  top: -10px;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
-
-.modal-sparks span {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 3px;
-  height: 46px;
-  border-radius: 3px;
-  background: linear-gradient(to top, transparent, var(--green) 40%, #fff);
+  bottom: 40px;
+  --tr: rotate(0deg) translateY(0);
+  transform: var(--tr);
+  width: 4px;
+  height: 80px;
+  background: linear-gradient(to top, rgba(0, 255, 170, 0), #00ffaa);
+  border-radius: 4px;
   transform-origin: bottom center;
-  transform: rotate(var(--a)) translateY(-30px) scaleY(0);
   opacity: 0;
-  animation: spark 1.1s ease-out 0.35s forwards;
+  filter: drop-shadow(0 0 4px #00ffaa);
+  animation: burst-fade 2s infinite ease-out;
 }
 
-.modal-sparks span:nth-child(even) {
-  height: 30px;
-  background: linear-gradient(to top, transparent, var(--cyan) 40%, #fff);
-  animation-delay: 0.45s;
+.burst-ray:nth-child(1) {
+  height: 60px;
+  animation-delay: 0.1s;
 }
 
-@keyframes spark {
-  40% {
+.burst-ray:nth-child(2) {
+  height: 80px;
+  animation-delay: 0.2s;
+}
+
+.burst-ray:nth-child(3) {
+  height: 90px;
+  animation-delay: 0s;
+}
+
+.burst-ray:nth-child(4) {
+  height: 80px;
+  animation-delay: 0.3s;
+}
+
+.burst-ray:nth-child(5) {
+  height: 60px;
+  animation-delay: 0.1s;
+}
+
+.spark-dot {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #00ffaa;
+  animation: float-up 3s infinite ease-in-out;
+}
+
+@keyframes burst-fade {
+  0% {
+    opacity: 0;
+    transform: var(--tr) scaleY(0.5);
+  }
+
+  50% {
     opacity: 1;
-    transform: rotate(var(--a)) translateY(-44px) scaleY(1);
+    transform: var(--tr) scaleY(1);
   }
 
   100% {
     opacity: 0;
-    transform: rotate(var(--a)) translateY(-70px) scaleY(0.4);
+    transform: var(--tr) scaleY(1.2);
+  }
+}
+
+@keyframes float-up {
+  0% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-50px);
   }
 }
 
@@ -1419,8 +1473,7 @@ input::placeholder {
 }
 
 /* "LIKE SENT": no energy link or sparks yet, just a dashed line */
-.modal-overlay.is-like .beam,
-.modal-overlay.is-like .modal-sparks {
+.modal-overlay.is-like .beam {
   display: none;
 }
 
