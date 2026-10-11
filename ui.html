@@ -1225,6 +1225,8 @@
 
   <div class="toast-container" id="toast-container"></div>
 
+  <!-- Supabase JS: keeps the login session fresh (access tokens expire after 1 hour) -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script>
     /* =========================================================
        PlayMate BF — ui.html script (refactored for readability)
@@ -1264,6 +1266,38 @@
     }
 
 
+    // Same public (anon) key as landing.html
+    const SUPABASE_URL = "https://fffejwdrqhizgxpjacgn.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmZmVqd2RycWhpemd4cGphY2duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMTExNjgsImV4cCI6MjA4MDc4NzE2OH0.Zr2And6oP8PKmCDiW3rNcimBWh5cUV22YvnWwhQQz7s";
+    const supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) || null;
+
+    // supabase-js refreshes the session in the background; keep our copy of the token in sync
+    supabaseClient?.auth.onAuthStateChange((_event, session) => {
+      if (session?.access_token) localStorage.setItem("pm_access_token", session.access_token);
+    });
+
+    // Get a fresh access token from the Supabase session (null if there is no session)
+    async function refreshAccessToken() {
+      if (!supabaseClient) return null;
+      try {
+        const { data } = await supabaseClient.auth.refreshSession();
+        const token = data?.session?.access_token || null;
+        if (token) localStorage.setItem("pm_access_token", token);
+        return token;
+      } catch {
+        return null;
+      }
+    }
+
+    async function syncTokenFromSession() {
+      if (!supabaseClient) return;
+      try {
+        const { data } = await supabaseClient.auth.getSession(); // refreshes if expired
+        const token = data?.session?.access_token;
+        if (token) localStorage.setItem("pm_access_token", token);
+      } catch { }
+    }
+
     async function authFetch(url, options = {}) {
       const token = getAccessToken();
       if (!token) {
@@ -1271,8 +1305,14 @@
         throw new Error("AUTH_MISSING");
       }
 
-      const headers = { ...(options.headers || {}), Authorization: `Bearer ${token}` };
-      const res = await fetch(url, { ...options, headers });
+      const send = (t) => fetch(url, { ...options, headers: { ...(options.headers || {}), Authorization: `Bearer ${t}` } });
+      let res = await send(token);
+
+      if (res.status === 401) {
+        // Token probably expired: refresh once and retry before logging out
+        const fresh = await refreshAccessToken();
+        if (fresh) res = await send(fresh);
+      }
 
       if (res.status === 401) {
         // Auth problem, not "connection issue"
@@ -1373,6 +1413,9 @@
        INIT
     ========================================================= */
     document.addEventListener("DOMContentLoaded", async () => {
+
+      // Pick up a fresh token if the Supabase session was refreshed while away
+      await syncTokenFromSession();
 
       // HARD GATE: no token => go landing (avoid 401 spam)
       const t = getAccessToken();
