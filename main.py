@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi import HTTPException
 from pydantic import BaseModel
 from pathlib import Path
@@ -42,6 +43,9 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY, options=SyncClientOptions(h
 
 app = FastAPI()
 API_PREFIX = "/api"
+
+# CSS / JS for the pages (bump the ?v= in the HTML when these change, to bust browser caches)
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 
 # ----------------- مدل پروفایل -----------------
