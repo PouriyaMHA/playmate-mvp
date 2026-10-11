@@ -518,7 +518,8 @@ def profile_squad(username: str = Query(...), game: str = "battlefield"):
     prof = (
         supabase.table("profiles")
         .select(
-            "username,display_username,in_game_username,profile_pic_url,wallpaper_url,"
+            # public endpoint: never expose in_game_username here
+            "username,display_username,profile_pic_url,wallpaper_url,"
             "region,city,languages,mic,favorite_mode,class_type,last_active"
         )
         .eq("game", game)
