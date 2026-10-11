@@ -299,17 +299,6 @@ def my_profile(game: str = "battlefield", user_id: str = Depends(get_current_use
         raise HTTPException(status_code=404, detail="Profile not found for this user")
     return result.data[0]
 
-@app.get(f"{API_PREFIX}/profiles")
-def get_profiles():
-    result = (
-        supabase
-        .table("profiles")
-        .select(PUBLIC_PROFILE_FIELDS)
-        .execute()
-    )
-    data = result.data or []
-    return {"count": len(data), "data": data}
-
 # Fields of another player that are safe to show in match results (no in_game_username)
 MATCH_PUBLIC_FIELDS = (
     "username", "display_username", "game", "platform", "region", "city",
@@ -415,7 +404,6 @@ def match_players(current: GamerProfile, user_id: str = Depends(get_current_user
         "matches": matches[:10],
     }
 
-from typing import Optional
 
 @app.get("/api/my-squad-details")
 def my_squad_details(
@@ -685,50 +673,6 @@ def add_like(like: LikeRequest, user_id: str = Depends(get_current_user_id)):
         return {"status": "mutual", "mutual": True, "data": payload}
     return {"status": "liked", "mutual": False, "data": payload}
 
-
-from typing import List, Dict
-# NOTE: Query already imported at top: from fastapi import Header, Depends, Request, Query
-
-
-@app.get("/api/my-squad")
-def my_squad(username: str = Query(..., alias="username")):
-    # GET /api/my-squad?username=Pouriya
-    result = supabase.rpc(
-        "find_mutual_likes",
-        {"user_input": username}
-    ).execute()
-
-    rows: List[dict] = result.data or []
-
-    return {
-        "username": username,
-        "squadmates": [
-            {
-                "me": r.get("me"),
-                "squadmate": r.get("squadmate")
-            }
-            for r in rows
-        ]
-    }
-
-@app.get("/api/my-likes")
-def my_likes(username: str, game: str = "battlefield"):
-    username = (username or "").strip().lower()
-    game = (game or "battlefield").strip().lower()
-
-    result = (
-        supabase
-        .table("likes")
-        .select("to_user")
-        .eq("from_user", username)
-        .eq("game", game)
-        .execute()
-    )
-
-    rows = result.data or []
-    liked = [r.get("to_user") for r in rows if r.get("to_user")]
-
-    return {"liked_users": liked}
 
 @app.get(f"{API_PREFIX}/meta/{{game}}")
 
