@@ -66,6 +66,62 @@
     }
 
     /* --- Typography & Commons --- */
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding-bottom: 10px;
+    }
+
+    .panel-header h2 {
+      margin: 0;
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .btn-logout {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      color: rgba(255, 255, 255, 0.75);
+      padding: 8px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .btn-logout:hover {
+      border-color: rgba(74, 222, 128, 0.8);
+      color: rgba(74, 222, 128, 0.95);
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .btn-logout {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      color: rgba(255, 255, 255, 0.78);
+      padding: 8px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    .btn-logout:hover {
+      border-color: rgba(74, 222, 128, 0.8);
+      color: rgba(74, 222, 128, 0.95);
+    }
+
+
     h2 {
       font-size: 1.2rem;
       text-transform: uppercase;
@@ -84,6 +140,19 @@
       margin-bottom: 5px;
       margin-top: 15px;
     }
+
+    .readonly-field {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.04);
+      color: #e5e7eb;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      user-select: text;
+    }
+
 
     input,
     select {
@@ -417,22 +486,23 @@
       background: rgba(255, 255, 255, 0.05);
     }
 
-    /* --- Modal --- */
+    /* --- NEW MODAL STYLES (MATCHING TARGET IMAGE) --- */
     .modal-overlay {
       position: fixed;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0, 0, 0, 0.8);
-      backdrop-filter: blur(5px);
+      background: rgba(0, 0, 0, 0.9);
+      /* Darker backdrop */
+      backdrop-filter: blur(12px);
+      z-index: 3000;
       display: flex;
       justify-content: center;
       align-items: center;
-      z-index: 1000;
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.3s;
+      transition: opacity 0.3s ease;
     }
 
     .modal-overlay.active {
@@ -440,470 +510,410 @@
       pointer-events: all;
     }
 
+    /* The Glass Card */
     .match-modal {
-      background: linear-gradient(135deg, #0d121c, #1a253a);
+      position: relative;
+      width: 500px;
+      /* Slightly narrower to match reference */
+      background: rgba(18, 22, 28, 0.8);
+      /* Dark matte glass */
+      backdrop-filter: blur(30px);
+      -webkit-backdrop-filter: blur(30px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-top: 1px solid rgba(255, 255, 255, 0.15);
+      /* Highlight top edge */
+      border-radius: 32px;
+      /* Rounder corners */
       padding: 40px;
-      border-radius: 20px;
-      border: 2px solid var(--neon-green);
       text-align: center;
-      max-width: 500px;
-      width: 90%;
-      box-shadow: 0 0 50px rgba(0, 255, 204, 0.3);
-      transform: scale(0.8);
-      transition: transform 0.3s;
+      box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+      transform: scale(0.95);
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      overflow: visible;
     }
 
     .modal-overlay.active .match-modal {
       transform: scale(1);
     }
 
-
-
-    /* ✅ خود مودال بالاتر از fireworks */
-    .match-modal-fancy {
-      position: relative;
-      background: radial-gradient(circle at top, #0f172a, #0b1220);
-      border: 2px solid rgba(0, 255, 204, 0.7);
-      box-shadow: 0 0 60px rgba(0, 255, 204, 0.25);
-      overflow: hidden;
-      /* تا افکت‌ها بیرون نزنن */
-      position: relative;
-      z-index: 2;
-    }
-
-    /* --- Fireworks: thin rays + sparkles (no green rectangle) --- */
-    #match-modal::before {
-      content: "";
+    /* Close Button */
+    .modal-close {
       position: absolute;
-      left: 50%;
-      top: calc(50% - 360px);
-      /* بالای مودال */
-      width: 760px;
-      height: 260px;
-      transform: translateX(-50%);
-      pointer-events: none;
-      z-index: 1;
-      opacity: .95;
-      mix-blend-mode: screen;
-
-      /* 1) rays: repeating-conic = تیرهای باریک و زیاد */
-      background:
-        repeating-conic-gradient(from 200deg at 50% 92%,
-          rgba(52, 245, 197, .75) 0 1deg,
-          transparent 1deg 7deg),
-        repeating-conic-gradient(from 220deg at 50% 92%,
-          rgba(34, 211, 238, .55) 0 .8deg,
-          transparent .8deg 9deg);
-
-      /* 2) fade ماسک: فقط بالای مودال دیده بشه (مستطیل نشه) */
-      -webkit-mask-image: radial-gradient(circle at 50% 92%, #000 0 42%, transparent 70%);
-      mask-image: radial-gradient(circle at 50% 92%, #000 0 42%, transparent 70%);
-
-      filter: blur(.25px) drop-shadow(0 0 16px rgba(52, 245, 197, .35));
-      animation: fireworksPulse 1.8s ease-in-out infinite;
-    }
-
-    #match-modal::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      top: calc(50% - 360px);
-      /* دقیقاً هم‌محل ::before */
-      width: 760px;
-      height: 260px;
-      transform: translateX(-50%);
-      pointer-events: none;
-      z-index: 1;
-      opacity: .85;
-      mix-blend-mode: screen;
-
-      /* sparkles: جرقه‌های کوچک */
-      background:
-        radial-gradient(circle at 18% 35%, rgba(255, 255, 255, .35), transparent 28%),
-        radial-gradient(circle at 30% 22%, rgba(52, 245, 197, .45), transparent 30%),
-        radial-gradient(circle at 45% 30%, rgba(34, 211, 238, .32), transparent 30%),
-        radial-gradient(circle at 60% 20%, rgba(52, 245, 197, .35), transparent 32%),
-        radial-gradient(circle at 78% 34%, rgba(255, 255, 255, .25), transparent 30%),
-        radial-gradient(circle at 52% 42%, rgba(34, 211, 238, .20), transparent 34%);
-
-      -webkit-mask-image: radial-gradient(circle at 50% 92%, #000 0 40%, transparent 72%);
-      mask-image: radial-gradient(circle at 50% 92%, #000 0 40%, transparent 72%);
-
-      filter: blur(.35px) drop-shadow(0 0 10px rgba(52, 245, 197, .25));
-      animation: sparkleDrift 2.2s ease-in-out infinite;
-    }
-
-    @keyframes fireworksPulse {
-      0% {
-        transform: translateX(-50%) scale(.98);
-        opacity: .55;
-      }
-
-      50% {
-        transform: translateX(-50%) scale(1.03);
-        opacity: .98;
-      }
-
-      100% {
-        transform: translateX(-50%) scale(.98);
-        opacity: .65;
-      }
-    }
-
-    @keyframes sparkleDrift {
-      0% {
-        transform: translateX(-50%) translateY(0) scale(.98);
-        opacity: .55;
-      }
-
-      50% {
-        transform: translateX(-50%) translateY(-8px) scale(1.02);
-        opacity: .95;
-      }
-
-      100% {
-        transform: translateX(-50%) translateY(0) scale(.98);
-        opacity: .65;
-      }
-    }
-
-
-
-
-
-    .match-title {
-      font-size: 2.5rem;
-      font-weight: 800;
-      color: var(--neon-green);
-      margin-bottom: 20px;
-      text-transform: uppercase;
-      letter-spacing: 3px;
-    }
-
-    .match-avatars {
-      display: flex;
-      justify-content: center;
-      gap: 20px;
-      margin-bottom: 30px;
-    }
-
-    .modal-btn {
-      display: block;
-      width: 100%;
-      padding: 12px;
-      margin-bottom: 10px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: bold;
-      border: none;
-    }
-
-    .btn-view-squad {
-      background: var(--neon-green);
-      color: #000;
-    }
-
-    .btn-keep-matching {
+      top: 20px;
+      right: 24px;
       background: transparent;
-      border: 1px solid var(--text-muted);
-      color: var(--text-muted);
-    }
-
-    .btn-keep-matching:hover {
-      color: white;
-      border-color: white;
-    }
-
-    /* --- Toast --- */
-    .toast-container {
-      position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      z-index: 2000;
-    }
-
-    .match-close {
-      position: absolute;
-      top: 10px;
-      right: 12px;
-      width: 34px;
-      height: 34px;
-      border-radius: 10px;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      background: rgba(0, 0, 0, 0.25);
-      color: rgba(255, 255, 255, 0.85);
+      border: none;
+      color: rgba(255, 255, 255, 0.75);
+      font-size: 20px;
       cursor: pointer;
-      font-size: 18px;
-      line-height: 30px;
+      transition: 0.2s;
     }
 
-    .match-sub {
-      margin-top: -6px;
-      margin-bottom: 22px;
-      color: var(--text-muted);
-      font-size: 0.95rem;
+    .modal-close:hover {
+      color: #fff;
     }
 
-    .match-highlight {
-      color: var(--neon-green);
-      font-weight: 700;
+    /* --- FIREWORKS (THE GREEN BURST) --- */
+    .fireworks-container {
+      position: absolute;
+      top: -190px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 400px;
+      height: 300px;
+      pointer-events: none;
+      z-index: 0;
     }
 
-    .match-avatars.fancy {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      /* فقط دو ستون */
-      align-items: center;
-      column-gap: 18px;
-      margin: 18px 0 22px;
-      position: relative;
-      /* ✅ برای برق absolute */
-    }
-
-    .avatar-block {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      min-width: 0;
-      /* برای ellipsis */
-      position: relative;
-      z-index: 2;
-      /* روی برق بیاد */
-    }
-
-    .avatar-name {
-      margin-top: 10px;
-      line-height: 1.1;
-      width: 100%;
-      max-width: 190px;
-      text-align: center;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .avatar-ign {
-      margin-top: 6px;
-      width: 100%;
-      max-width: 190px;
-      text-align: center;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    /* ✅ برق دقیقاً وسط دو آواتار و وصل‌کننده */
-    .match-link {
+    /* The glowing rays */
+    .burst-ray {
       position: absolute;
       left: 50%;
-      top: 46px;
-      /* ✅ مرکز دایره‌ها؛ اگر avatar بزرگ/کوچک شد این عدد را فقط تنظیم کن */
-      transform: translateX(-50%);
-      width: 300px;
-      /* طول اتصال (به آواتارها برسد) */
-      height: 46px;
-      pointer-events: none;
-      z-index: 1;
+      bottom: 40px;
+
+      /* Default transform var (prevents jitter / inconsistent render) */
+      --tr: rotate(0deg) translateY(0);
+      transform: var(--tr);
+
+      width: 4px;
+      height: 80px;
+      background: linear-gradient(to top, rgba(0, 255, 170, 0), #00ffaa);
+      border-radius: 4px;
+      transform-origin: bottom center;
+      opacity: 0;
+      filter: drop-shadow(0 0 4px #00ffaa);
+      animation: burst-fade 2s infinite ease-out;
     }
 
-    /* SVG برق */
-    .match-link .electric {
-      width: 100%;
-      height: 100%;
-      overflow: visible;
+
+    .burst-ray:nth-child(1) {
+      transform: rotate(-40deg) translateY(-20px);
+      height: 60px;
+      animation-delay: 0.1s;
     }
 
-    /* رشته‌ها */
-    .match-link .electric .e {
-      fill: none;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-
-      /* برق باید پیوسته باشد */
-      stroke-width: 2.8;
-      opacity: .92;
-
-      /* مهم: به‌جای dash، جریان واقعی با فیلتر */
-      filter: url(#electricFlow);
-
-      /* فلیکر خیلی سبک */
-      animation: elecFlicker 220ms steps(2, end) infinite;
+    .burst-ray:nth-child(2) {
+      transform: rotate(-20deg) translateY(-40px);
+      height: 80px;
+      animation-delay: 0.2s;
     }
 
-    /* رنگ/ضخامت‌ها (همون‌ها رو نگه می‌داریم ولی کمی طبیعی‌تر) */
-    .match-link .electric .e1 {
-      stroke: rgba(52, 245, 197, .95);
-      stroke-width: 3.4;
+    .burst-ray:nth-child(3) {
+      transform: rotate(0deg) translateY(-50px);
+      height: 90px;
+      animation-delay: 0s;
     }
 
-    .match-link .electric .e2 {
-      stroke: rgba(34, 211, 238, .78);
-      stroke-width: 2.5;
-      opacity: .75;
+    .burst-ray:nth-child(4) {
+      transform: rotate(20deg) translateY(-40px);
+      height: 80px;
+      animation-delay: 0.3s;
     }
 
-    .match-link .electric .e3 {
-      stroke: rgba(255, 255, 255, .55);
-      stroke-width: 1.9;
-      opacity: .55;
+    .burst-ray:nth-child(5) {
+      transform: rotate(40deg) translateY(-20px);
+      height: 60px;
+      animation-delay: 0.1s;
     }
 
-    .match-link .electric .e4 {
-      stroke: rgba(52, 245, 197, .70);
-      stroke-width: 2.3;
-      opacity: .68;
+    /* Small floating sparks */
+    .spark-dot {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      background: #fff;
+      border-radius: 50%;
+      box-shadow: 0 0 10px #00ffaa;
+      animation: float-up 3s infinite ease-in-out;
     }
 
-    @keyframes elecFlicker {
+    @keyframes burst-fade {
       0% {
-        opacity: .55;
+        opacity: 0;
+        transform: var(--tr) scaleY(0.5);
       }
 
-      40% {
-        opacity: .95;
+      50% {
+        opacity: 1;
+        transform: var(--tr) scaleY(1);
       }
 
       100% {
-        opacity: .70;
+        opacity: 0;
+        transform: var(--tr) scaleY(1.2);
       }
     }
 
-
-    /* جرقه سرها */
-    .match-link .spark {
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      opacity: .95;
-      pointer-events: none;
-      background:
-        radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .85), transparent 55%),
-        radial-gradient(circle at 50% 50%, rgba(52, 245, 197, .35), transparent 62%),
-        conic-gradient(from 0deg, rgba(34, 211, 238, 0), rgba(52, 245, 197, .95), rgba(255, 255, 255, .55), rgba(34, 211, 238, 0));
-      filter: blur(.2px) drop-shadow(0 0 18px rgba(52, 245, 197, .85));
-      animation: sparkPulse 1.0s ease-in-out infinite;
-    }
-
-    .match-link .spark-left {
-      left: -16px;
-    }
-
-    .match-link .spark-right {
-      right: -16px;
-    }
-
-    @keyframes sparkPulse {
+    @keyframes float-up {
       0% {
-        transform: translateY(-50%) scale(.85);
-        opacity: .25;
+        opacity: 0;
+        transform: translateY(0);
       }
 
-      45% {
-        transform: translateY(-50%) scale(1.08);
+      50% {
         opacity: 1;
       }
 
       100% {
-        transform: translateY(-50%) scale(.9);
-        opacity: .35;
-      }
-    }
-
-
-    .avatar-lg.me,
-    .avatar-lg.them {
-      position: relative;
-    }
-
-    .avatar-lg.me {
-      box-shadow: 0 0 24px rgba(34, 211, 238, .22);
-    }
-
-    .avatar-lg.them {
-      box-shadow: 0 0 24px rgba(52, 245, 197, .22);
-    }
-
-    .avatar-lg.me::after,
-    .avatar-lg.them::after {
-      content: "";
-      position: absolute;
-      inset: -8px;
-      border-radius: 50%;
-      border: 2px solid rgba(52, 245, 197, .18);
-      opacity: .0;
-      animation: pulseRing 2.2s ease-in-out infinite;
-    }
-
-    .avatar-lg.me::after {
-      border-color: rgba(34, 211, 238, .18);
-    }
-
-    @keyframes pulseRing {
-      0% {
-        transform: scale(.92);
         opacity: 0;
+        transform: translateY(-50px);
       }
+    }
 
-      35% {
-        opacity: .65;
+    /* Typography */
+    .match-title {
+      font-family: 'Segoe UI', Roboto, sans-serif;
+      font-size: 2rem;
+      font-weight: 900;
+      margin: 10px 0 5px 0;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      background: linear-gradient(180deg, #ffffff 0%, #aaffcc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 20px rgba(0, 255, 170, 0.6));
+      position: relative;
+      z-index: 2;
+    }
+
+    .match-sub {
+      font-size: 0.95rem;
+      color: #b0c4de;
+      margin-bottom: 40px;
+      position: relative;
+      z-index: 2;
+    }
+
+    /* --- AVATARS & CONNECTOR --- */
+    .match-avatars-area {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 35px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .avatar-wrapper {
+      position: relative;
+      width: 120px;
+      height: 120px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* Rings with exact gradients */
+    .avatar-ring {
+      position: absolute;
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      border: 3px solid #00ffaa;
+      box-shadow: 0 0 20px rgba(0, 255, 170, 0.4), inset 0 0 10px rgba(0, 255, 170, 0.2);
+    }
+
+    .avatar-ring.right {
+      border-color: #00ccff;
+      box-shadow: 0 0 20px rgba(0, 204, 255, 0.4), inset 0 0 10px rgba(0, 204, 255, 0.2);
+    }
+
+    .modal-avatar-img {
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      background: #1a1f26;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 28px;
+      color: #fff;
+      z-index: 2;
+      position: relative;
+      /* Ensure text is above bg */
+    }
+
+    /* Info Labels */
+    .avatar-info {
+      position: absolute;
+      top: 110px;
+      width: 180px;
+      text-align: center;
+    }
+
+    .info-name {
+      font-weight: 700;
+      color: white;
+      font-size: 1.1rem;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    }
+
+    .info-ign {
+      font-size: 0.8rem;
+      color: #8ba2b5;
+      margin-top: 4px;
+    }
+
+    /* --- NEW ELECTRICITY STYLES --- */
+    .connector {
+      position: relative;
+      flex: 1;
+      height: 60px;
+      /* Taller to allow wave movement */
+      max-width: 140px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 5;
+    }
+
+    .electric-svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      /* Important for the glow to spill out */
+      filter: drop-shadow(0 0 8px rgba(0, 255, 170, 0.8));
+      /* Base Glow */
+    }
+
+    /* The Electric Strands */
+    .strand {
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      mix-blend-mode: screen;
+      /* Makes them brighter where they overlap */
+      animation: electric-pulse 0.1s infinite alternate;
+      /* The flicker */
+    }
+
+    /* Main Beam (Thick) */
+    .strand-main {
+      stroke: url(#gradConn);
+      stroke-width: 3px;
+      opacity: 0.9;
+      animation: electric-flow 2s linear infinite;
+      /* Flows smoothly */
+    }
+
+    /* Fast Jitter Beam (Thin, White-ish) */
+    .strand-jitter {
+      stroke: #ccffee;
+      /* Almost white green */
+      stroke-width: 1.5px;
+      stroke-dasharray: 10 15;
+      /* Dashed for spark effect */
+      opacity: 0.8;
+      animation: electric-jitter 0.2s linear infinite;
+      /* Moves very fast */
+    }
+
+    /* Secondary Beam (Blue-ish) */
+    .strand-secondary {
+      stroke: #00ccff;
+      stroke-width: 2px;
+      opacity: 0.6;
+      animation: electric-flow-reverse 2.5s linear infinite;
+    }
+
+    /* --- ANIMATIONS --- */
+    @keyframes electric-flow {
+      0% {
+        stroke-dashoffset: 0;
       }
 
       100% {
-        transform: scale(1.08);
-        opacity: 0;
+        stroke-dashoffset: -100;
       }
     }
 
+    @keyframes electric-flow-reverse {
+      0% {
+        stroke-dashoffset: 0;
+      }
 
+      100% {
+        stroke-dashoffset: 100;
+      }
+    }
+
+    @keyframes electric-jitter {
+      0% {
+        transform: translateY(0) scaleY(1);
+        opacity: 0.8;
+      }
+
+      25% {
+        transform: translateY(-2px) scaleY(1.2);
+        opacity: 1;
+      }
+
+      50% {
+        transform: translateY(2px) scaleY(0.8);
+        opacity: 0.6;
+      }
+
+      75% {
+        transform: translateY(-1px) scaleY(1.1);
+        opacity: 1;
+      }
+
+      100% {
+        transform: translateY(0) scaleY(1);
+        opacity: 0.8;
+      }
+    }
+
+    /* --- BUTTONS --- */
+    .modal-actions {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      margin-top: 70px;
+    }
+
+    .btn-fancy {
+      flex: 1;
+      padding: 14px 0;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s, filter 0.2s;
+    }
+
+    /* View Squad: Vibrant Green Gradient */
     .btn-view-squad {
-      box-shadow: 0 0 28px rgba(52, 245, 197, .22);
-      transition: transform .15s ease, box-shadow .15s ease;
+      background: linear-gradient(90deg, #ccff00 0%, #00ffaa 100%);
+      border: none;
+      color: #051a10;
+      box-shadow: 0 0 25px rgba(0, 255, 170, 0.3);
     }
 
     .btn-view-squad:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 0 40px rgba(52, 245, 197, .32);
+      transform: translateY(-2px);
+      box-shadow: 0 0 40px rgba(0, 255, 170, 0.5);
+      filter: brightness(1.1);
     }
 
+    /* Continue: Dark with Teal Border */
     .btn-keep-matching {
-      opacity: .9;
-      transition: opacity .15s ease;
+      background: transparent;
+      border: 1px solid #00ccff;
+      color: #00ccff;
+      box-shadow: inset 0 0 12px rgba(0, 204, 255, 0.25);
     }
 
     .btn-keep-matching:hover {
-      opacity: 1;
+      background: rgba(0, 204, 255, 0.1);
+      color: white;
+      border-color: white;
+      box-shadow: inset 0 0 20px rgba(0, 204, 255, 0.2), 0 0 15px rgba(0, 204, 255, 0.2);
     }
-
-
-    .avatar-name,
-    .match-highlight {
-      max-width: 160px;
-      display: inline-block;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      vertical-align: bottom;
-    }
-
-    .btn-keep-matching {
-      background: rgba(255, 255, 255, 0.03);
-      border-color: rgba(255, 255, 255, 0.18);
-    }
-
-
-    .match-actions {
-      margin-top: 10px;
-    }
-
 
     .toast {
       background: #222;
@@ -990,12 +1000,19 @@
   <div class="app-container">
 
     <div class="panel">
-      <h2>My Profile</h2>
+      <div class="panel-header">
+        <h2>MY PROFILE</h2>
+        <button type="button" id="btn-logout" class="btn-logout">Log out</button>
+      </div>
+
+
       <div id="profile-status" class="profile-status">New profile – fill in your details</div>
 
       <form id="profile-form">
         <label>PlayMate Username</label>
-        <input type="text" id="username" placeholder="e.g. NeonSlayer" required>
+        <div id="pm-username-display" class="readonly-field">—</div>
+        <input type="hidden" id="username">
+
 
         <label>Region</label>
         <select id="region" class="glass-input" required>
@@ -1003,8 +1020,10 @@
         </select>
 
 
-        <label>City / Sub-region</label>
-        <select id="city" class="glass-input" style="margin-top: 8px;" disabled>
+        <label>City (optional)</label>
+
+        <select id="city">
+
           <option value="">Select City...</option>
         </select>
 
@@ -1046,7 +1065,9 @@
         <label>Languages</label>
         <div class="lang-grid" id="lang-container"></div>
 
-        <button type="submit" id="btn-find-matches" class="btn-primary">Find Matches</button>
+        <button type="button" id="btn-find-matches" class="btn-primary">Find Matches</button>
+
+
       </form>
 
       <a href="#" class="profile-link" id="view-profile-link" style="display:none;">View public profile →</a>
@@ -1072,89 +1093,92 @@
   </div>
 
   <div class="modal-overlay" id="match-modal">
-    <div class="match-modal match-modal-fancy">
-      <button class="match-close" onclick="closeModal()">×</button>
+    <div class="match-modal">
 
-      <div class="match-title">IT'S A MATCH!</div>
-      <div class="match-sub">
-        Squadmate unlocked:
-        <span id="modal-them-name" class="match-highlight">User</span>
+      <div class="fireworks-container">
+        <div class="burst-ray" style="--tr: rotate(-40deg) translateY(-20px);"></div>
+        <div class="burst-ray" style="--tr: rotate(-20deg) translateY(-40px);"></div>
+        <div class="burst-ray" style="--tr: rotate(0deg) translateY(-50px);"></div>
+        <div class="burst-ray" style="--tr: rotate(20deg) translateY(-40px);"></div>
+        <div class="burst-ray" style="--tr: rotate(40deg) translateY(-20px);"></div>
 
+        <div class="spark-dot" style="left: 30%; top: 40%; animation-delay: 0.5s"></div>
+        <div class="spark-dot" style="left: 70%; top: 20%; animation-delay: 1.2s"></div>
+        <div class="spark-dot" style="left: 50%; top: 10%; animation-delay: 2.0s"></div>
       </div>
 
-      <div class="match-avatars fancy">
-        <div class="avatar-block">
-          <div class="avatar-lg me" id="modal-me-avatar">P</div>
-          <div class="avatar-name" id="modal-me-name">You</div>
-          <div class="avatar-ign" id="modal-me-ign">In-game: —</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+
+      <h1 class="match-title" id="modal-title">IT'S A MATCH!</h1>
+      <p class="match-sub" id="modal-sub">
+        You're now squadmates with <span id="modal-them-name"
+          style="color:#fff; font-weight:600;">ShadowSlayer99</span>!
+      </p>
+
+
+      <div class="match-avatars-area">
+
+        <div class="avatar-wrapper">
+          <div class="avatar-ring"></div>
+          <div id="modal-me-avatar" class="modal-avatar-img">B</div>
+
+          <div class="avatar-info">
+            <div class="info-name" id="modal-me-name">BehroozGamer</div>
+            <div class="info-ign" id="modal-me-ign">In-game: Behrooz_BF</div>
+          </div>
         </div>
 
-        <div class="match-link" aria-hidden="true">
-          <svg class="electric" viewBox="0 0 320 60" preserveAspectRatio="none">
+        <div class="connector">
+          <svg class="electric-svg" viewBox="0 0 100 30" preserveAspectRatio="none">
             <defs>
-              <!-- Glow نرم -->
-              <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
-                <feGaussianBlur stdDeviation="2.4" result="b" />
+              <linearGradient id="gradConn" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#00ffaa" />
+                <stop offset="50%" stop-color="#ccff00" />
+                <stop offset="100%" stop-color="#00ccff" />
+              </linearGradient>
+              <filter id="glow-core">
+                <feGaussianBlur stdDeviation="1.5" result="coloredBlur" />
                 <feMerge>
-                  <feMergeNode in="b" />
+                  <feMergeNode in="coloredBlur" />
                   <feMergeNode in="SourceGraphic" />
                 </feMerge>
               </filter>
-
-              <!-- Electric flow: turbulence + displacement -->
-              <filter id="electricFlow" x="-40%" y="-80%" width="180%" height="260%">
-                <feTurbulence type="fractalNoise" baseFrequency="0.012 0.18" numOctaves="2" seed="2" result="noise">
-                  <animate attributeName="baseFrequency" dur="600ms" values="0.010 0.16; 0.014 0.22; 0.010 0.16"
-                    repeatCount="indefinite" />
-                </feTurbulence>
-
-                <feDisplacementMap in="SourceGraphic" in2="noise" scale="14" xChannelSelector="R" yChannelSelector="G"
-                  result="warp" />
-
-                <!-- Glow داخلی -->
-                <feGaussianBlur in="warp" stdDeviation="2.2" result="glowBlur" />
-                <feColorMatrix in="glowBlur" type="matrix" values="
-      1 0 0 0 0
-      0 1 0 0 0
-      0 0 1 0 0
-      0 0 0 0.9 0" result="glow" />
-
-                <feMerge>
-                  <feMergeNode in="glow" />
-                  <feMergeNode in="warp" />
-                </feMerge>
-              </filter>
-
             </defs>
 
+            <path class="strand strand-main" d="M0,15 Q10,5 20,15 T40,15 T60,15 T80,15 T100,15"
+              stroke-dasharray="100 10">
+            </path>
 
-            <!-- رشته‌های برق -->
-            <path class="e e1" d="M0,30 C40,18 70,40 110,30 C150,20 180,44 220,30 C255,20 285,38 320,30" />
-            <path class="e e2" d="M0,30 C35,10 75,48 115,30 C150,12 190,50 230,30 C265,12 290,46 320,30" />
-            <path class="e e3" d="M0,30 C45,24 70,34 110,30 C150,26 180,36 220,30 C255,26 285,34 320,30" />
-            <path class="e e4" d="M0,30 C55,8 85,52 125,30 C165,8 205,52 245,30 C275,12 300,44 320,30" />
+            <path class="strand strand-jitter"
+              d="M0,15 Q5,25 10,15 T20,15 T30,25 T40,15 T50,5 T60,15 T70,25 T80,15 T90,5 T100,15"
+              filter="url(#glow-core)">
+            </path>
+
+            <path class="strand strand-secondary" d="M0,15 Q25,25 50,15 T100,15" stroke-dasharray="20 10">
+            </path>
           </svg>
-
-          <span class="spark spark-left"></span>
-          <span class="spark spark-right"></span>
         </div>
 
+        <div class="avatar-wrapper">
+          <div class="avatar-ring right"></div>
+          <div id="modal-them-avatar" class="modal-avatar-img">S</div>
 
-
-        <div class="avatar-block">
-          <div class="avatar-lg them" id="modal-them-avatar">B</div>
-          <div class="avatar-name" id="modal-them-name-2">User</div>
-          <div class="avatar-ign" id="modal-them-ign">In-game: —</div>
+          <div class="avatar-info">
+            <div class="info-name" id="modal-them-name-2">ShadowSlayer99</div>
+            <div class="info-ign" id="modal-them-ign">In-game: Shadow_BF</div>
+          </div>
         </div>
+
       </div>
 
-      <div class="match-actions">
-        <button class="modal-btn btn-view-squad" onclick="goToSquad()">View Squad</button>
-
-        <button class="modal-btn btn-keep-matching" onclick="closeModal()">Continue Matching</button>
+      <div class="modal-actions">
+        <button class="btn-fancy btn-view-squad" onclick="goToSquad()">VIEW SQUAD</button>
+        <button class="btn-fancy btn-keep-matching" onclick="closeModal()">CONTINUE MATCHING</button>
       </div>
+
     </div>
   </div>
+
 
   <div class="toast-container" id="toast-container"></div>
 
@@ -1167,25 +1191,86 @@
     /* -----------------------
        GLOBALS / CONSTANTS
     ------------------------*/
-    let lastSquadSignature = "";
+    const REALTIME_INTERVAL_MS = 15000; // 15s
 
-    const API_BASE = "/api";     // Relative path
+
+    let lastSquadSignature = localStorage.getItem("pm_last_squad_sig") || "";
+
+
+    const API_BASE = '/api'; // Relative path as requested
+
     const GAME = "battlefield";
-    const REALTIME_INTERVAL_MS = 30000;
-
     let META = null;
+
+    // --- AUTH HELPERS (Step 10A) ---
+
+    function clearAuthAndRedirect() {
+      localStorage.removeItem("pm_access_token");
+      localStorage.removeItem("pm_username");
+
+      // Clear Supabase auth session keys so Landing won't auto-redirect
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("sb-") && k.endsWith("-auth-token")) {
+          localStorage.removeItem(k);
+        }
+      }
+
+      stopRealtime();
+      window.location.href = "/";
+    }
+
+
+    async function authFetch(url, options = {}) {
+      const token = getAccessToken();
+      if (!token) {
+        clearAuthAndRedirect();
+        throw new Error("AUTH_MISSING");
+      }
+
+      const headers = { ...(options.headers || {}), Authorization: `Bearer ${token}` };
+      const res = await fetch(url, { ...options, headers });
+
+      if (res.status === 401) {
+        // Auth problem, not "connection issue"
+        clearAuthAndRedirect();
+        throw new Error("AUTH_EXPIRED");
+      }
+
+      return res;
+    }
+
+
+    function getAccessToken() {
+      return localStorage.getItem("pm_access_token") || "";
+    }
+
+    function withAuthHeaders(headers = {}) {
+      const t = getAccessToken();
+      // اگر توکن نبود، همون headers را برگردان (بعداً می‌تونیم redirect کنیم)
+      if (!t) return { ...headers };
+      return { ...headers, Authorization: `Bearer ${t}` };
+    }
+
+    function authHeaders(headers = {}) {
+      return withAuthHeaders(headers);
+    }
+
 
     /* Realtime (single timer) */
     let realtimeTimer = null;
 
     /* In-flight guards (Step 9E) */
     const inFlight = {
-      ping: false,
-      squad: false,
       match: false,
       like: false,
-      save: false
+      squad: false,
+      ping: false,
+
+      // NEW: share the same in-flight promise so callers don't "return" and miss updates
+      squadPromise: null
     };
+
 
     /* -----------------------
        STATE
@@ -1228,15 +1313,32 @@
       classType: document.getElementById("class_type"),
       mic: document.getElementById("mic"),
       ign: document.getElementById("in_game_username"),
-      username: document.getElementById("username"),
+      usernameHidden: document.getElementById("username"),
+      pmUsernameDisplay: document.getElementById("pm-username-display"),
 
-      btnFind: document.getElementById("btn-find-matches")
+
+      btnFind: document.getElementById("btn-find-matches"),
+      btnLogout: document.getElementById("btn-logout")
+
     };
 
     /* =========================================================
        INIT
     ========================================================= */
     document.addEventListener("DOMContentLoaded", async () => {
+
+      // HARD GATE: no token => go landing (avoid 401 spam)
+      const t = getAccessToken();
+      if (!t) {
+        window.location.href = "/";
+        return;
+      }
+
+      // Logout should always work (do not depend on meta/region)
+      if (els.btnLogout) {
+        els.btnLogout.addEventListener("click", clearAuthAndRedirect);
+      }
+
       try {
         await loadMeta();
         populateRegions();
@@ -1249,6 +1351,7 @@
 
       // Now that select options + language pills exist, restore works
       loadProfileFromStorage();
+      initLockedUsernameFromStorage();
 
       if ((state.profile.username || "").trim()) startRealtime();
 
@@ -1259,11 +1362,14 @@
 
       // If region from storage set, rebuild city list
       if (state.profile.region) {
+        els.region.value = normalizeRegionId(state.profile.region);
         els.region.dispatchEvent(new Event("change"));
         if (state.profile.city) els.city.value = state.profile.city;
       }
 
+
       if (state.profile.username) refreshSquad();
+
     });
 
     document.addEventListener("visibilitychange", () => {
@@ -1295,6 +1401,52 @@
       findMatches();
       refreshSquad();
     });
+
+    function setLockedUsername(displayUsername) {
+      const d = (displayUsername || "").trim();
+      if (!d) return;
+
+      state.profile.display_username = d;
+      state.profile.username = d.toLowerCase();
+
+      // persist (source of truth for UI)
+      localStorage.setItem("pm_username", d);
+      localStorage.setItem("pm_username_locked", "1");
+
+      if (els.pmUsernameDisplay) els.pmUsernameDisplay.textContent = d;
+      if (els.usernameHidden) els.usernameHidden.value = d;
+
+      updateProfileLink(state.profile.username);
+    }
+
+    function initLockedUsernameFromStorage() {
+      // priority: pm_username set at Landing, otherwise keep what loadProfileFromStorage set
+      const fromLanding = (localStorage.getItem("pm_username") || "").trim();
+      if (fromLanding && !state.profile.display_username) {
+        setLockedUsername(fromLanding);
+      } else if (state.profile.display_username) {
+        setLockedUsername(state.profile.display_username);
+      }
+    }
+
+
+    function normalizeRegionId(rawRegion) {
+      const raw = (rawRegion || "").trim();
+      if (!raw) return "";
+
+      const regions = META?.regions || [];
+
+      // اگر از قبل id بود (na-west)
+      let r = regions.find(x => x.id === raw);
+      if (r) return r.id;
+
+      // اگر label ذخیره شده بود (North America West)
+      r = regions.find(x => (x.label || "").trim().toLowerCase() === raw.toLowerCase());
+      if (r) return r.id;
+
+      return "";
+    }
+
 
     function showToast(msg, type = "info") {
       const toast = document.createElement("div");
@@ -1356,19 +1508,55 @@
       if (!inFlight.ping) {
         inFlight.ping = true;
         try {
-          const u = (state.profile.username || "").trim();
-          const res = await fetch(`${API_BASE}/ping?username=${encodeURIComponent(u)}&game=${GAME}`, { method: "POST" });
+          const token = getAccessToken();
 
-          // اگر ping ok بود، یعنی connection خوبه
-          if (res.ok) hideNetError();
-          else showNetError();
+          // اگر توکن نداریم، ping نزن (401 بی‌خودی تولید نکن)
+          if (!token) {
+            // هیچ
+          } else {
+            try {
+              const res = await authFetch(`${API_BASE}/ping?game=${GAME}`, { method: "POST" });
+
+              if (res.ok) {
+                hideNetError();
+
+                const data = await res.json().catch(() => null);
+
+                const serverUsername = data?.username ? String(data.username).trim() : "";
+                const serverDisplay = data?.display_username ? String(data.display_username).trim() : "";
+
+                const effective = serverDisplay || serverUsername;
+
+                if (effective) {
+                  // If localStorage has a different username, override it (token is source of truth)
+                  const localU = (localStorage.getItem("pm_username") || "").trim();
+                  if (localU && localU !== effective) {
+                    // اینجا اگر mismatch داری یعنی قبلاً token/username قاطی بوده
+                    // از این به بعد همیشه به نفع سرور درستش می‌کنیم
+                    localStorage.setItem("pm_username", effective);
+                  }
+
+                  setLockedUsername(effective);
+                  localStorage.setItem("pm_username_locked", "1");
+                }
+
+              }
+
+
+            } catch (e) {
+              // authFetch خودش redirect می‌کند اگر 401/بدون توکن
+              // فقط اگر واقعاً شبکه down بود، banner را نشان بده
+              showNetError();
+            }
+
+          }
         } catch {
-          // network/backend down
           showNetError();
         } finally {
           inFlight.ping = false;
         }
       }
+
 
       // 2) Squad refresh (let refreshSquad manage inFlight.squad)
       try {
@@ -1430,14 +1618,24 @@
           opt.textContent = c;
           els.city.appendChild(opt);
         });
+
+
       });
 
-      // Form submit -> Save + Match
-      els.form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        await saveProfile();
-        findMatches();
-      });
+      // Find Matches action (shared by button click + Enter key submit)
+      async function runFindMatches(e) {
+        if (e) e.preventDefault();
+
+        await saveProfile();       // 1) save first
+        await findMatches();       // 2) then scan
+      }
+
+      // Click on button (won't submit the form anymore because type="button")
+      els.btnFind.addEventListener("click", runFindMatches);
+
+      // Pressing Enter inside the form still works (submit)
+      els.form.addEventListener("submit", runFindMatches);
+
     }
 
     function updateStateLangs() {
@@ -1455,9 +1653,14 @@
         state.profile = { ...state.profile, ...data };
 
         // DOM
-        els.username.value = data.display_username || data.username || "";
+        setLockedUsername(data.display_username || data.username || "");
         els.ign.value = data.in_game_username || "";
-        els.region.value = data.region || "";
+        // Region + City (normalize to META id)
+        const normalizedRegion = normalizeRegionId(data.region || "");
+        els.region.value = normalizedRegion;
+        els.region.dispatchEvent(new Event("change")); // city options rebuild
+
+        // بعد از rebuild، city را ست کن
         els.city.value = data.city || "";
         els.platform.value = data.platform || "PC";
         els.favoriteMode.value = data.favorite_mode || "Conquest";
@@ -1472,8 +1675,8 @@
           applyStoredLanguagesToPills();
         }
 
-        els.status.textContent = `Profile loaded for '${data.display_username || data.username || ""}'`;
-        updateProfileLink(data.username);
+        els.status.textContent = `Profile loaded for '${state.profile.display_username || ""}'`;
+        updateProfileLink(state.profile.username);
       } catch (e) {
         console.error("Error parsing profile", e);
       }
@@ -1481,41 +1684,51 @@
 
     async function saveProfile() {
       // state <- DOM
-      state.profile.display_username = els.username.value;
-      state.profile.username = state.profile.display_username.toLowerCase();
+      const locked = (localStorage.getItem("pm_username") || "").trim();
+      if (!locked) {
+        showToast("No PlayMate Username found. Please go back to Landing and log in again.", "error");
+        clearAuthAndRedirect();
+        return;
+      }
+
+      setLockedUsername(locked); // keeps state/profile consistent
+
       state.profile.in_game_username = els.ign.value;
       state.profile.region = els.region.value;
-      state.profile.city = els.city.value;
+      state.profile.city = els.city.value || null;
       state.profile.platform = els.platform.value;
       state.profile.favorite_mode = els.favoriteMode.value;
       state.profile.class_type = els.classType.value;
       state.profile.mic = els.mic.value;
       updateStateLangs();
 
-      // payload
       const payload = {
-        username: state.profile.username,
-        display_username: state.profile.display_username,
+        username: locked,              // locked
         game: GAME,
         region: state.profile.region,
-        city: state.profile.city,
+        city: state.profile.city || null,
         platform: state.profile.platform,
         favorite_mode: state.profile.favorite_mode,
         class_type: state.profile.class_type,
         mic: state.profile.mic,
-        languages: (state.profile.languages || []).join(","), // "en,fa"
+        languages: (state.profile.languages || []).join(","),
         in_game_username: state.profile.in_game_username,
         profile_pic_url: null,
         wallpaper_url: null,
         game_meta: {}
       };
 
+      // Store both
+      const toStore = { ...payload, username: state.profile.username, display_username: state.profile.display_username };
+      localStorage.setItem("playmate_profile", JSON.stringify(toStore));
+
       try {
-        const res = await fetch(`${API_BASE}/profile`, {
+        const res = await authFetch(`${API_BASE}/profile`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
+
 
         if (res.status === 409) {
           showToast("This Battlefield username is already used by another PlayMate user.", "error");
@@ -1531,6 +1744,9 @@
         showToast("Profile saved!", "success");
 
         startRealtime();
+        if (els.usernameHidden) els.usernameHidden.disabled = true;
+        localStorage.setItem("pm_username_locked", "1");
+
       } catch (err) {
         console.error(err);
         if (err.message !== "Conflict") showToast("Failed to save profile", "error");
@@ -1565,7 +1781,7 @@
       try {
         setLoading(true, "Scanning for Operators...");
 
-        const res = await fetch(`${API_BASE}/match`, {
+        const res = await authFetch(`${API_BASE}/match`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1718,14 +1934,14 @@
       if (card) card.classList.add("swipe-right");
 
       try {
-        const res = await fetch(`${API_BASE}/like`, {
+        const res = await authFetch(`${API_BASE}/like`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            from_user: state.profile.username,
             to_user: matchUser.username,
             game: GAME
           })
+
         });
 
         let data = null;
@@ -1743,19 +1959,24 @@
           return;
         }
 
-        // mutual
-        if (data?.mutual === true || data?.status === "mutual") {
-          await refreshSquad();
+        const isMutual = (data?.mutual === true || data?.status === "mutual");
 
-          const mate = (state.squad || []).find(
-            m => (m.username || "").toLowerCase() === (matchUser.username || "").toLowerCase()
-          );
+        // matchUser از /api/match می‌آید و profile داخلش است
+        const mp = matchUser.profile || {};
 
-          if (mate) triggerMatchModal(mate);
-          else showToast("Matched, but could not load squadmate details yet.", "info");
-        } else {
-          await refreshSquad();
-        }
+        triggerMatchModal(
+          {
+            username: matchUser.username,
+            display_username: mp.display_username || matchUser.username,
+            in_game_username: mp.in_game_username || "—"
+          },
+          { kind: isMutual ? "match" : "like" }
+        );
+
+        // squad را در پس‌زمینه رفرش کن
+        refreshSquad().catch(() => { });
+
+
       } catch (err) {
         console.error("Like failed", err);
         showNetError();
@@ -1771,6 +1992,9 @@
       }, 300);
     }
 
+    let lastSquadUsernames = new Set();
+    let squadBootstrapped = false; // prevents match modal on first load
+
 
     /* =========================================================
        SQUAD + STATUS
@@ -1779,33 +2003,72 @@
       const silent = !!opts.silent;
       if (!state.profile.username) return;
 
-      // Step 9E: prevent duplicate fetch/race
-      if (inFlight.squad) return;
+      // NEW: if a squad fetch is already running, await it (no race)
+      if (inFlight.squadPromise) {
+        return await inFlight.squadPromise;
+      }
 
       inFlight.squad = true;
-      try {
-        const res = await fetch(
-          `${API_BASE}/my-squad-details?username=${encodeURIComponent(state.profile.username)}&game=${GAME}`
+
+      inFlight.squadPromise = (async () => {
+        const res = await authFetch(
+          `${API_BASE}/my-squad-details?game=${GAME}`
         );
+
         if (!res.ok) throw new Error(`squad failed: ${res.status}`);
 
         const data = await res.json();
         const newSquad = data.squadmates || [];
 
+        // detect newly added squadmates (by username)
+        const newSet = new Set(
+          newSquad.map(m => (m.username || "").toLowerCase()).filter(Boolean)
+        );
+        const newlyAdded = [...newSet].filter(u => !lastSquadUsernames.has(u));
+        lastSquadUsernames = newSet;
+
         const sig = computeSquadSignature(newSquad);
         if (sig === lastSquadSignature) return;
 
         lastSquadSignature = sig;
-        state.squad = newSquad;
+        localStorage.setItem("pm_last_squad_sig", sig);
 
+        state.squad = newSquad;
         renderSquadList({ silent });
+
+
+        // if a new squadmate arrived, show match modal automatically
+        // BUT: never on first bootstrap refresh
+        if (squadBootstrapped && newlyAdded.length) {
+          const u = newlyAdded[0];
+          const mate = newSquad.find(m => (m.username || "").toLowerCase() === u);
+          if (mate) {
+            triggerMatchModal({
+              username: mate.username,
+              display_username: mate.display_username || mate.username,
+              in_game_username: mate.in_game_username || "—"
+            });
+          }
+        }
+
+        // mark bootstrap complete after first successful refresh
+        squadBootstrapped = true;
+
+
+      })();
+
+      try {
+        return await inFlight.squadPromise;
       } catch (err) {
         console.error("Squad fetch error", err);
         showNetError();
+        throw err;
       } finally {
         inFlight.squad = false;
+        inFlight.squadPromise = null;
       }
     }
+
 
 
     function renderSquadList({ silent = false } = {}) {
@@ -1879,17 +2142,36 @@
       if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
-    function triggerMatchModal(mate) {
+    function triggerMatchModal(mate, opts = {}) {
+      const kind = opts.kind || "match"; // "match" | "like"
+
       const meDisplay = state.profile.display_username || state.profile.username || "You";
       const meIGN = state.profile.in_game_username || "—";
 
       const mateDisplay = mate?.display_username || mate?.username || "User";
       const mateIGN = mate?.in_game_username || "—";
 
+      // title/sub text
+      const titleEl = document.getElementById("modal-title");
+      const subEl = document.getElementById("modal-sub");
+
+      if (titleEl && subEl) {
+        if (kind === "like") {
+          titleEl.textContent = "LIKE SENT";
+          subEl.innerHTML = `You liked <span id="modal-them-name" style="color:#fff; font-weight:600;">${mateDisplay}</span>. If they like you back, you’ll match.`;
+        } else {
+          titleEl.textContent = "IT'S A MATCH!";
+          subEl.innerHTML = `You're now squadmates with <span id="modal-them-name" style="color:#fff; font-weight:600;">${mateDisplay}</span>!`;
+        }
+      }
+
       document.getElementById("modal-me-avatar").textContent = getInitials(meDisplay);
       document.getElementById("modal-them-avatar").textContent = getInitials(mateDisplay);
 
-      document.getElementById("modal-them-name").textContent = mateDisplay;
+      // (این span را بالا در innerHTML ساختیم؛ حالا مطمئن می‌شویم درست set می‌شود)
+      const themName = document.getElementById("modal-them-name");
+      if (themName) themName.textContent = mateDisplay;
+
       document.getElementById("modal-me-name").textContent = meDisplay;
       document.getElementById("modal-me-ign").textContent = `In-game: ${meIGN}`;
 
@@ -1898,6 +2180,7 @@
 
       els.modal.classList.add("active");
     }
+
 
     window.closeModal = function () {
       els.modal.classList.remove("active");

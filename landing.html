@@ -1,231 +1,731 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="UTF-8" />
-  <title>PlayMate BF – Find your Battlefield squad</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PlayMate | Find Your Perfect Squad</title>
+  <meta name="description" content="Intelligent squad matchmaking for Battlefield. Stop playing solo.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* --- CSS VARIABLES & RESET --- */
+    :root {
+      --bg-dark: #050505;
+      --bg-surface: #0F1115;
+      --primary: #00FFA3;
+      --primary-glow: rgba(0, 255, 163, 0.4);
+      --text-main: #FFFFFF;
+      --text-muted: #9CA3AF;
+      --border-light: rgba(255, 255, 255, 0.1);
+      --glass-bg: rgba(20, 25, 30, 0.6);
+      --font-main: 'Inter', system-ui, -apple-system, sans-serif;
+      --radius-md: 12px;
+      --radius-lg: 24px;
+      --transition: all 0.2s ease;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: radial-gradient(circle at top, #111827 0, #020617 40%, #000 100%);
-      color: #e5e7eb;
+      font-family: var(--font-main);
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      line-height: 1.5;
+      overflow-x: hidden;
       min-height: 100vh;
       display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
+      flex-direction: column;
     }
-    .shell {
-      max-width: 960px;
+
+    /* --- UTILITIES --- */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
       width: 100%;
-      display: grid;
-      grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-      gap: 24px;
-      background: rgba(15, 23, 42, 0.95);
-      border-radius: 24px;
-      border: 1px solid #1f2937;
-      box-shadow: 0 30px 80px rgba(0,0,0,0.6);
-      padding: 28px 32px;
     }
-    @media (max-width: 800px) {
-      .shell {
-        grid-template-columns: minmax(0,1fr);
-        padding: 22px 20px;
-      }
+
+    a {
+      text-decoration: none;
+      color: inherit;
+      transition: var(--transition);
     }
-    .logo-row {
+
+    button {
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+    }
+
+    /* --- AMBIENT GLOW EFFECTS --- */
+    .glow-bg {
+      position: fixed;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, var(--primary-glow) 0%, rgba(0, 0, 0, 0) 70%);
+      top: -200px;
+      left: 50%;
+      transform: translateX(-50%);
+      opacity: 0.15;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    /* --- HEADER --- */
+    header {
+      padding: 24px 0;
+      position: absolute;
+      top: 0;
+      width: 100%;
+      z-index: 10;
+    }
+
+    .nav-flex {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-weight: 700;
+      font-size: 1.5rem;
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 18px;
     }
-    .logo-circle {
-      width: 32px;
-      height: 32px;
-      border-radius: 999px;
-      background: linear-gradient(135deg, #22c55e, #4ade80);
+
+    .logo span {
+      color: var(--primary);
+    }
+
+    .btn-ghost {
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 0.95rem;
+    }
+
+    .btn-ghost:hover {
+      color: var(--text-main);
+    }
+
+    .mode-toggle {
       display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #020617;
+      gap: 10px;
+      margin: 14px 0 10px;
+    }
+
+    .mode-btn {
+      flex: 1;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(255, 255, 255, 0.78);
+      border-radius: 12px;
+      padding: 10px 12px;
+      cursor: pointer;
       font-weight: 800;
-      font-size: 14px;
     }
-    .logo-text {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
+
+    .mode-btn.active {
+      border-color: rgba(74, 222, 128, 0.8);
+      color: rgba(74, 222, 128, 0.95);
     }
-    .logo-text-main {
-      font-size: 15px;
-      font-weight: 600;
-    }
-    .logo-text-sub {
-      font-size: 11px;
-      color: #9ca3af;
-    }
-    h1 {
-      font-size: 30px;
-      line-height: 1.1;
-      margin-bottom: 10px;
-    }
-    h1 span {
-      color: #22c55e;
-    }
-    .lead {
-      font-size: 14px;
-      color: #9ca3af;
-      margin-bottom: 16px;
-    }
-    ul {
-      list-style: none;
-      margin-bottom: 18px;
-    }
-    li {
-      font-size: 13px;
-      margin-bottom: 6px;
+
+
+
+    /* --- HERO SECTION --- */
+    .hero {
+      flex-grow: 1;
       display: flex;
       align-items: center;
-      gap: 6px;
-      color: #d1d5db;
+      padding: 120px 0 80px;
+      position: relative;
     }
-    .dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 999px;
-      background: #22c55e;
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 60px;
+      align-items: center;
     }
-    .cta-row {
+
+    /* Hero Text Content */
+    .hero-content h1 {
+      font-size: 3.5rem;
+      line-height: 1.1;
+      font-weight: 700;
+      margin-bottom: 24px;
+      letter-spacing: -0.02em;
+    }
+
+    .hero-content p {
+      color: var(--text-muted);
+      font-size: 1.125rem;
+      margin-bottom: 40px;
+      max-width: 480px;
+    }
+
+    .feature-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .feature-item {
       display: flex;
-      flex-wrap: wrap;
       align-items: center;
       gap: 12px;
-      margin-top: 8px;
+      font-size: 0.95rem;
+      color: var(--text-muted);
     }
-    .btn-primary {
-      background: #22c55e;
-      border: none;
-      padding: 11px 26px;
-      border-radius: 999px;
-      color: #020617;
-      font-weight: 700;
-      font-size: 14px;
-      cursor: pointer;
-      box-shadow: 0 18px 40px rgba(22, 163, 74, 0.55);
-      text-decoration: none;
-      display: inline-flex;
+
+    .feature-icon {
+      width: 24px;
+      height: 24px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 50%;
+      display: flex;
       align-items: center;
-      gap: 6px;
+      justify-content: center;
+      color: var(--primary);
     }
+
+    /* Hero Form Card */
+    .auth-card {
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-lg);
+      padding: 40px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+      max-width: 440px;
+      width: 100%;
+      margin-left: auto;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Subtle top shine on card */
+    .auth-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+      opacity: 0.5;
+    }
+
+    .auth-header {
+      margin-bottom: 32px;
+      text-align: center;
+    }
+
+    .auth-header h2 {
+      font-size: 1.5rem;
+      margin-bottom: 8px;
+    }
+
+    .auth-header p {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: var(--text-muted);
+    }
+
+    .form-input {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      color: var(--text-main);
+      font-size: 1rem;
+      outline: none;
+      transition: var(--transition);
+    }
+
+    .form-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(0, 255, 163, 0.1);
+    }
+
+    .btn-primary {
+      width: 100%;
+      background: var(--primary);
+      color: #000;
+      font-weight: 700;
+      padding: 16px;
+      border-radius: var(--radius-md);
+      font-size: 1rem;
+      transition: var(--transition);
+      margin-top: 10px;
+    }
+
     .btn-primary:hover {
-      background: #16a34a;
-      box-shadow: 0 22px 55px rgba(22, 163, 74, 0.6);
-      transform: translateY(-1px);
+      transform: translateY(-2px);
+      box-shadow: 0 0 20px var(--primary-glow);
     }
-    .btn-primary:active {
-      transform: translateY(0);
-      box-shadow: 0 12px 30px rgba(22, 163, 74, 0.5);
+
+    .auth-footer {
+      margin-top: 24px;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
     }
-    .btn-secondary {
-      font-size: 12px;
-      color: #9ca3af;
+
+    .auth-footer a {
+      color: var(--primary);
+      font-weight: 500;
     }
-    .btn-secondary span {
-      color: #e5e7eb;
-      font-weight: 600;
+
+    /* --- FOOTER --- */
+    footer {
+      padding: 40px 0;
+      border-top: 1px solid var(--border-light);
+      margin-top: auto;
     }
-    .right-card {
-      background: radial-gradient(circle at top left, #022c22, #020617 55%);
-      border-radius: 18px;
-      border: 1px solid #064e3b;
-      padding: 16px 18px;
+
+    .footer-content {
       display: flex;
-      flex-direction: column;
-      gap: 10px;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
     }
-    .tag-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-bottom: 6px;
-    }
-    .tag {
-      font-size: 11px;
-      padding: 4px 8px;
-      border-radius: 999px;
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid #1f2937;
-      color: #e5e7eb;
-    }
-    .tag-soft {
-      background: rgba(15, 23, 42, 0.8);
-      color: #9ca3af;
-    }
-    .right-title {
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 2px;
-    }
-    .right-text {
-      font-size: 12px;
-      color: #9ca3af;
-      margin-bottom: 4px;
-    }
-    .right-small {
-      font-size: 11px;
-      color: #6b7280;
+
+    /* --- RESPONSIVE --- */
+    @media (max-width: 968px) {
+      .hero-grid {
+        grid-template-columns: 1fr;
+        gap: 40px;
+        text-align: center;
+      }
+
+      .hero-content h1 {
+        font-size: 2.5rem;
+      }
+
+      .hero-content p {
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .feature-list {
+        justify-content: center;
+      }
+
+      .auth-card {
+        margin: 0 auto;
+      }
+
+      .feature-item {
+        justify-content: center;
+      }
     }
   </style>
 </head>
+
 <body>
-  <div class="shell">
-    <div>
-      <div class="logo-row">
-        <div class="logo-circle">PM</div>
-        <div class="logo-text">
-          <div class="logo-text-main">PlayMate BF · MVP</div>
-          <div class="logo-text-sub">Battlefield squad finder – early preview</div>
+
+  <div class="glow-bg"></div>
+
+  <header>
+    <div class="container nav-flex">
+      <a href="#" class="logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00FFA3" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+          <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+          <path d="M4 22h16"></path>
+          <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path>
+          <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path>
+          <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+        </svg>
+        PlayMate
+      </a>
+      <a href="#" class="btn-ghost" onclick="focusEmail()">Log in</a>
+    </div>
+  </header>
+
+  <main class="hero">
+    <div class="container">
+      <div class="hero-grid">
+
+        <div class="hero-content">
+          <h1>Stop playing solo.<br>Find your perfect squad.</h1>
+          <p>Intelligent matchmaking for Battlefield. We analyze region, playstyle, and mic preferences to connect you
+            with teammates who actually communicate.</p>
+
+          <div class="feature-list">
+            <div class="feature-item">
+              <div class="feature-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+              <span>Region & Language locked</span>
+            </div>
+            <div class="feature-item">
+              <div class="feature-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+              <span>Mic required squads</span>
+            </div>
+            <div class="feature-item">
+              <div class="feature-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+              <span>Playstyle matching (Aggro/Tac)</span>
+            </div>
+            <div class="feature-item">
+              <div class="feature-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+              <span>No toxicity tolerance</span>
+            </div>
+          </div>
         </div>
-      </div>
-      <h1>
-        Find your <span>Battlefield squad</span><br/>
-        in under 30 seconds.
-      </h1>
-      <p class="lead">
-        PlayMate BF matches Battlefield players by region, favorite mode, class and languages –
-        so you can skip random lobbies and build a real squad.
-      </p>
-      <ul>
-        <li><span class="dot"></span> Smart matching based on <b>region, mode, class, mic and languages</b>.</li>
-        <li><span class="dot"></span> Swipe through your best matches, then <b>add them to your squad</b>.</li>
-        <li><span class="dot"></span> See <b>mutual likes</b> in My Squad when both of you add each other.</li>
-      </ul>
-      <div class="cta-row">
-        <a href="/bf" class="btn-primary">
-          Start matchmaking
-        </a>
-        <div class="btn-secondary">
-          No login yet. <span>Set your Battlefield profile</span> and start matching.
+
+        <div class="auth-card">
+          <div class="auth-header" id="authHeader">
+            <h2 id="authTitle">Log in to your account</h2>
+            <p id="authSubtitle">Enter your email and password.</p>
+          </div>
+
+          <div class="mode-toggle">
+            <button type="button" id="mode-login" class="mode-btn active">Log in</button>
+            <button type="button" id="mode-signup" class="mode-btn">Sign up</button>
+          </div>
+
+          <form id="authForm" onsubmit="handleAuth(event)">
+            <div class="auth-header">
+              <h2 id="authTitle">Log in to your account</h2>
+              <p id="authSubtitle">Enter your email and password.</p>
+            </div>
+
+            <div class="mode-toggle" style="display:flex; gap:10px; margin: 14px 0 16px;">
+              <button type="button" id="mode-login" class="btn-secondary active" onclick="setAuthMode('login')">Log
+                in</button>
+              <button type="button" id="mode-signup" class="btn-secondary" onclick="setAuthMode('signup')">Sign
+                up</button>
+            </div>
+
+            <div class="form-group" id="pm-username-group" style="display:none;">
+              <label class="form-label" for="pm_username">PlayMate Username</label>
+              <input type="text" id="pm_username" class="form-input" placeholder="pouriya">
+            </div>
+
+            <form id="authForm" onsubmit="handleAuth(event)">
+              <div class="form-group">
+                <label class="form-label" for="email">Email address</label>
+                <input type="email" id="email" class="form-input" placeholder="soldier@example.com" required>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="password">Password</label>
+                <input type="password" id="password" class="form-input" placeholder="••••••••" required>
+              </div>
+
+              <button type="submit" class="btn-primary">Continue</button>
+              <button type="button" class="btn-secondary" onclick="quickDevAccount()">
+                Quick Dev Account (no email)
+              </button>
+            </form>
+
+
+            <div class="auth-footer">
+              By continuing, you agree to our <a href="#">Terms</a> & <a href="#">Privacy</a>.
+            </div>
         </div>
+
       </div>
     </div>
-    <div class="right-card">
-      <div class="right-title">What you’ll see inside</div>
-      <div class="tag-row">
-        <div class="tag">Battlefield profile form</div>
-        <div class="tag">Match list (0–100%)</div>
-        <div class="tag">Swipe mode (beta)</div>
-        <div class="tag">My Squad · mutual likes</div>
-      </div>
-      <div class="right-title">Match inputs</div>
-      <div class="right-text">Region, platform, favorite mode, class, mic, languages.</div>
-      <div class="right-title">Perfect for</div>
-      <div class="right-text">Players tired of random teammates & solo queue.</div>
-      <div class="right-title">Current scope</div>
-      <div class="right-small">
-        Battlefield only. Designed to extend to more games later.
+  </main>
+
+  <footer>
+    <div class="container footer-content">
+      <div>&copy; 2024 PlayMate. All rights reserved.</div>
+      <div>
+        <a href="#">Support</a> &nbsp;•&nbsp; <a href="#">Twitter</a>
       </div>
     </div>
-  </div>
+  </footer>
+
+  <!-- 1) Supabase JS -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+  <!-- 2) Create Supabase client + auto-redirect if already logged in -->
+  <script>
+    const SUPABASE_URL = "https://fffejwdrqhizgxpjacgn.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmZmVqd2RycWhpemd4cGphY2duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMTExNjgsImV4cCI6MjA4MDc4NzE2OH0.Zr2And6oP8PKmCDiW3rNcimBWh5cUV22YvnWwhQQz7s";
+
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Auto-redirect if already logged in
+    (async () => {
+      try {
+        // This handles email-confirm redirects (token comes back in URL/hash)
+        const { data, error } = await supabaseClient.auth.getSession();
+        if (error) {
+          console.warn("getSession error:", error.message);
+          return;
+        }
+        if (data?.session?.access_token) {
+          localStorage.setItem("pm_access_token", data.session.access_token);
+
+          const u =
+            data.session.user?.user_metadata?.pm_username ||
+            data.session.user?.user_metadata?.username ||
+            "";
+
+          if (u) localStorage.setItem("pm_username", u);
+
+          window.location.href = "/bf";
+        }
+
+
+      } catch (e) {
+        console.warn("session init failed:", e);
+      }
+    })();
+
+  </script>
+
+  <!-- 3) Replace mock auth with real Supabase Auth -->
+  <script>
+    function focusEmail() {
+      document.getElementById("email").focus();
+    }
+
+    function rand(n = 8) { return Math.random().toString(36).slice(2, 2 + n); }
+
+    async function quickDevAccount() {
+      const btn = document.querySelector(".btn-primary");
+      const originalText = btn.innerText;
+
+      // nickname optional (for readability)
+      const nick = prompt("Nickname (optional):") || "dev";
+      const safeNick = nick.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+
+      const email = `${safeNick}_${Date.now()}@playmate.local`;
+      const password = `Dev!${rand(10)}${rand(10)}`;
+
+      btn.innerText = "Creating dev account...";
+      btn.disabled = true;
+
+      try {
+        const pmUsername = document.getElementById("pm_username").value.trim();
+        if (!pmUsername) {
+          alert("PlayMate Username is required.");
+          return;
+        }
+
+        const signup = await supabaseClient.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { pm_username: pmUsername },
+            emailRedirectTo: `${window.location.origin}/`
+          }
+        });
+
+
+
+        if (signup.error) {
+          alert(signup.error.message);
+          return;
+        }
+
+        // if confirmations are OFF, session exists here
+        let session = signup.data?.session;
+
+        if (!session) {
+          // fallback: try login
+          const login = await supabaseClient.auth.signInWithPassword({ email, password });
+          if (login.error) {
+            alert("Dev account created but could not auto-login. Check Auth email confirmation settings.");
+            return;
+          }
+          session = login.data.session;
+        }
+
+        localStorage.setItem("pm_access_token", session.access_token);
+        // optional: store dev credentials for debugging
+        localStorage.setItem("pm_dev_email", email);
+        localStorage.setItem("pm_dev_password", password);
+        localStorage.setItem("pm_username", pmUsername);
+
+        window.location.href = "/bf";
+      } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+      }
+    }
+
+    let AUTH_MODE = "login";
+
+    function setAuthMode(mode) {
+      AUTH_MODE = mode;
+
+      const btnLogin = document.getElementById("mode-login");
+      const btnSignup = document.getElementById("mode-signup");
+      const group = document.getElementById("pm-username-group");
+      const username = document.getElementById("pm_username");
+
+      const title = document.getElementById("authTitle");
+      const sub = document.getElementById("authSubtitle");
+
+      if (mode === "signup") {
+        btnSignup.classList.add("active");
+        btnLogin.classList.remove("active");
+        group.style.display = "";
+        username.required = true;
+
+        if (title) title.textContent = "Create your account";
+        if (sub) sub.textContent = "Choose a PlayMate username, then enter email and password.";
+      } else {
+        btnLogin.classList.add("active");
+        btnSignup.classList.remove("active");
+        group.style.display = "none";
+        username.required = false;
+        username.value = "";
+
+        if (title) title.textContent = "Log in to your account";
+        if (sub) sub.textContent = "Enter your email and password.";
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const btnLogin = document.getElementById("mode-login");
+      const btnSignup = document.getElementById("mode-signup");
+
+      if (btnLogin) btnLogin.addEventListener("click", () => setAuthMode("login"));
+      if (btnSignup) btnSignup.addEventListener("click", () => setAuthMode("signup"));
+
+      setAuthMode("login");
+    });
+
+
+    async function handleAuth(e) {
+      e.preventDefault();
+
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const pmUsernameInput = (document.getElementById("pm_username")?.value || "").trim();
+
+      const btn = document.querySelector(".btn-primary");
+      const originalText = btn.innerText;
+
+      btn.innerText = (AUTH_MODE === "signup") ? "Signing up..." : "Signing in...";
+      btn.style.opacity = "0.7";
+      btn.disabled = true;
+
+      try {
+        if (!email || !password) {
+          alert("Email and password are required.");
+          return;
+        }
+
+        let data;
+
+        if (AUTH_MODE === "login") {
+          const login = await supabaseClient.auth.signInWithPassword({ email, password });
+          if (login.error) {
+            alert(login.error.message);
+            return;
+          }
+          data = login.data;
+        } else {
+          if (!pmUsernameInput) {
+            alert("PlayMate Username is required for Sign up.");
+            return;
+          }
+
+          const signup = await supabaseClient.auth.signUp({
+            email,
+            password,
+            options: {
+              data: { pm_username: pmUsernameInput },
+              emailRedirectTo: `${window.location.origin}/`
+            }
+          });
+
+          if (signup.error) {
+            alert(signup.error.message);
+            return;
+          }
+
+          data = signup.data;
+
+          if (!data.session) {
+            alert("Account created. Please check your email to confirm, then log in.");
+            setAuthMode("login");
+            return;
+          }
+        }
+
+        const token = data?.session?.access_token;
+        const user = data?.session?.user;
+
+        if (!token) {
+          alert("Authentication succeeded but no session token was returned.");
+          return;
+        }
+
+        const metaUsername =
+          user?.user_metadata?.pm_username ||
+          user?.user_metadata?.username ||
+          "";
+
+        const lockedUsername = (metaUsername || pmUsernameInput || "").trim();
+        if (!lockedUsername) {
+          alert("No PlayMate Username found for this account.");
+          return;
+        }
+
+        localStorage.setItem("pm_access_token", token);
+        localStorage.setItem("pm_username", lockedUsername);
+
+        window.location.href = "/bf";
+      } finally {
+        btn.innerText = originalText;
+        btn.style.opacity = "1";
+        btn.disabled = false;
+      }
+    }
+
+
+  </script>
 </body>
+
 </html>

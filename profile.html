@@ -1,14 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PlayMate | Profile</title>
-  
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
-  
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Orbitron:wght@500;700;900&display=swap"
+    rel="stylesheet">
+
   <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
   <style>
@@ -23,7 +26,10 @@
       --text-muted: #8b9bb4;
     }
 
-    * { box-sizing: border-box; outline: none; }
+    * {
+      box-sizing: border-box;
+      outline: none;
+    }
 
     body {
       margin: 0;
@@ -31,7 +37,7 @@
       font-family: 'Inter', sans-serif;
       background-color: var(--bg-dark);
       /* Background Mesh Gradient */
-      background-image: 
+      background-image:
         radial-gradient(circle at 15% 15%, rgba(0, 255, 136, 0.08) 0%, transparent 40%),
         radial-gradient(circle at 85% 85%, rgba(0, 204, 255, 0.08) 0%, transparent 40%);
       color: var(--text-main);
@@ -76,7 +82,10 @@
 
     .avatar-glow-ring {
       position: absolute;
-      top: -10px; left: -10px; right: -10px; bottom: -10px;
+      top: -10px;
+      left: -10px;
+      right: -10px;
+      bottom: -10px;
       border-radius: 50%;
       border: 1px solid rgba(0, 255, 136, 0.2);
       animation: pulse 3s infinite;
@@ -84,9 +93,20 @@
     }
 
     @keyframes pulse {
-      0% { transform: scale(1); opacity: 0.5; }
-      50% { transform: scale(1.1); opacity: 0.2; }
-      100% { transform: scale(1); opacity: 0.5; }
+      0% {
+        transform: scale(1);
+        opacity: 0.5;
+      }
+
+      50% {
+        transform: scale(1.1);
+        opacity: 0.2;
+      }
+
+      100% {
+        transform: scale(1);
+        opacity: 0.5;
+      }
     }
 
     .game-badge {
@@ -162,8 +182,10 @@
       gap: 8px;
     }
 
-    .tab-btn:hover { color: white; }
-    
+    .tab-btn:hover {
+      color: white;
+    }
+
     .tab-btn.active {
       background: rgba(0, 255, 136, 0.15);
       color: var(--neon-green);
@@ -174,7 +196,8 @@
     /* --- GRID LAYOUT --- */
     .profile-grid {
       display: grid;
-      grid-template-columns: 1.4fr 1fr 0.8fr; /* Layout ratio */
+      grid-template-columns: 1.4fr 1fr 0.8fr;
+      /* Layout ratio */
       gap: 20px;
     }
 
@@ -220,9 +243,10 @@
       min-width: 140px;
       transition: 0.2s;
     }
+
     .stat-pill:hover {
-        background: rgba(255, 255, 255, 0.06);
-        border-color: rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.15);
     }
 
     .stat-icon {
@@ -236,8 +260,18 @@
       flex-direction: column;
     }
 
-    .stat-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
-    .stat-value { font-size: 14px; font-weight: 600; color: white; }
+    .stat-label {
+      font-size: 10px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: white;
+    }
 
     /* --- MIDDLE: SQUAD LIST --- */
     .squad-list {
@@ -258,21 +292,37 @@
       border: 1px solid transparent;
       transition: 0.2s;
     }
-    
+
     .squad-item:hover {
-        border-color: rgba(255, 255, 255, 0.1);
-        background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.05);
     }
 
     .squad-avatar {
-      width: 40px; height: 40px;
+      width: 40px;
+      height: 40px;
       border-radius: 50%;
       background: #333;
     }
 
-    .squad-info { flex: 1; }
-    .squad-name { font-size: 13px; font-weight: 600; color: white; }
-    .squad-ign { font-size: 11px; color: var(--neon-green); opacity: 0.8; display: flex; align-items: center; gap: 4px; }
+    .squad-info {
+      flex: 1;
+    }
+
+    .squad-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: white;
+    }
+
+    .squad-ign {
+      font-size: 11px;
+      color: var(--neon-green);
+      opacity: 0.8;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
 
     .status-badge {
       font-size: 10px;
@@ -283,9 +333,24 @@
       gap: 4px;
       font-weight: 600;
     }
-    .status-online { background: rgba(0, 255, 136, 0.15); color: var(--neon-green); border: 1px solid rgba(0, 255, 136, 0.3); }
-    .status-away { background: rgba(255, 170, 0, 0.15); color: #ffaa00; border: 1px solid rgba(255, 170, 0, 0.3); }
-    .status-offline { background: rgba(255, 255, 255, 0.05); color: #888; border: 1px solid rgba(255, 255, 255, 0.1); }
+
+    .status-online {
+      background: rgba(0, 255, 136, 0.15);
+      color: var(--neon-green);
+      border: 1px solid rgba(0, 255, 136, 0.3);
+    }
+
+    .status-away {
+      background: rgba(255, 170, 0, 0.15);
+      color: #ffaa00;
+      border: 1px solid rgba(255, 170, 0, 0.3);
+    }
+
+    .status-offline {
+      background: rgba(255, 255, 255, 0.05);
+      color: #888;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
 
     /* --- RIGHT: CUSTOMIZATION --- */
     .wallpaper-grid {
@@ -294,7 +359,7 @@
       gap: 8px;
       margin-bottom: 20px;
     }
-    
+
     .wall-thumb {
       aspect-ratio: 16/9;
       background: #333;
@@ -304,10 +369,26 @@
       overflow: hidden;
       position: relative;
     }
-    .wall-thumb img { width: 100%; height: 100%; object-fit: cover; opacity: 0.7; transition: 0.2s; }
-    .wall-thumb:hover img { opacity: 1; }
-    .wall-thumb.active { border-color: var(--neon-green); }
-    .wall-thumb.active img { opacity: 1; }
+
+    .wall-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0.7;
+      transition: 0.2s;
+    }
+
+    .wall-thumb:hover img {
+      opacity: 1;
+    }
+
+    .wall-thumb.active {
+      border-color: var(--neon-green);
+    }
+
+    .wall-thumb.active img {
+      opacity: 1;
+    }
 
     .setting-row {
       display: flex;
@@ -315,73 +396,99 @@
       align-items: center;
       margin-bottom: 12px;
       padding-bottom: 12px;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     }
-    .setting-label { font-size: 12px; color: #ccc; }
-    
+
+    .setting-label {
+      font-size: 12px;
+      color: #ccc;
+    }
+
     /* Custom Toggle */
     .toggle-switch {
       position: relative;
-      width: 36px; height: 20px;
+      width: 36px;
+      height: 20px;
       background: #333;
       border-radius: 20px;
       cursor: pointer;
       transition: 0.3s;
     }
-    .toggle-switch.on { background: var(--neon-green); }
+
+    .toggle-switch.on {
+      background: var(--neon-green);
+    }
+
     .toggle-thumb {
       position: absolute;
-      top: 2px; left: 2px;
-      width: 16px; height: 16px;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
       background: white;
       border-radius: 50%;
       transition: 0.3s;
     }
-    .toggle-switch.on .toggle-thumb { left: 18px; }
+
+    .toggle-switch.on .toggle-thumb {
+      left: 18px;
+    }
 
     /* Color Picker Mockup */
     .color-picker-box {
-        width: 40px; height: 20px;
-        background: var(--neon-green);
-        border-radius: 4px;
-        border: 1px solid rgba(255,255,255,0.2);
-        cursor: pointer;
-        display: flex; align-items: center; justify-content: center;
+      width: 40px;
+      height: 20px;
+      background: var(--neon-green);
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     /* Back Link */
     .back-link {
-        position: absolute;
-        top: 20px; left: 20px;
-        color: #666;
-        text-decoration: none;
-        font-size: 12px;
-        display: flex; align-items: center; gap: 5px;
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: #666;
+      text-decoration: none;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
     }
-    .back-link:hover { color: white; }
+
+    .back-link:hover {
+      color: white;
+    }
 
     /* Responsive */
     @media (max-width: 1000px) {
-      .profile-grid { grid-template-columns: 1fr; }
+      .profile-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
+
 <body>
 
   <a href="/bf" class="back-link"><i class="ph ph-arrow-left"></i> Back to Battlefield</a>
 
   <div class="main-container">
-    
+
     <div class="profile-header">
       <div class="game-badge">
         <i class="ph ph-sword"></i> BATTLEFIELD
       </div>
-      
+
       <div class="avatar-container">
         <div class="avatar-glow-ring"></div>
         <img src="" id="headerAvatar" class="profile-avatar">
       </div>
-      
+
       <h1 class="profile-name">
         <span id="headerName">Loading...</span>
         <div class="online-indicator" id="headerOnlineDot" title="Status"></div>
@@ -391,19 +498,21 @@
     </div>
 
     <div class="tabs-container">
-     <button class="tab-btn active" onclick="switchTab('overview', this)"><i class="ph ph-user-focus"></i> Overview</button>
-<button class="tab-btn" onclick="switchTab('games', this)"><i class="ph ph-game-controller"></i> Games</button>
-<button class="tab-btn" onclick="switchTab('squad', this)"><i class="ph ph-users-three"></i> Squad</button>
-<button class="tab-btn" onclick="switchTab('custom', this)"><i class="ph ph-paint-brush-broad"></i> Customization</button>
+      <button class="tab-btn active" onclick="switchTab('overview', this)"><i class="ph ph-user-focus"></i>
+        Overview</button>
+      <button class="tab-btn" onclick="switchTab('games', this)"><i class="ph ph-game-controller"></i> Games</button>
+      <button class="tab-btn" onclick="switchTab('squad', this)"><i class="ph ph-users-three"></i> Squad</button>
+      <button class="tab-btn" onclick="switchTab('custom', this)"><i class="ph ph-paint-brush-broad"></i>
+        Customization</button>
 
     </div>
 
     <div class="profile-grid" id="tab-overview">
-      
+
       <div class="glass-card">
         <span class="card-title">Player Preferences</span>
         <div class="stats-container">
-          
+
           <div class="stat-row">
             <div class="stat-pill">
               <i class="ph ph-game-controller stat-icon"></i>
@@ -429,7 +538,7 @@
                 <span class="stat-value" id="pCity">-</span>
               </div>
             </div>
-             <div class="stat-pill">
+            <div class="stat-pill">
               <i class="ph ph-microphone stat-icon"></i>
               <div class="stat-content">
                 <span class="stat-label">Mic</span>
@@ -469,80 +578,92 @@
       <div class="glass-card">
         <span class="card-title">Mutual Squadmates</span>
         <div class="squad-list" id="squadList">
-           <div style="color:#666; font-size:12px; text-align:center; margin-top:20px;">Loading squad...</div>
+          <div style="color:#666; font-size:12px; text-align:center; margin-top:20px;">Loading squad...</div>
         </div>
         <div style="text-align:center; margin-top:15px;">
-            <button style="background:transparent; border:1px solid #444; color:#888; padding:8px 16px; border-radius:12px; font-size:11px; cursor:pointer;">
-                VIEW FULL SQUAD >
-            </button>
+          <button
+            style="background:transparent; border:1px solid #444; color:#888; padding:8px 16px; border-radius:12px; font-size:11px; cursor:pointer;">
+            VIEW FULL SQUAD >
+          </button>
         </div>
       </div>
 
       <div class="glass-card">
         <span class="card-title">Wallpaper Selector</span>
         <div class="wallpaper-grid">
-            <div class="wall-thumb active"><img src="https://media.contentapi.ea.com/content/dam/battlefield/battlefield-2042/images/2021/06/bf2042-key-art.jpg.adapt.crop191x100.1200w.jpg"></div>
-            <div class="wall-thumb"><img src="https://wallpapers.com/images/hd/battlefield-2042-4k-desktop-f215m55883g8182g.jpg"></div>
-            <div class="wall-thumb"><img src="https://images4.alphacoders.com/115/1152069.jpg"></div>
-            <div class="wall-thumb"><img src="https://i.pinimg.com/originals/c9/73/19/c97319e78262799c961e685f6756623d.jpg"></div>
-            <div class="wall-thumb"><img src="https://images.hdqwalls.com/wallpapers/battlefield-2042-soldier-4k-7p.jpg"></div>
-            <div class="wall-thumb" style="background:#222; display:flex; align-items:center; justify-content:center; color:#555; font-size:10px;">More...</div>
+          <div class="wall-thumb active"><img
+              src="https://media.contentapi.ea.com/content/dam/battlefield/battlefield-2042/images/2021/06/bf2042-key-art.jpg.adapt.crop191x100.1200w.jpg">
+          </div>
+          <div class="wall-thumb"><img
+              src="https://wallpapers.com/images/hd/battlefield-2042-4k-desktop-f215m55883g8182g.jpg"></div>
+          <div class="wall-thumb"><img src="https://images4.alphacoders.com/115/1152069.jpg"></div>
+          <div class="wall-thumb"><img
+              src="https://i.pinimg.com/originals/c9/73/19/c97319e78262799c961e685f6756623d.jpg"></div>
+          <div class="wall-thumb"><img src="https://images.hdqwalls.com/wallpapers/battlefield-2042-soldier-4k-7p.jpg">
+          </div>
+          <div class="wall-thumb"
+            style="background:#222; display:flex; align-items:center; justify-content:center; color:#555; font-size:10px;">
+            More...</div>
         </div>
-        <button style="width:100%; padding:10px; background:rgba(255,255,255,0.05); border:1px solid #333; color:#ccc; border-radius:8px; cursor:pointer;">Select Image</button>
+        <button
+          style="width:100%; padding:10px; background:rgba(255,255,255,0.05); border:1px solid #333; color:#ccc; border-radius:8px; cursor:pointer;">Select
+          Image</button>
 
         <span class="card-title" style="margin-top:20px;">Profile Appearance</span>
-        
+
         <div class="setting-row">
-            <span class="setting-label">Theme Color</span>
-            <div class="color-picker-box"><i class="ph ph-pencil-simple" style="font-size:10px; color:#003311;"></i></div>
+          <span class="setting-label">Theme Color</span>
+          <div class="color-picker-box"><i class="ph ph-pencil-simple" style="font-size:10px; color:#003311;"></i></div>
         </div>
 
         <div class="setting-row">
-            <span class="setting-label">Glow Intensity</span>
-            <input type="range" min="1" max="100" value="70" style="width:80px; accent-color: var(--neon-green);">
+          <span class="setting-label">Glow Intensity</span>
+          <input type="range" min="1" max="100" value="70" style="width:80px; accent-color: var(--neon-green);">
         </div>
 
         <div class="setting-row" style="border:none;">
-            <span class="setting-label">Animated Avatar</span>
-            <div class="toggle-switch on" onclick="this.classList.toggle('on')"><div class="toggle-thumb"></div></div>
+          <span class="setting-label">Animated Avatar</span>
+          <div class="toggle-switch on" onclick="this.classList.toggle('on')">
+            <div class="toggle-thumb"></div>
+          </div>
         </div>
 
       </div>
 
     </div>
-    
+
     <div id="tab-others" style="display:none; text-align:center; padding:50px; color:#666;">
-        Content for this tab is coming soon.
+      Content for this tab is coming soon.
     </div>
 
   </div>
 
   <script>
-    function qs(name){ return new URLSearchParams(window.location.search).get(name) || ""; }
-    
+    function qs(name) { return new URLSearchParams(window.location.search).get(name) || ""; }
+
     // --- API HELPER ---
     async function fetchJson(url) {
       try {
         const r = await fetch(url);
-        if(!r.ok) throw new Error("HTTP " + r.status);
+        if (!r.ok) throw new Error("HTTP " + r.status);
         return await r.json();
-      } catch(e) { console.error(e); return {}; }
+      } catch (e) { console.error(e); return {}; }
     }
 
     // --- MAIN LOAD ---
     async function loadProfile() {
       const username = qs("username").trim();
-      if(!username) {
+      if (!username) {
         document.body.innerHTML = "<div style='color:white; text-align:center; padding-top:100px;'>No username provided.</div>";
         return;
       }
 
       // 1. Fetch Profile Data
       const p = await fetchJson("/profile-full?username=" + encodeURIComponent(username));
-      
-      if(p.error) {
-         document.body.innerHTML = `<div style='color:white; text-align:center; padding-top:100px;'>User ${username} not found.</div>`;
-         return;
+
+      if (p.error) {
+        document.body.innerHTML = `<div style='color:white; text-align:center; padding-top:100px;'>User ${username} not found.</div>`;
+        return;
       }
 
       // 2. Populate Header
@@ -553,20 +674,20 @@
       document.getElementById("headerAvatar").src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.username}&backgroundColor=b6e3f4`;
 
 
-//2.1.
+      //2.1.
 
-const dot = document.getElementById("headerOnlineDot");
-if (dot) {
-  if (p.last_active) {
-    const diffSec = (Date.now() - new Date(p.last_active).getTime()) / 1000;
-    // آنلاین = 60 ثانیه
-    dot.style.opacity = (diffSec <= 60) ? "1" : "0.25";
-    dot.title = (diffSec <= 60) ? "Online" : `Last seen ${formatLastSeenFromIso(p.last_active)}`;
-  } else {
-    dot.style.opacity = "0.25";
-    dot.title = "Offline";
-  }
-}
+      const dot = document.getElementById("headerOnlineDot");
+      if (dot) {
+        if (p.last_active) {
+          const diffSec = (Date.now() - new Date(p.last_active).getTime()) / 1000;
+          // آنلاین = 60 ثانیه
+          dot.style.opacity = (diffSec <= 60) ? "1" : "0.25";
+          dot.title = (diffSec <= 60) ? "Online" : `Last seen ${formatLastSeenFromIso(p.last_active)}`;
+        } else {
+          dot.style.opacity = "0.25";
+          dot.title = "Offline";
+        }
+      }
 
 
       // 3. Populate Stats (Pills)
@@ -578,66 +699,73 @@ if (dot) {
       document.getElementById("pClass").textContent = p.class_type || "Any";
       document.getElementById("pLang").textContent = p.languages || "English";
 
-      // 4. Fetch & Populate Squad
-      const squadData = await fetchJson("/api/my-squad-details?username=" + encodeURIComponent(p.username) + "&game=battlefield");
-      renderSquad(squadData.squadmates || []);
+      // 4) Fetch & Populate Squad (public mutual list)
+      try {
+        const squad = await fetchJson(`/profile-squad?username=${encodeURIComponent(p.username)}&game=${encodeURIComponent(p.game || "battlefield")}`);
+        renderSquad(squad.squadmates || []);
+      } catch (e) {
+        console.warn("profile-squad failed:", e);
+        renderSquad([]);
+      }
+
+
     }
 
-function formatLastSeenFromIso(iso) {
-  if (!iso) return "Unknown";
-  const diffSec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (!isFinite(diffSec) || diffSec < 0) return "Unknown";
+    function formatLastSeenFromIso(iso) {
+      if (!iso) return "Unknown";
+      const diffSec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+      if (!isFinite(diffSec) || diffSec < 0) return "Unknown";
 
-  if (diffSec < 60) return `${diffSec}s ago`;
+      if (diffSec < 60) return `${diffSec}s ago`;
 
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) return `${diffMin}m ago`;
 
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
+      const diffHr = Math.floor(diffMin / 60);
+      if (diffHr < 24) return `${diffHr}h ago`;
 
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 30) return `${diffDay}d ago`;
+      const diffDay = Math.floor(diffHr / 24);
+      if (diffDay < 30) return `${diffDay}d ago`;
 
-  const diffMon = Math.floor(diffDay / 30);
-  if (diffMon < 12) return `${diffMon}mo ago`;
+      const diffMon = Math.floor(diffDay / 30);
+      if (diffMon < 12) return `${diffMon}mo ago`;
 
-  const diffYr = Math.floor(diffMon / 12);
-  return `${diffYr}y ago`;
-}
+      const diffYr = Math.floor(diffMon / 12);
+      return `${diffYr}y ago`;
+    }
 
 
     function renderSquad(list) {
       const container = document.getElementById("squadList");
       container.innerHTML = "";
 
-      if(list.length === 0) {
+      if (list.length === 0) {
         container.innerHTML = "<div style='color:#666; font-size:12px; text-align:center;'>No mutual squadmates yet.</div>";
         return;
       }
 
       list.forEach(mate => {
         // Calculate status
-let statusClass = "status-offline";
-let statusText = "Offline";
+        let statusClass = "status-offline";
+        let statusText = "Offline";
 
-if (mate.last_active) {
-  const diffSec = (Date.now() - new Date(mate.last_active).getTime()) / 1000;
+        if (mate.last_active) {
+          const diffSec = (Date.now() - new Date(mate.last_active).getTime()) / 1000;
 
-  if (diffSec <= 60) {
-    statusClass = "status-online";
-    statusText = "Online";
-  } else if (diffSec <= 300) {
-    statusClass = "status-away";
-    statusText = `Away · ${formatLastSeenFromIso(mate.last_active)}`;
-  } else {
-    statusClass = "status-offline";
-    statusText = `Last seen ${formatLastSeenFromIso(mate.last_active)}`;
-  }
-} else {
-  statusClass = "status-offline";
-  statusText = "Last seen Unknown";
-}
+          if (diffSec <= 60) {
+            statusClass = "status-online";
+            statusText = "Online";
+          } else if (diffSec <= 300) {
+            statusClass = "status-away";
+            statusText = `Away · ${formatLastSeenFromIso(mate.last_active)}`;
+          } else {
+            statusClass = "status-offline";
+            statusText = `Last seen ${formatLastSeenFromIso(mate.last_active)}`;
+          }
+        } else {
+          statusClass = "status-offline";
+          statusText = "Last seen Unknown";
+        }
 
 
         const div = document.createElement("div");
@@ -661,19 +789,19 @@ if (mate.last_active) {
 
     // --- TAB LOGIC ---
     function switchTab(tabName, btn) {
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
 
-  if(tabName === 'overview') {
-    document.getElementById('tab-overview').style.display = 'grid';
-    document.getElementById('tab-others').style.display = 'none';
-  } else {
-    document.getElementById('tab-overview').style.display = 'none';
-    document.getElementById('tab-others').style.display = 'block';
-    document.getElementById('tab-others').textContent =
-      tabName.charAt(0).toUpperCase() + tabName.slice(1) + " content coming soon...";
-  }
-}
+      if (tabName === 'overview') {
+        document.getElementById('tab-overview').style.display = 'grid';
+        document.getElementById('tab-others').style.display = 'none';
+      } else {
+        document.getElementById('tab-overview').style.display = 'none';
+        document.getElementById('tab-others').style.display = 'block';
+        document.getElementById('tab-others').textContent =
+          tabName.charAt(0).toUpperCase() + tabName.slice(1) + " content coming soon...";
+      }
+    }
 
 
     // Init
@@ -681,4 +809,5 @@ if (mate.last_active) {
 
   </script>
 </body>
+
 </html>
