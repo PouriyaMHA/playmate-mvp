@@ -37,6 +37,8 @@ Working tree (`E:\MVP PlayMate\playmate-mvp`, copied here) has **large uncommitt
 
 Same day, deployed to Render (`SUPABASE_JWT_SECRET` added there): `/api/my-profile` (profile loads from server), Pending Likes (`/api/pending-likes`), IGN removed from public `/profile-squad`, session refresh past the 1-hour token expiry, My Squad no longer empty after reload, cached profile cleared on logout. Live E2E run with two accounts (pouriya + test user) passed; signup/login screens themselves still need a manual check.
 
+Later same day: RLS enabled on `likes` (was fully open to the public anon key); legacy unauthenticated endpoints removed; new `Looking now` status (`profiles.looking_until`, `/api/looking`), optional Discord (`profiles.discord_username`, mutual-only) with copy buttons, Block/Report (`blocks` table, `/api/block`); XSS fixes in ui.html/profile.html; stale HTTP/2 Supabase connection (random 500s) fixed; GitHub Actions keep-alive every 10 min. Confirm email intentionally still OFF until public launch. Next: full UI/UX redesign (target 10/10, mobile, onboarding, split ui.html).
+
 ## Roadmap
 1. ~~Fix the ❌ items above, restore Supabase, deploy, two-account E2E~~ (done 2026-10-11). Manual check of Sign up / Log in.
 2. **Pending Likes** section under My Squad (incoming vs outgoing — undecided).
