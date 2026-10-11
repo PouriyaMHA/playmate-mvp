@@ -1019,7 +1019,7 @@ function renderCard() {
       ${langs ? `<span class="info-pill">${svgIcon("chat")}Languages: <b>${esc(langs)}</b></span>` : ""}
     </div>
 
-    <details class="match-reasons" open>
+    <details class="match-reasons" ${window.innerHeight >= 800 ? "open" : ""}>
       <summary>Why this match</summary>
       <ul>${(match.reasons || []).map(r => `<li>${esc(r)}</li>`).join("")}</ul>
     </details>
