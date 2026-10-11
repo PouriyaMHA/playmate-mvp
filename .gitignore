@@ -10,3 +10,7 @@ venv/
 
 # Test / temp files
 test_env.py
+
+# Local-only
+.claude/
+docs/chatgpt-history/

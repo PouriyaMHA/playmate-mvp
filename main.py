@@ -128,6 +128,13 @@ def ping(game: str = "battlefield", user_id: str = Depends(get_current_user_id))
 
 
 # ----------------- توابع کمکی -----------------
+REQUIRED_PROFILE_FIELDS = ("region", "favorite_mode", "class_type", "mic", "languages")
+
+def require_profile_fields(profile: "GamerProfile") -> None:
+    missing = [f for f in REQUIRED_PROFILE_FIELDS if not (getattr(profile, f, None) or "").strip()]
+    if missing:
+        raise HTTPException(status_code=422, detail="Missing required fields: " + ", ".join(missing))
+
 def parse_languages(lang_str: str) -> list[str]:
     if not lang_str:
         return []
@@ -189,6 +196,7 @@ def health():
 
 @app.post("/api/profile")
 def create_profile(profile: GamerProfile, user_id: str = Depends(get_current_user_id)):
+    require_profile_fields(profile)
     game = (profile.game or "battlefield").strip().lower()
 
     # 1) اگر قبلاً برای این user_id + game پروفایل وجود دارد:
@@ -286,8 +294,15 @@ def get_profiles():
     data = result.data or []
     return {"count": len(data), "data": data}
 
+# Fields of another player that are safe to show in match results (no in_game_username)
+MATCH_PUBLIC_FIELDS = (
+    "username", "display_username", "game", "platform", "region", "city",
+    "languages", "mic", "favorite_mode", "class_type", "profile_pic_url", "wallpaper_url",
+)
+
 @app.post("/api/match")
 def match_players(current: GamerProfile, user_id: str = Depends(get_current_user_id)):
+    require_profile_fields(current)
 
     game = (current.game or "battlefield").lower().strip()
 
@@ -320,9 +335,20 @@ def match_players(current: GamerProfile, user_id: str = Depends(get_current_user
 
     current_username = (me.data[0].get("username") or "").strip().lower()
 
+    # Players I already liked are not shown again (prevents re-show / re-like)
+    liked_res = (
+        supabase.table("likes")
+        .select("to_user_id")
+        .eq("from_user_id", user_id)
+        .eq("game", game)
+        .execute()
+    )
+    liked_ids = {str(r["to_user_id"]) for r in (liked_res.data or []) if r.get("to_user_id")}
 
     for p in players:
         if (p.get("username") or "").strip().lower() == current_username:
+            continue
+        if str(p.get("user_id")) in liked_ids:
             continue
 
         score = 0
@@ -355,22 +381,7 @@ def match_players(current: GamerProfile, user_id: str = Depends(get_current_user
         if score > 100:
             score = 100
 
-        ALLOWED_PUBLIC_FIELDS = {
-    "username",
-    "display_username",
-    "game",
-    "platform",
-    "region",
-    "city",
-    "languages",
-    "mic",
-    "favorite_mode",
-    "class_type",
-    "profile_pic_url",
-    "wallpaper_url",
-}
-
-        safe_profile = {k: p.get(k) for k in ALLOWED_PUBLIC_FIELDS}
+        safe_profile = {k: p.get(k) for k in MATCH_PUBLIC_FIELDS}
 
 
         matches.append({

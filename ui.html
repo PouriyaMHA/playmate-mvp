@@ -1040,7 +1040,7 @@
         <input type="text" id="in_game_username" placeholder="Origin/EA ID" required>
 
         <label>Favorite Mode</label>
-        <select id="favorite_mode" class="glass-input" style="margin-bottom:8px;">
+        <select id="favorite_mode" class="glass-input" style="margin-bottom:8px;" required>
           <option value="">Fav Mode...</option>
         </select>
 
@@ -1626,7 +1626,11 @@
       async function runFindMatches(e) {
         if (e) e.preventDefault();
 
-        await saveProfile();       // 1) save first
+        try {
+          await saveProfile();     // 1) save first
+        } catch {
+          return;                  // save failed (toast already shown) -> don't scan
+        }
         await findMatches();       // 2) then scan
       }
 
@@ -1702,6 +1706,17 @@
       state.profile.mic = els.mic.value;
       updateStateLangs();
 
+      const missing = [];
+      if (!state.profile.region) missing.push("Region");
+      if (!state.profile.favorite_mode) missing.push("Favorite Mode");
+      if (!state.profile.class_type) missing.push("Class");
+      if (!state.profile.mic) missing.push("Mic");
+      if (!(state.profile.languages || []).length) missing.push("Languages");
+      if (missing.length) {
+        showToast(`Please fill in: ${missing.join(", ")}`, "error");
+        throw new Error("Validation");
+      }
+
       const payload = {
         username: locked,              // locked
         game: GAME,
@@ -1750,6 +1765,7 @@
       } catch (err) {
         console.error(err);
         if (err.message !== "Conflict") showToast("Failed to save profile", "error");
+        throw err;
       }
     }
 
@@ -1932,6 +1948,7 @@
 
       // Optimistic UI
       if (card) card.classList.add("swipe-right");
+      let liked = true;
 
       try {
         const res = await authFetch(`${API_BASE}/like`, {
@@ -1956,6 +1973,7 @@
             (data?.detail && (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail))) ||
             `Like failed: ${res.status}`;
           showToast(msg, "error");
+          liked = false;
           return;
         }
 
@@ -1963,33 +1981,46 @@
 
         // matchUser از /api/match می‌آید و profile داخلش است
         const mp = matchUser.profile || {};
+        const mate = {
+          username: matchUser.username,
+          display_username: mp.display_username || matchUser.username,
+          in_game_username: null
+        };
 
-        triggerMatchModal(
-          {
-            username: matchUser.username,
-            display_username: mp.display_username || matchUser.username,
-            in_game_username: mp.in_game_username || "—"
-          },
-          { kind: isMutual ? "match" : "like" }
-        );
-
-        // squad را در پس‌زمینه رفرش کن
-        refreshSquad().catch(() => { });
-
+        if (isMutual) {
+          // IGN is only revealed in the squad response -> refresh first, then show it.
+          // Mark as known so refreshSquad doesn't open a second modal for the same person.
+          const key = (matchUser.username || "").toLowerCase();
+          lastSquadUsernames.add(key);
+          try { await refreshSquad({ silent: true }); } catch { }
+          const fromSquad = (state.squad || []).find(m => (m.username || "").toLowerCase() === key);
+          if (fromSquad?.in_game_username) mate.in_game_username = fromSquad.in_game_username;
+          triggerMatchModal(mate, { kind: "match" });
+        } else {
+          triggerMatchModal(mate, { kind: "like" });
+          // squad را در پس‌زمینه رفرش کن
+          refreshSquad().catch(() => { });
+        }
 
       } catch (err) {
         console.error("Like failed", err);
+        liked = false;
         showNetError();
         showToast("Connection error sending like", "error");
+      } finally {
+        // Always release the lock; only move to the next card if the like went through
+        setTimeout(() => {
+          if (liked) {
+            state.currentMatchIndex++;
+            renderCard();
+          } else if (card) {
+            card.classList.remove("swipe-right");
+          }
+          likeBtn?.removeAttribute("disabled");
+          skipBtn?.removeAttribute("disabled");
+          inFlight.like = false;
+        }, 300);
       }
-
-      setTimeout(() => {
-        state.currentMatchIndex++;
-        likeBtn?.removeAttribute("disabled");
-        skipBtn?.removeAttribute("disabled");
-        inFlight.like = false;
-        renderCard();
-      }, 300);
     }
 
     let lastSquadUsernames = new Set();
@@ -2015,6 +2046,13 @@
           `${API_BASE}/my-squad-details?game=${GAME}`
         );
 
+        // 404 = this user has not saved a profile yet (not a connection problem)
+        if (res.status === 404) {
+          state.squad = [];
+          renderSquadList({ silent });
+          squadBootstrapped = true;
+          return;
+        }
         if (!res.ok) throw new Error(`squad failed: ${res.status}`);
 
         const data = await res.json();
@@ -2149,7 +2187,7 @@
       const meIGN = state.profile.in_game_username || "—";
 
       const mateDisplay = mate?.display_username || mate?.username || "User";
-      const mateIGN = mate?.in_game_username || "—";
+      const mateIGN = mate?.in_game_username || (kind === "like" ? "Hidden until match" : "—");
 
       // title/sub text
       const titleEl = document.getElementById("modal-title");

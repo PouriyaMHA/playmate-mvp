@@ -428,44 +428,30 @@
           </div>
 
           <form id="authForm" onsubmit="handleAuth(event)">
-            <div class="auth-header">
-              <h2 id="authTitle">Log in to your account</h2>
-              <p id="authSubtitle">Enter your email and password.</p>
-            </div>
-
-            <div class="mode-toggle" style="display:flex; gap:10px; margin: 14px 0 16px;">
-              <button type="button" id="mode-login" class="btn-secondary active" onclick="setAuthMode('login')">Log
-                in</button>
-              <button type="button" id="mode-signup" class="btn-secondary" onclick="setAuthMode('signup')">Sign
-                up</button>
-            </div>
-
             <div class="form-group" id="pm-username-group" style="display:none;">
               <label class="form-label" for="pm_username">PlayMate Username</label>
               <input type="text" id="pm_username" class="form-input" placeholder="pouriya">
             </div>
 
-            <form id="authForm" onsubmit="handleAuth(event)">
-              <div class="form-group">
-                <label class="form-label" for="email">Email address</label>
-                <input type="email" id="email" class="form-input" placeholder="soldier@example.com" required>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label" for="password">Password</label>
-                <input type="password" id="password" class="form-input" placeholder="••••••••" required>
-              </div>
-
-              <button type="submit" class="btn-primary">Continue</button>
-              <button type="button" class="btn-secondary" onclick="quickDevAccount()">
-                Quick Dev Account (no email)
-              </button>
-            </form>
-
-
-            <div class="auth-footer">
-              By continuing, you agree to our <a href="#">Terms</a> & <a href="#">Privacy</a>.
+            <div class="form-group">
+              <label class="form-label" for="email">Email address</label>
+              <input type="email" id="email" class="form-input" placeholder="soldier@example.com" required>
             </div>
+
+            <div class="form-group">
+              <label class="form-label" for="password">Password</label>
+              <input type="password" id="password" class="form-input" placeholder="••••••••" required>
+            </div>
+
+            <button type="submit" class="btn-primary">Continue</button>
+            <button type="button" class="btn-secondary" onclick="quickDevAccount()">
+              Quick Dev Account (no email)
+            </button>
+          </form>
+
+          <div class="auth-footer">
+            By continuing, you agree to our <a href="#">Terms</a> & <a href="#">Privacy</a>.
+          </div>
         </div>
 
       </div>
@@ -546,7 +532,10 @@
       try {
         const pmUsername = document.getElementById("pm_username").value.trim();
         if (!pmUsername) {
-          alert("PlayMate Username is required.");
+          // Username field is only visible in Sign up mode
+          setAuthMode("signup");
+          document.getElementById("pm_username").focus();
+          alert("Enter a PlayMate Username first, then click Quick Dev Account again.");
           return;
         }
 
