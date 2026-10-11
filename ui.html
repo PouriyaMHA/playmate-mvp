@@ -1349,8 +1349,10 @@
         showToast("Failed to load game meta", "error");
       }
 
-      // Now that select options + language pills exist, restore works
+      // Now that select options + language pills exist, restore works.
+      // Show the cached copy instantly, then replace it with the server copy.
       loadProfileFromStorage();
+      await loadProfileFromServer();
       initLockedUsernameFromStorage();
 
       if ((state.profile.username || "").trim()) startRealtime();
@@ -1651,8 +1653,47 @@
       if (!stored) return;
 
       try {
-        const data = JSON.parse(stored);
+        applyProfileToForm(JSON.parse(stored));
+      } catch (e) {
+        console.error("Error parsing profile", e);
+      }
+    }
 
+    // Server is the source of truth: restores the profile on any browser/device
+    async function loadProfileFromServer() {
+      try {
+        const res = await authFetch(`${API_BASE}/my-profile?game=${GAME}`);
+        if (res.status === 404) return false; // no profile saved yet
+        if (!res.ok) return false;
+
+        const data = await res.json();
+        const toStore = {
+          username: data.username,
+          display_username: data.display_username || data.username,
+          game: data.game || GAME,
+          region: data.region,
+          city: data.city || null,
+          platform: data.platform,
+          favorite_mode: data.favorite_mode,
+          class_type: data.class_type,
+          mic: data.mic,
+          languages: data.languages || "",
+          in_game_username: data.in_game_username || "",
+          profile_pic_url: data.profile_pic_url || null,
+          wallpaper_url: data.wallpaper_url || null,
+          game_meta: data.game_meta || {}
+        };
+        localStorage.setItem("playmate_profile", JSON.stringify(toStore));
+        applyProfileToForm(toStore);
+        return true;
+      } catch (e) {
+        console.warn("Could not load profile from server", e);
+        return false;
+      }
+    }
+
+    function applyProfileToForm(data) {
+      try {
         // state
         state.profile = { ...state.profile, ...data };
 
@@ -1682,7 +1723,7 @@
         els.status.textContent = `Profile loaded for '${state.profile.display_username || ""}'`;
         updateProfileLink(state.profile.username);
       } catch (e) {
-        console.error("Error parsing profile", e);
+        console.error("Error applying profile", e);
       }
     }
 
