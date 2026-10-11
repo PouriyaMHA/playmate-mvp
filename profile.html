@@ -641,6 +641,18 @@
   <script>
     function qs(name) { return new URLSearchParams(window.location.search).get(name) || ""; }
 
+    // Escape anything user-provided before it goes into innerHTML (prevents XSS)
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"'`]/g, ch => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;"
+      })[ch]);
+    }
+
+    const REGION_LABELS = {
+      "na-west": "North America West", "na-east": "North America East",
+      "eu-west": "Europe West", "eu-central": "Europe Central", "middle-east": "Middle East"
+    };
+
     // --- API HELPER ---
     async function fetchJson(url) {
       try {
@@ -662,7 +674,7 @@
       const p = await fetchJson("/profile-full?username=" + encodeURIComponent(username));
 
       if (p.error) {
-        document.body.innerHTML = `<div style='color:white; text-align:center; padding-top:100px;'>User ${username} not found.</div>`;
+        document.body.innerHTML = `<div style='color:white; text-align:center; padding-top:100px;'>User ${esc(username)} not found.</div>`;
         return;
       }
 
@@ -671,7 +683,7 @@
       document.getElementById("headerName").textContent = displayName;
       document.getElementById("headerHandle").textContent = "@" + p.username;
       // Use DiceBear for Avatar
-      document.getElementById("headerAvatar").src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.username}&backgroundColor=b6e3f4`;
+      document.getElementById("headerAvatar").src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(p.username)}&backgroundColor=b6e3f4`;
 
 
       //2.1.
@@ -692,7 +704,7 @@
 
       // 3. Populate Stats (Pills)
       document.getElementById("pGame").textContent = (p.game || "Battlefield").toUpperCase();
-      document.getElementById("pRegion").textContent = p.region || "Unknown";
+      document.getElementById("pRegion").textContent = REGION_LABELS[p.region] || p.region || "Unknown";
       document.getElementById("pCity").textContent = p.city || "Unknown";
       document.getElementById("pMic").textContent = p.mic || "Off";
       document.getElementById("pMode").textContent = p.favorite_mode || "Any";
@@ -774,13 +786,13 @@
             <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(mate.username || mate.display_username || 'user')}&backgroundColor=b6e3f4" class="squad-avatar">
 
             <div class="squad-info">
-                <div class="squad-name">${mate.display_username || mate.username || "Unknown"}</div>
+                <div class="squad-name">${esc(mate.display_username || mate.username || "Unknown")}</div>
 
-                <div class="squad-ign"><i class="ph ph-game-controller"></i> ${mate.in_game_username || "Hidden"}</div>
+                <div class="squad-ign"><i class="ph ph-game-controller"></i> ${esc(mate.in_game_username || "Hidden")}</div>
             </div>
             <div class="status-badge ${statusClass}">
                 <div style="width:6px; height:6px; background:currentColor; border-radius:50%;"></div>
-                ${statusText}
+                ${esc(statusText)}
             </div>
         `;
         container.appendChild(div);

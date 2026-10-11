@@ -180,6 +180,90 @@
       min-height: 1.2em;
     }
 
+    /* --- Looking for a squad now --- */
+    .looking-btn {
+      width: 100%;
+      margin-bottom: 16px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-muted);
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .looking-btn:hover {
+      border-color: var(--neon-green);
+      color: #fff;
+    }
+
+    .looking-btn.on {
+      border-color: var(--neon-green);
+      background: rgba(0, 255, 204, 0.12);
+      color: var(--neon-green);
+    }
+
+    .looking-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 10px;
+      color: var(--neon-green);
+      background: rgba(0, 255, 204, 0.12);
+      white-space: nowrap;
+    }
+
+    /* --- Squad actions (copy / block) --- */
+    .sm-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .sm-btn {
+      font-size: 0.7rem;
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .sm-btn:hover {
+      color: #fff;
+      border-color: var(--neon-blue);
+    }
+
+    .sm-btn.danger:hover {
+      border-color: var(--neon-red);
+      color: var(--neon-red);
+    }
+
+    .card-safety {
+      margin-top: 12px;
+      text-align: center;
+    }
+
+    .card-safety button {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      cursor: pointer;
+      text-decoration: underline;
+      opacity: 0.7;
+    }
+
+    .card-safety button:hover {
+      opacity: 1;
+      color: var(--neon-red);
+    }
+
     .lang-grid {
       display: flex;
       flex-wrap: wrap;
@@ -1043,6 +1127,8 @@
 
       <div id="profile-status" class="profile-status">New profile – fill in your details</div>
 
+      <button type="button" id="btn-looking" class="looking-btn" style="display:none;">🟢 I'm looking for a squad now</button>
+
       <form id="profile-form">
         <label>PlayMate Username</label>
         <div id="pm-username-display" class="readonly-field">—</div>
@@ -1072,7 +1158,10 @@
 
 
         <label>Battlefield Username (In-Game)</label>
-        <input type="text" id="in_game_username" placeholder="Origin/EA ID" required>
+        <input type="text" id="in_game_username" placeholder="Origin/EA ID" required maxlength="40">
+
+        <label>Discord (optional – only your squad sees it)</label>
+        <input type="text" id="discord_username" placeholder="yourname" maxlength="40">
 
         <label>Favorite Mode</label>
         <select id="favorite_mode" class="glass-input" style="margin-bottom:8px;" required>
@@ -1112,9 +1201,9 @@
     <div class="panel match-area">
       <div id="card-wrapper" class="card-container">
         <div class="empty-state">
-          <h3>Ready to Deploy?</h3>
-          <p style="color: var(--text-muted); margin-top: 10px;">Update your profile and click "Find Matches" to scan
-            for squadmates.</p>
+          <h3>Find your squad</h3>
+          <p style="color: var(--text-muted); margin-top: 10px;">Fill in your profile and hit "Find Matches" to see
+            players who fit how you play.</p>
         </div>
       </div>
     </div>
@@ -1406,6 +1495,8 @@
       classType: document.getElementById("class_type"),
       mic: document.getElementById("mic"),
       ign: document.getElementById("in_game_username"),
+      discord: document.getElementById("discord_username"),
+      btnLooking: document.getElementById("btn-looking"),
       usernameHidden: document.getElementById("username"),
       pmUsernameDisplay: document.getElementById("pm-username-display"),
 
@@ -1558,13 +1649,110 @@
     }
 
     function getInitials(name) {
-      return name ? name.substring(0, 1).toUpperCase() : "?";
+      return name ? esc(name.substring(0, 1).toUpperCase()) : "?";
+    }
+
+    // Escape anything user-provided before it goes into innerHTML (prevents XSS)
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"'`]/g, ch => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;"
+      })[ch]);
+    }
+
+    function regionLabel(id) {
+      const r = (META?.regions || []).find(x => x.id === id);
+      return r ? r.label : (id || "");
+    }
+
+    async function copyText(text, label) {
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast(`${label} copied`, "success");
+      } catch {
+        showToast(`${label}: ${text}`, "info");
+      }
+    }
+
+    // ---- Looking for a squad now ----
+    function renderLookingButton() {
+      const btn = els.btnLooking;
+      if (!btn) return;
+      const until = state.profile.looking_until ? new Date(state.profile.looking_until).getTime() : 0;
+      const on = until > Date.now();
+      btn.style.display = state.profile.username ? "" : "none";
+      btn.classList.toggle("on", on);
+      if (on) {
+        const mins = Math.max(1, Math.round((until - Date.now()) / 60000));
+        btn.textContent = `🟢 Looking for a squad · ${mins} min left (tap to stop)`;
+      } else {
+        btn.textContent = "🟢 I'm looking for a squad now";
+      }
+    }
+
+    async function toggleLooking() {
+      const until = state.profile.looking_until ? new Date(state.profile.looking_until).getTime() : 0;
+      const turningOn = !(until > Date.now());
+      try {
+        const res = await authFetch(`${API_BASE}/looking`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ minutes: turningOn ? 60 : 0, game: GAME })
+        });
+        if (res.status === 404) {
+          showToast("Save your profile first", "error");
+          return;
+        }
+        if (!res.ok) throw new Error(`looking failed: ${res.status}`);
+        const data = await res.json();
+        state.profile.looking_until = data.looking_until;
+        renderLookingButton();
+        showToast(turningOn ? "You're visible as looking for 1 hour" : "Stopped looking", "success");
+      } catch (e) {
+        console.error(e);
+        showToast("Could not update your status", "error");
+      }
+    }
+
+    // ---- Block / report ----
+    async function blockPlayer(username, report) {
+      let reason = null;
+      if (report) {
+        reason = prompt(`Report ${username}: what happened? (they will also be blocked)`);
+        if (reason === null) return;
+      } else if (!confirm(`Block ${username}? You won't see each other anymore.`)) {
+        return;
+      }
+      try {
+        const res = await authFetch(`${API_BASE}/block`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to_user: username, game: GAME, report: !!report, reason })
+        });
+        if (!res.ok) throw new Error(`block failed: ${res.status}`);
+        showToast(report ? "Reported and blocked" : "Blocked", "success");
+
+        // remove from the current deck
+        const key = String(username).toLowerCase();
+        const before = state.matches.length;
+        state.matches = state.matches.filter((m, i) => {
+          const drop = (m.username || "").toLowerCase() === key;
+          if (drop && i < state.currentMatchIndex) state.currentMatchIndex--;
+          return !drop;
+        });
+        if (state.matches.length !== before) renderCard();
+
+        refreshSquad({ silent: true }).catch(() => { });
+        refreshPending();
+      } catch (e) {
+        console.error(e);
+        showToast("Could not block this player", "error");
+      }
     }
 
     function computeSquadSignature(squad) {
-      // include last_active (affects UI status)
+      // include everything the squad list shows
       return (squad || [])
-        .map(m => `${(m.username || "").toLowerCase()}|${m.in_game_username || ""}|${m.last_active || ""}`)
+        .map(m => `${(m.username || "").toLowerCase()}|${m.in_game_username || ""}|${m.discord_username || ""}|${m.looking_now ? 1 : 0}|${m.last_active || ""}`)
         .sort()
         .join(";");
     }
@@ -1585,7 +1773,7 @@
       if (els.cardWrapper && isLoading) {
         els.cardWrapper.innerHTML = `
       <div class="empty-state">
-        <div style="opacity:.85; font-weight:600;">${message}</div>
+        <div style="opacity:.85; font-weight:600;">${esc(message)}</div>
         <div style="margin-top:10px; opacity:.6; font-size:.9rem;">Please wait…</div>
       </div>
     `;
@@ -1671,6 +1859,7 @@
 
       // 3) Pending likes (someone may have liked me back -> moves to squad)
       refreshPending();
+      renderLookingButton();
 
     }
 
@@ -1724,6 +1913,21 @@
         });
 
 
+      });
+
+      // Looking for a squad now
+      els.btnLooking?.addEventListener("click", toggleLooking);
+
+      // Copy / block / report buttons (match card + squad list)
+      document.addEventListener("click", (e) => {
+        const copyBtn = e.target.closest("[data-copy]");
+        if (copyBtn) return copyText(copyBtn.dataset.copy, copyBtn.dataset.copyLabel || "Text");
+
+        const blockBtn = e.target.closest("[data-block-user]");
+        if (blockBtn) return blockPlayer(blockBtn.dataset.blockUser, false);
+
+        const reportBtn = e.target.closest("[data-report-user]");
+        if (reportBtn) return blockPlayer(reportBtn.dataset.reportUser, true);
       });
 
       // Find Matches action (shared by button click + Enter key submit)
@@ -1781,6 +1985,8 @@
           mic: data.mic,
           languages: data.languages || "",
           in_game_username: data.in_game_username || "",
+          discord_username: data.discord_username || "",
+          looking_until: data.looking_until || null,
           profile_pic_url: data.profile_pic_url || null,
           wallpaper_url: data.wallpaper_url || null,
           game_meta: data.game_meta || {}
@@ -1802,6 +2008,9 @@
         // DOM
         setLockedUsername(data.display_username || data.username || "");
         els.ign.value = data.in_game_username || "";
+        if (els.discord) els.discord.value = data.discord_username || "";
+        if ("looking_until" in data) state.profile.looking_until = data.looking_until;
+        renderLookingButton();
         // Region + City (normalize to META id)
         const normalizedRegion = normalizeRegionId(data.region || "");
         els.region.value = normalizedRegion;
@@ -1841,6 +2050,7 @@
       setLockedUsername(locked); // keeps state/profile consistent
 
       state.profile.in_game_username = els.ign.value;
+      state.profile.discord_username = els.discord ? els.discord.value : "";
       state.profile.region = els.region.value;
       state.profile.city = els.city.value || null;
       state.profile.platform = els.platform.value;
@@ -1871,15 +2081,13 @@
         mic: state.profile.mic,
         languages: (state.profile.languages || []).join(","),
         in_game_username: state.profile.in_game_username,
+        discord_username: state.profile.discord_username || null,
         profile_pic_url: null,
         wallpaper_url: null,
         game_meta: {}
       };
 
       // Store both
-      const toStore = { ...payload, username: state.profile.username, display_username: state.profile.display_username };
-      localStorage.setItem("playmate_profile", JSON.stringify(toStore));
-
       try {
         const res = await authFetch(`${API_BASE}/profile`, {
           method: "POST",
@@ -1892,11 +2100,22 @@
           showToast("This Battlefield username is already used by another PlayMate user.", "error");
           throw new Error("Conflict");
         }
-        if (!res.ok) throw new Error("Save failed");
+        if (!res.ok) {
+          let msg = "Failed to save profile";
+          try {
+            const j = await res.json();
+            if (typeof j?.detail === "string") msg = j.detail;
+          } catch { }
+          showToast(msg, "error");
+          throw new Error("Conflict"); // already shown
+        }
 
         // store local only after success
-        localStorage.setItem("playmate_profile", JSON.stringify(payload));
+        localStorage.setItem("playmate_profile", JSON.stringify({
+          ...payload, username: state.profile.username, display_username: state.profile.display_username
+        }));
         updateProfileLink(state.profile.username);
+        renderLookingButton();
 
         els.status.textContent = "Profile saved successfully!";
         showToast("Profile saved!", "success");
@@ -2028,27 +2247,36 @@
       const match = state.matches[state.currentMatchIndex];
       const p = match.profile;
 
+      const micLabel = { voice: "Voice", both: "Voice + Text", none: "No mic" }[p.mic] || p.mic;
+
       els.cardWrapper.innerHTML = `
     <div class="match-card" id="active-card">
-      <div class="match-percent">${match.match_percent}% Match</div>
-      <div class="avatar-lg">${getInitials(match.username)}</div>
-      <div class="player-name">${p.display_username}</div>
+      <div class="match-percent">${Number(match.match_percent) || 0}% Match</div>
+      <div class="avatar-lg">${getInitials(p.display_username || match.username)}</div>
+      <div class="player-name">${esc(p.display_username || match.username)}</div>
+      ${match.looking_now ? '<div style="margin-top:6px;"><span class="looking-badge">🟢 Looking now</span></div>' : ""}
 
       <div class="pill-container">
-        <span class="info-pill">${p.region}</span>
-        <span class="info-pill">${p.platform}</span>
-        <span class="info-pill" style="color:var(--neon-green)">${p.class_type}</span>
-        <span class="info-pill">${p.mic}</span>
+        <span class="info-pill">${esc(regionLabel(p.region))}</span>
+        ${p.platform ? `<span class="info-pill">${esc(p.platform)}</span>` : ""}
+        <span class="info-pill" style="color:var(--neon-green)">${esc(p.class_type)}</span>
+        <span class="info-pill">${esc(micLabel)}</span>
       </div>
 
       <div class="match-reasons">
         <h4>Why this match:</h4>
-        <ul>${match.reasons.map(r => `<li>${r}</li>`).join("")}</ul>
+        <ul>${(match.reasons || []).map(r => `<li>${esc(r)}</li>`).join("")}</ul>
       </div>
 
       <div class="actions">
         <button class="action-btn btn-skip" onclick="handleSkip()">✕</button>
         <button class="action-btn btn-like" onclick="handleLike()">💚</button>
+      </div>
+
+      <div class="card-safety">
+        <button type="button" data-block-user="${esc(match.username)}">Block</button>
+        ·
+        <button type="button" data-report-user="${esc(match.username)}">Report</button>
       </div>
     </div>
   `;
@@ -2267,18 +2495,27 @@
       state.squad.forEach(mate => {
         const label = formatLastSeen(mate.last_active);
 
-        const statusHtml =
-          label === "Online"
+        const statusHtml = mate.looking_now
+          ? '<span class="looking-badge">🟢 Looking now</span>'
+          : label === "Online"
             ? '<span class="status-badge status-online">Online</span>'
-            : `<span class="status-badge status-offline">${label}</span>`;
+            : `<span class="status-badge status-offline">${esc(label)}</span>`;
+
+        const ign = mate.in_game_username || "";
+        const discord = mate.discord_username || "";
 
         const item = document.createElement("div");
         item.className = "squad-member";
         item.innerHTML = `
-      <div class="sm-avatar">${getInitials(mate.display_username)}</div>
+      <div class="sm-avatar">${getInitials(mate.display_username || mate.username)}</div>
       <div class="sm-info">
-        <span class="sm-name">${mate.display_username || mate.username || ""}</span>
-        <span class="sm-ign">In-game: ${mate.in_game_username || "—"}</span>
+        <span class="sm-name">${esc(mate.display_username || mate.username || "")}</span>
+        <span class="sm-ign">In-game: ${esc(ign || "—")}${discord ? ` · Discord: ${esc(discord)}` : ""}</span>
+        <div class="sm-actions">
+          ${ign ? `<button type="button" class="sm-btn" data-copy="${esc(ign)}" data-copy-label="In-game name">Copy in-game name</button>` : ""}
+          ${discord ? `<button type="button" class="sm-btn" data-copy="${esc(discord)}" data-copy-label="Discord">Copy Discord</button>` : ""}
+          <button type="button" class="sm-btn danger" data-block-user="${esc(mate.username)}">Block</button>
+        </div>
       </div>
       ${statusHtml}
     `;
@@ -2389,10 +2626,10 @@
       if (titleEl && subEl) {
         if (kind === "like") {
           titleEl.textContent = "LIKE SENT";
-          subEl.innerHTML = `You liked <span id="modal-them-name" style="color:#fff; font-weight:600;">${mateDisplay}</span>. If they like you back, you’ll match.`;
+          subEl.innerHTML = `You liked <span id="modal-them-name" style="color:#fff; font-weight:600;">${esc(mateDisplay)}</span>. If they like you back, you’ll match.`;
         } else {
           titleEl.textContent = "IT'S A MATCH!";
-          subEl.innerHTML = `You're now squadmates with <span id="modal-them-name" style="color:#fff; font-weight:600;">${mateDisplay}</span>!`;
+          subEl.innerHTML = `You're now squadmates with <span id="modal-them-name" style="color:#fff; font-weight:600;">${esc(mateDisplay)}</span>! Find them in My Squad to copy their in-game name.`;
         }
       }
 
