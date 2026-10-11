@@ -1239,7 +1239,10 @@
     const REALTIME_INTERVAL_MS = 15000; // 15s
 
 
-    let lastSquadSignature = localStorage.getItem("pm_last_squad_sig") || "";
+    // In-memory only: a persisted signature made the squad never render after a reload
+    // (the "no modal on first load" case is handled by squadBootstrapped)
+    let lastSquadSignature = "";
+    localStorage.removeItem("pm_last_squad_sig"); // clean up old versions
 
 
     const API_BASE = '/api'; // Relative path as requested
@@ -2204,11 +2207,14 @@
         const newlyAdded = [...newSet].filter(u => !lastSquadUsernames.has(u));
         lastSquadUsernames = newSet;
 
+        // first successful refresh = baseline (no auto modal for existing squadmates)
+        const wasBootstrapped = squadBootstrapped;
+        squadBootstrapped = true;
+
         const sig = computeSquadSignature(newSquad);
         if (sig === lastSquadSignature) return;
 
         lastSquadSignature = sig;
-        localStorage.setItem("pm_last_squad_sig", sig);
 
         state.squad = newSquad;
         renderSquadList({ silent });
@@ -2216,7 +2222,7 @@
 
         // if a new squadmate arrived, show match modal automatically
         // BUT: never on first bootstrap refresh
-        if (squadBootstrapped && newlyAdded.length) {
+        if (wasBootstrapped && newlyAdded.length) {
           const u = newlyAdded[0];
           const mate = newSquad.find(m => (m.username || "").toLowerCase() === u);
           if (mate) {
@@ -2227,9 +2233,6 @@
             });
           }
         }
-
-        // mark bootstrap complete after first successful refresh
-        squadBootstrapped = true;
 
 
       })();
