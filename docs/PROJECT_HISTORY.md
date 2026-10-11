@@ -35,8 +35,10 @@ Working tree (`E:\MVP PlayMate\playmate-mvp`, copied here) has **large uncommitt
 
 **2026-10-11:** the uncommitted ChatGPT-era work was committed as `Step 10A auth work…`, then all 7 ❌ items above were fixed in the next commit (not yet pushed/deployed; Supabase project appeared paused — host did not resolve).
 
+Same day, deployed to Render (`SUPABASE_JWT_SECRET` added there): `/api/my-profile` (profile loads from server), Pending Likes (`/api/pending-likes`), IGN removed from public `/profile-squad`, session refresh past the 1-hour token expiry, My Squad no longer empty after reload, cached profile cleared on logout. Live E2E run with two accounts (pouriya + test user) passed; signup/login screens themselves still need a manual check.
+
 ## Roadmap
-1. ~~Fix the ❌ items above~~, restore Supabase project, push/deploy, two-account E2E test.
+1. ~~Fix the ❌ items above, restore Supabase, deploy, two-account E2E~~ (done 2026-10-11). Manual check of Sign up / Log in.
 2. **Pending Likes** section under My Squad (incoming vs outgoing — undecided).
 3. Step 10A finish (user_id everywhere, drop legacy endpoints) → 10B multi-game → 10C smarter scoring + analytics.
 4. Later: UI/UX polish, account/settings pages (`/account`, `/settings`), squad chat, notifications, customization (wallpapers/themes store), referrals, mobile, i18n at the end (UI text English only for now).
