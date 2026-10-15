@@ -1,34 +1,36 @@
-from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi import HTTPException
-from pydantic import BaseModel
+"""PlayMate API + pages (FastAPI).
+
+Identity always comes from the Supabase JWT (user_id), never from request bodies.
+Per-game profiles live in `profiles` (unique user_id + game); account-level data
+(bio, banner, avatar, links, referral) lives in the auth user's app_metadata["playmate"],
+which only the server (secret key) can write.
+"""
+import os
+import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from supabase import create_client
-from supabase.lib.client_options import SyncClientOptions
-from dotenv import load_dotenv
-from fastapi import Header, Depends, Request, Query
-from jwt import PyJWTError
 
 import httpx
 import jwt
-import os
-import re
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from jwt import PyJWTError
+from pydantic import BaseModel
+from supabase import create_client
+from supabase.lib.client_options import SyncClientOptions
 
+from games import GAME_ORDER, GAMES, clean_fields, game_meta, game_summary, get_game, region_label
 
-# لود کردن .env از کنار همین فایل
-env_path = Path(__file__).parent / ".env"
-load_dotenv(env_path)
+BASE_DIR = Path(__file__).parent
+load_dotenv(BASE_DIR / ".env")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-
-SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")  # از Supabase Project Settings بگیر
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
 if not SUPABASE_JWT_SECRET:
     print("WARNING: SUPABASE_JWT_SECRET is missing. Auth endpoints will fail.")
-
 
 # Own HTTP client for Supabase: the default HTTP/2 connection goes stale after being idle and the
 # next request fails with "Server disconnected" (random 500s). HTTP/1.1 + short keep-alive + retries avoids it.
@@ -41,119 +43,58 @@ _supabase_http = httpx.Client(
 )
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY, options=SyncClientOptions(httpx_client=_supabase_http))
 
-app = FastAPI()
+app = FastAPI(title="PlayMate")
 API_PREFIX = "/api"
 
-# CSS / JS for the pages (bump the ?v= in the HTML when these change, to bust browser caches)
-app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
+# CSS / JS / images (bump the ?v= in the HTML when these change, to bust browser caches)
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
-
-# ----------------- مدل پروفایل -----------------
-class GamerProfile(BaseModel):
-    username: str                      # PlayMate username
-    game: str | None = "battlefield"   # per-game profile
-    in_game_username: str | None = None  # hidden until mutual
-    discord_username: str | None = None  # hidden until mutual
-    platform: str | None = None
-    region: str
-    city: str | None = None
-    favorite_mode: str
-    class_type: str
-    mic: str
-    languages: str
-    profile_pic_url: str | None = None
-    wallpaper_url: str | None = None
-    game_meta: dict | None = None      # JSON for future
-
-# ----------------- اضاقه کردن وضعیت آنلاین -----------------
-
-from datetime import datetime, timedelta, timezone
-
-def touch_last_active(username: str, game: str = "battlefield") -> str | None:
-    u = (username or "").strip().lower()
-    g = (game or "battlefield").strip().lower()
-    if not u:
-        return None
-
-    now_iso = datetime.now(timezone.utc).isoformat()
-    supabase.table("profiles").update({"last_active": now_iso}).eq("username", u).eq("game", g).execute()
-    return now_iso
-
-def get_current_user_id(authorization: str | None = Header(default=None)) -> str:
-    """
-    Reads Supabase access token from Authorization header and returns user_id (sub).
-    Raises 401 if missing/invalid.
-    """
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Missing Authorization header")
-
-    parts = authorization.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise HTTPException(status_code=401, detail="Invalid Authorization format")
-
-    token = parts[1].strip()
-    if not token:
-        raise HTTPException(status_code=401, detail="Empty token")
-
-    if not SUPABASE_JWT_SECRET:
-        raise HTTPException(status_code=500, detail="Server missing SUPABASE_JWT_SECRET")
-
-    try:
-        payload = jwt.decode(
-            token,
-            SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            options={"verify_aud": False},  # ساده نگه می‌داریم
-        )
-        user_id = payload.get("sub")
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Token missing sub")
-        return str(user_id)
-    except PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-@app.post("/api/ping")
-def ping(game: str = "battlefield", user_id: str = Depends(get_current_user_id)):
-    game = (game or "battlefield").strip().lower()
-
-    # find username for this user_id + game
-    me = (
-    supabase.table("profiles")
-    .select("username,display_username")
-    .eq("user_id", user_id)
-    .eq("game", game)
-    .limit(1)
-    .execute()
-    )
-    if not me.data:
-        raise HTTPException(status_code=404, detail="Profile not found for this user")
-
-    username = (me.data[0].get("username") or "").strip().lower()
-    display_username = (me.data[0].get("display_username") or me.data[0].get("username") or "").strip()
-
-    last_active = touch_last_active(username, game)
-    return {
-    "status": "ok",
-    "user_id": user_id,
-    "username": username,
-    "display_username": display_username,
-    "game": game,
-    "last_active": last_active,
-    }
-
-
-
-
-# ----------------- توابع کمکی -----------------
-REQUIRED_PROFILE_FIELDS = ("region", "favorite_mode", "class_type", "mic", "languages")
-
-def require_profile_fields(profile: "GamerProfile") -> None:
-    missing = [f for f in REQUIRED_PROFILE_FIELDS if not (getattr(profile, f, None) or "").strip()]
-    if missing:
-        raise HTTPException(status_code=422, detail="Missing required fields: " + ", ".join(missing))
+DEFAULT_GAME = "battlefield"
+EARLY_MEMBER_BEFORE = datetime(2027, 1, 1, tzinfo=timezone.utc)
+BANNERS = [f"banner-{i}" for i in range(1, 9)]
+AVATARS = [f"avatar-{i}" for i in range(1, 13)]
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{3,24}$")
-FREE_TEXT_RE = re.compile(r"^[^<>\"'`]{1,40}$")  # IGN / Discord: no HTML-ish characters
+FREE_TEXT_RE = re.compile(r"^[^<>\"'`]{1,40}$")  # IGN / Discord / handles: no HTML-ish characters
+VOICE = {"voice", "both"}
+
+# Fields of another player that are safe to show anywhere public (never in_game_username / discord)
+PUBLIC_PROFILE_FIELDS = (
+    "username,display_username,game,platform,region,city,languages,mic,"
+    "favorite_mode,class_type,game_meta,created_at,last_active,looking_until"
+)
+
+
+# =========================================================
+# helpers
+# =========================================================
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def parse_ts(value) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def is_looking_now(looking_until) -> bool:
+    ts = parse_ts(looking_until)
+    return bool(ts and ts > now_utc())
+
+
+def norm_game(game: str | None) -> str:
+    g = (game or DEFAULT_GAME).strip().lower()
+    if g not in GAMES:
+        raise HTTPException(status_code=400, detail="Unsupported game")
+    return g
+
+
+def parse_languages(lang_str: str | None) -> list[str]:
+    return [x.strip().lower() for x in (lang_str or "").split(",") if x.strip()]
 
 
 def clean_optional_text(value: str | None, field: str) -> str | None:
@@ -165,12 +106,43 @@ def clean_optional_text(value: str | None, field: str) -> str | None:
     return v
 
 
-def get_blocked_ids(user_id: str, game: str) -> set[str]:
-    """Users I blocked + users who blocked me (hidden from each other everywhere)."""
+def profile_fields(p: dict) -> dict:
+    """Game-specific field values of a profile row (with Battlefield's old columns as fallback)."""
+    fields = dict(((p.get("game_meta") or {}).get("fields")) or {})
+    g = GAMES.get(p.get("game") or "")
+    if g:
+        for f in g["fields"]:
+            col = f.get("column")
+            if col and not fields.get(f["id"]) and p.get(col):
+                fields[f["id"]] = p[col]
+    return fields
+
+
+def public_view(p: dict) -> dict:
+    """A profile row as other players may see it."""
+    return {
+        "username": p.get("username"),
+        "display_username": p.get("display_username") or p.get("username"),
+        "game": p.get("game"),
+        "platform": p.get("platform"),
+        "region": p.get("region"),
+        "city": p.get("city"),
+        "languages": p.get("languages"),
+        "mic": p.get("mic"),
+        "fields": profile_fields(p),
+        # kept for older clients
+        "favorite_mode": p.get("favorite_mode"),
+        "class_type": p.get("class_type"),
+        "last_active": p.get("last_active"),
+        "looking_now": is_looking_now(p.get("looking_until")),
+    }
+
+
+def get_blocked_ids(user_id: str) -> set[str]:
+    """Users I blocked + users who blocked me. A block hides both people from each other in every game."""
     res = (
         supabase.table("blocks")
         .select("blocker_id,blocked_id")
-        .eq("game", game)
         .or_(f"blocker_id.eq.{user_id},blocked_id.eq.{user_id}")
         .execute()
     )
@@ -181,627 +153,526 @@ def get_blocked_ids(user_id: str, game: str) -> set[str]:
     return out
 
 
-def is_looking_now(looking_until: str | None) -> bool:
-    if not looking_until:
-        return False
-    try:
-        return datetime.fromisoformat(str(looking_until).replace("Z", "+00:00")) > datetime.now(timezone.utc)
-    except ValueError:
-        return False
+def my_profile_row(user_id: str, game: str, columns: str = "*") -> dict | None:
+    res = supabase.table("profiles").select(columns).eq("user_id", user_id).eq("game", game).limit(1).execute()
+    return res.data[0] if res.data else None
 
 
-def parse_languages(lang_str: str) -> list[str]:
-    if not lang_str:
+def require_profile(user_id: str, game: str, columns: str = "*") -> dict:
+    row = my_profile_row(user_id, game, columns)
+    if not row:
+        raise HTTPException(status_code=404, detail="Profile not found for this user")
+    return row
+
+
+def mutual_ids(user_id: str, game: str) -> list[str]:
+    out_res = supabase.table("likes").select("to_user_id").eq("from_user_id", user_id).eq("game", game).execute()
+    outgoing = [str(r["to_user_id"]) for r in (out_res.data or []) if r.get("to_user_id")]
+    if not outgoing:
         return []
-    return [x.strip().lower() for x in lang_str.split(",") if x.strip()]
+    in_res = (
+        supabase.table("likes").select("from_user_id")
+        .eq("to_user_id", user_id).eq("game", game).in_("from_user_id", outgoing).execute()
+    )
+    return [str(r["from_user_id"]) for r in (in_res.data or []) if r.get("from_user_id")]
 
 
+def user_id_for_username(username: str) -> str | None:
+    u = (username or "").strip().lower()
+    if not u:
+        return None
+    res = supabase.table("profiles").select("user_id").eq("username", u).limit(1).execute()
+    return str(res.data[0]["user_id"]) if res.data and res.data[0].get("user_id") else None
 
 
-# ----------------- روت‌ها -----------------
+def auth_user(user_id: str):
+    try:
+        return supabase.auth.admin.get_user_by_id(user_id).user
+    except Exception:
+        return None
+
+
+def account_data(user) -> dict:
+    meta = (getattr(user, "app_metadata", None) or {}).get("playmate") or {}
+    return {
+        "bio": meta.get("bio") or "",
+        "banner": meta.get("banner") if meta.get("banner") in BANNERS else "banner-1",
+        "avatar": meta.get("avatar") if meta.get("avatar") in AVATARS else "",
+        "links": {k: v for k, v in (meta.get("links") or {}).items() if k in ("twitch", "youtube", "instagram", "steam")},
+        "referred_by": meta.get("referred_by"),
+    }
+
+
+def save_account_meta(user, changes: dict) -> dict:
+    app_meta = dict(getattr(user, "app_metadata", None) or {})
+    playmate = dict(app_meta.get("playmate") or {})
+    playmate.update(changes)
+    app_meta["playmate"] = playmate
+    supabase.auth.admin.update_user_by_id(user.id, {"app_metadata": app_meta})
+    return playmate
+
+
+def badges_for(user, mutual_count: int) -> list[dict]:
+    created = parse_ts(getattr(user, "created_at", None)) if user else None
+    return [
+        {"id": "early-member", "label": "Early Member", "desc": "Joined PlayMate in its first months",
+         "earned": bool(created and created < EARLY_MEMBER_BEFORE)},
+        {"id": "first-match", "label": "First Match", "desc": "Made a first mutual match", "earned": mutual_count >= 1},
+        {"id": "squad-leader", "label": "Squad Leader", "desc": "5 or more squadmates", "earned": mutual_count >= 5},
+        {"id": "verified", "label": "Verified", "desc": "Coming soon", "earned": False},
+        {"id": "legendary", "label": "Legendary", "desc": "Coming soon", "earned": False},
+    ]
+
+
+# =========================================================
+# auth
+# =========================================================
+def get_current_user_id(authorization: str | None = Header(default=None)) -> str:
+    """Reads the Supabase access token from the Authorization header and returns user_id (sub)."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1].strip():
+        raise HTTPException(status_code=401, detail="Invalid Authorization format")
+    if not SUPABASE_JWT_SECRET:
+        raise HTTPException(status_code=500, detail="Server missing SUPABASE_JWT_SECRET")
+    try:
+        payload = jwt.decode(parts[1].strip(), SUPABASE_JWT_SECRET, algorithms=["HS256"], options={"verify_aud": False})
+    except PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Token missing sub")
+    return str(user_id)
+
+
+# =========================================================
+# pages
+# =========================================================
+def page(name: str) -> HTMLResponse:
+    return HTMLResponse((BASE_DIR / name).read_text(encoding="utf-8"))
+
+
 @app.get("/", response_class=HTMLResponse)
 def landing_page():
-    html_path = Path(__file__).parent / "landing.html"
-    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+    return page("landing.html")
 
+
+@app.get("/app", response_class=HTMLResponse)
 @app.get("/bf", response_class=HTMLResponse)
-def bf_page():
-    html_path = Path(__file__).parent / "ui.html"
-    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+def app_page():
+    return page("ui.html")
+
 
 @app.get("/ui")
 def ui_redirect():
-    return RedirectResponse(url="/bf", status_code=302)
+    return RedirectResponse(url="/app", status_code=302)
+
 
 @app.get("/profile", response_class=HTMLResponse)
-def profile_page():
-    # این فایل را در کنار ui.html قرار می‌دهیم
-    path = os.path.join(os.path.dirname(__file__), "profile.html")
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
-
-@app.get("/profile-full")
-def profile_full(username: str):
-    username = (username or "").strip().lower()
-
-    PUBLIC_PROFILE_FIELDS = (
-        "username,display_username,game,platform,region,city,languages,mic,"
-        "favorite_mode,class_type,profile_pic_url,wallpaper_url,game_meta,created_at,last_active"
-    )
-
-    result = (
-        supabase
-        .table("profiles")
-        .select(PUBLIC_PROFILE_FIELDS)
-        .eq("username", username)
-        .execute()
-    )
-
-    if not result.data:
-        return {"error": "user not found"}
-
-    return result.data[0]
-
+@app.get("/u/{username}", response_class=HTMLResponse)
+def profile_page(username: str | None = None):
+    return page("profile.html")
 
 
 @app.get("/health")
 def health(deep: bool = False):
-    # deep=1 also touches the database (used by the keep-alive job so Supabase doesn't pause)
+    # deep=1 also touches the database (used by keep-alive pings so Supabase doesn't pause)
     if deep:
         supabase.table("profiles").select("id").limit(1).execute()
     return {"status": "ok"}
 
 
-@app.post("/api/profile")
-def create_profile(profile: GamerProfile, user_id: str = Depends(get_current_user_id)):
-    require_profile_fields(profile)
-    game = (profile.game or "battlefield").strip().lower()
+# =========================================================
+# games / meta (public)
+# =========================================================
+@app.get(f"{API_PREFIX}/games")
+def list_games():
+    counts: dict[str, int] = {}
+    rows = supabase.table("profiles").select("game").execute().data or []
+    for r in rows:
+        counts[r["game"]] = counts.get(r["game"], 0) + 1
+    return {"games": [{**game_summary(g), "players": counts.get(g, 0)} for g in GAME_ORDER]}
 
-    # 1) اگر قبلاً برای این user_id + game پروفایل وجود دارد:
-    #    username را از DB بگیر و body را نادیده بگیر (LOCK)
-    existing = (
-        supabase.table("profiles")
-        .select("username, display_username")
-        .eq("user_id", user_id)
-        .eq("game", game)
-        .limit(1)
-        .execute()
-    )
 
-    if existing.data:
-        username = (existing.data[0].get("username") or "").strip().lower()
-        display_username = (
-            existing.data[0].get("display_username")
-            or existing.data[0].get("username")
-            or username
-        )
-        locked_username = True
+@app.get(f"{API_PREFIX}/meta/{{game}}")
+def get_game_meta(game: str):
+    return game_meta(norm_game(game))
+
+
+@app.get(f"{API_PREFIX}/stats")
+def stats(game: str = DEFAULT_GAME, region: str | None = None):
+    """Small 'the site is alive' numbers for empty states."""
+    game = norm_game(game)
+    rows = supabase.table("profiles").select("region,looking_until,last_active").eq("game", game).execute().data or []
+    day_ago = now_utc() - timedelta(days=1)
+    return {
+        "game": game,
+        "players": len(rows),
+        "in_region": sum(1 for r in rows if region and r.get("region") == region),
+        "looking_now": sum(1 for r in rows if is_looking_now(r.get("looking_until"))),
+        "active_today": sum(1 for r in rows if (parse_ts(r.get("last_active")) or datetime.min.replace(tzinfo=timezone.utc)) > day_ago),
+    }
+
+
+# =========================================================
+# my per-game profiles
+# =========================================================
+class ProfileIn(BaseModel):
+    username: str | None = None
+    game: str | None = DEFAULT_GAME
+    in_game_username: str | None = None
+    discord_username: str | None = None
+    platform: str | None = None
+    region: str | None = None
+    city: str | None = None
+    mic: str | None = None
+    languages: str | None = None
+    fields: dict | None = None
+    # older Battlefield clients
+    favorite_mode: str | None = None
+    class_type: str | None = None
+
+
+@app.post(f"{API_PREFIX}/profile")
+def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)):
+    game = norm_game(profile.game)
+    g = GAMES[game]
+
+    # username: locked once chosen (same name in every game)
+    existing = my_profile_row(user_id, game, "username,display_username")
+    if not existing:
+        any_game = supabase.table("profiles").select("username,display_username").eq("user_id", user_id).limit(1).execute()
+        existing = any_game.data[0] if any_game.data else None
+    if existing:
+        username = (existing.get("username") or "").strip().lower()
+        display_username = existing.get("display_username") or username
+        locked = True
     else:
-        raw_username = (profile.username or "").strip()
-        if not raw_username:
-            raise HTTPException(status_code=400, detail="username is required")
-        if not USERNAME_RE.match(raw_username):
-            raise HTTPException(
-                status_code=422,
-                detail="Username must be 3-24 characters: letters, numbers, _ . -"
-            )
-        username = raw_username.lower()
-        display_username = raw_username
-        locked_username = False
+        raw = (profile.username or "").strip()
+        if not USERNAME_RE.match(raw):
+            raise HTTPException(status_code=422, detail="Username must be 3-24 characters: letters, numbers, _ . -")
+        taken = supabase.table("profiles").select("user_id").eq("username", raw.lower()).neq("user_id", user_id).limit(1).execute()
+        if taken.data:
+            raise HTTPException(status_code=409, detail="This PlayMate username is already taken.")
+        username, display_username, locked = raw.lower(), raw, False
 
-    # 2) sanitize in_game_username / discord_username
-    in_game_username = clean_optional_text(profile.in_game_username, "In-game username")
-    discord_username = clean_optional_text(profile.discord_username, "Discord username")
+    # common fields
+    missing = []
+    region = (profile.region or "").strip()
+    if not region:
+        missing.append("Region")
+    mic = (profile.mic or "").strip()
+    if mic not in ("voice", "both", "none"):
+        missing.append("Mic")
+    languages = ",".join(parse_languages(profile.languages))
+    if not languages:
+        missing.append("Languages")
+    platform = (profile.platform or "").strip() or None
+    if platform and platform not in g["platforms"]:
+        platform = None
+
+    raw_fields = dict(profile.fields or {})
+    if profile.favorite_mode and "favorite_mode" not in raw_fields:
+        raw_fields["favorite_mode"] = profile.favorite_mode
+    if profile.class_type and "class_type" not in raw_fields:
+        raw_fields["class_type"] = profile.class_type
+    fields, missing_fields = clean_fields(game, raw_fields)
+    missing += missing_fields
+    if missing:
+        raise HTTPException(status_code=422, detail="Missing required fields: " + ", ".join(missing))
 
     payload = {
         "user_id": user_id,
         "username": username,
         "display_username": display_username,
         "game": game,
-
-        "in_game_username": in_game_username,
-        "discord_username": discord_username,
-        "platform": profile.platform,
-        "region": profile.region,
-        "city": profile.city,
-        "favorite_mode": profile.favorite_mode,
-        "class_type": profile.class_type,
-        "mic": profile.mic,
-        "languages": profile.languages,
-        "profile_pic_url": profile.profile_pic_url,
-        "wallpaper_url": profile.wallpaper_url,
-        "game_meta": profile.game_meta or {},
+        "in_game_username": clean_optional_text(profile.in_game_username, g["ign_label"]),
+        "discord_username": clean_optional_text(profile.discord_username, "Discord username"),
+        "platform": platform,
+        "region": region,
+        "city": (profile.city or "").strip()[:40] or None,
+        "mic": mic,
+        "languages": languages,
+        "game_meta": {"fields": fields},
     }
+    for f in g["fields"]:
+        if f.get("column"):
+            payload[f["column"]] = fields.get(f["id"])
 
     try:
-        result = (
-            supabase
-            .table("profiles")
-            .upsert(payload, on_conflict="user_id,game")
-            .execute()
-        )
+        result = supabase.table("profiles").upsert(payload, on_conflict="user_id,game").execute()
     except Exception as e:
         msg = str(e)
-        if ("profiles_game_ign_unique" in msg) or ("duplicate key value violates unique constraint" in msg):
-            raise HTTPException(
-                status_code=409,
-                detail="This Battlefield username is already used by another PlayMate user. Please choose a different one."
-            )
+        if "profiles_game_ign_unique" in msg:
+            raise HTTPException(status_code=409, detail=f"This {g['ign_label']} is already used by another PlayMate player.")
+        if "duplicate key" in msg:
+            raise HTTPException(status_code=409, detail="This username is already taken.")
         raise
-
-    if getattr(result, "error", None):
-        raise HTTPException(status_code=500, detail="Profile save failed.")
-
-    # اگر result.data خالی بود، حداقل payload را بده
-    saved = (result.data[0] if (result.data and len(result.data) > 0) else payload)
-
-    return {"status": "saved", "locked_username": locked_username, "data": saved}
+    saved = result.data[0] if result.data else payload
+    return {"status": "saved", "locked_username": locked, "data": saved}
 
 
+@app.delete(f"{API_PREFIX}/profile")
+def delete_game_profile(game: str, user_id: str = Depends(get_current_user_id)):
+    """Remove one game from my profile (my likes in that game go too)."""
+    game = norm_game(game)
+    supabase.table("likes").delete().eq("from_user_id", user_id).eq("game", game).execute()
+    supabase.table("likes").delete().eq("to_user_id", user_id).eq("game", game).execute()
+    supabase.table("profiles").delete().eq("user_id", user_id).eq("game", game).execute()
+    return {"status": "deleted", "game": game}
 
-PUBLIC_PROFILE_FIELDS = (
-    "username,display_username,game,platform,region,city,languages,mic,"
-    "favorite_mode,class_type,profile_pic_url,wallpaper_url,game_meta,created_at,last_active"
-)
 
 @app.get(f"{API_PREFIX}/my-profile")
-def my_profile(game: str = "battlefield", user_id: str = Depends(get_current_user_id)):
-    """The logged-in user's own profile (incl. in_game_username), so any device can restore the form."""
-    game = (game or "battlefield").strip().lower()
-    result = (
-        supabase.table("profiles")
-        .select(PUBLIC_PROFILE_FIELDS + ",in_game_username,discord_username,looking_until")
-        .eq("user_id", user_id)
-        .eq("game", game)
-        .limit(1)
-        .execute()
-    )
-    if not result.data:
-        raise HTTPException(status_code=404, detail="Profile not found for this user")
-    return result.data[0]
-
-# Fields of another player that are safe to show in match results (no in_game_username)
-MATCH_PUBLIC_FIELDS = (
-    "username", "display_username", "game", "platform", "region", "city",
-    "languages", "mic", "favorite_mode", "class_type", "profile_pic_url", "wallpaper_url",
-)
-
-@app.post("/api/match")
-def match_players(current: GamerProfile, user_id: str = Depends(get_current_user_id)):
-    require_profile_fields(current)
-
-    game = (current.game or "battlefield").lower().strip()
-
-    result = (
-        supabase
-        .table("profiles")
-        .select("*")
-        .eq("game", game)
-        .execute()
-    )
-    players = [p for p in (result.data or []) if p.get("user_id")]
+def my_profile(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user_id)):
+    """My own profile for one game (incl. private in_game_username / discord), to restore the form anywhere."""
+    row = require_profile(user_id, norm_game(game))
+    out = public_view(row)
+    out.update({
+        "in_game_username": row.get("in_game_username"),
+        "discord_username": row.get("discord_username"),
+        "looking_until": row.get("looking_until"),
+    })
+    return out
 
 
-    current_langs = parse_languages(current.languages)
-    voice_set = {"voice", "both"}
-
-    matches = []
-
-    # Derive "me" from auth token, not from request body (prevents spoof)
-    me = (
-        supabase.table("profiles")
-        .select("username")
-        .eq("user_id", user_id)
-        .eq("game", game)
-        .limit(1)
-        .execute()
-    )
-    if not me.data:
-        raise HTTPException(status_code=404, detail="Profile not found for this user")
-
-    current_username = (me.data[0].get("username") or "").strip().lower()
-
-    # Players I already liked are not shown again (prevents re-show / re-like)
-    liked_res = (
-        supabase.table("likes")
-        .select("to_user_id")
-        .eq("from_user_id", user_id)
-        .eq("game", game)
-        .execute()
-    )
-    liked_ids = {str(r["to_user_id"]) for r in (liked_res.data or []) if r.get("to_user_id")}
-    hidden_ids = liked_ids | get_blocked_ids(user_id, game)
-
-    for p in players:
-        if (p.get("username") or "").strip().lower() == current_username:
-            continue
-        if str(p.get("user_id")) in hidden_ids:
-            continue
-
-        score = 0
-        reasons: list[str] = []
-
-        if p.get("region") == current.region:
-            score += 40
-            reasons.append(f"Region match: {region_label(current.region)}")
-
-        if p.get("favorite_mode") == current.favorite_mode:
-            score += 25
-            reasons.append(f"Same favorite mode: {current.favorite_mode}")
-
-        if p.get("class_type") == current.class_type:
-            score += 15
-            reasons.append(f"Same class: {current.class_type}")
-
-        other_langs = parse_languages(p.get("languages", ""))
-        common_langs = sorted(set(current_langs) & set(other_langs))
-        if common_langs:
-            score += 10
-            reasons.append("Common languages: " + ", ".join(common_langs))
-
-        mic_current = (current.mic or "").lower()
-        mic_other = (p.get("mic") or "").lower()
-        if mic_current in voice_set and mic_other in voice_set:
-            score += 10
-            reasons.append("Both can use voice chat")
-
-        if score > 100:
-            score = 100
-
-        safe_profile = {k: p.get(k) for k in MATCH_PUBLIC_FIELDS}
-        looking = is_looking_now(p.get("looking_until"))
-        if looking:
-            reasons.insert(0, "Looking for a squad right now")
-
-        matches.append({
-            "username": p.get("username"),
-            "match_percent": score,
-            "reasons": reasons,
-            "looking_now": looking,
-            "profile": safe_profile,
-        })
-
-    # players looking right now first, then by score
-    matches.sort(key=lambda x: (x["looking_now"], x["match_percent"]), reverse=True)
-
+@app.get(f"{API_PREFIX}/my-games")
+def my_games(user_id: str = Depends(get_current_user_id)):
+    rows = supabase.table("profiles").select("game,username,display_username").eq("user_id", user_id).execute().data or []
+    username = rows[0]["username"] if rows else None
     return {
-        "target_user": current_username,
+        "username": username,
+        "display_username": rows[0].get("display_username") if rows else None,
+        "games": [r["game"] for r in rows if r.get("game") in GAMES],
+    }
+
+
+@app.post(f"{API_PREFIX}/ping")
+def ping(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user_id)):
+    game = norm_game(game)
+    me = require_profile(user_id, game, "username,display_username")
+    now_iso = now_utc().isoformat()
+    supabase.table("profiles").update({"last_active": now_iso}).eq("user_id", user_id).eq("game", game).execute()
+    return {
+        "status": "ok",
+        "username": me.get("username"),
+        "display_username": me.get("display_username") or me.get("username"),
         "game": game,
-        "matches": matches[:10],
+        "last_active": now_iso,
     }
-
-
-@app.get("/api/my-squad-details")
-def my_squad_details(
-    game: str = "battlefield",
-    user_id: str = Depends(get_current_user_id),
-):
-    game = (game or "battlefield").strip().lower()
-
-    # derive "me" from auth token
-    me = (
-        supabase.table("profiles")
-        .select("username, display_username")
-        .eq("user_id", user_id)
-        .eq("game", game)
-        .limit(1)
-        .execute()
-    )
-    if not me.data:
-        raise HTTPException(status_code=404, detail="Profile not found for this user")
-
-    my_username = (me.data[0].get("username") or "").strip().lower()
-
-    # touch last_active for ME only (no spoof)
-    touch_last_active(my_username, game)
-
-    # mutual via user_id
-    out_res = (
-        supabase.table("likes")
-        .select("to_user_id")
-        .eq("from_user_id", user_id)
-        .eq("game", game)
-        .execute()
-    )
-    outgoing_ids = [r.get("to_user_id") for r in (out_res.data or []) if r.get("to_user_id")]
-
-    if not outgoing_ids:
-        return {"username": my_username, "game": game, "squadmates": []}
-
-    in_res = (
-        supabase.table("likes")
-        .select("from_user_id")
-        .eq("to_user_id", user_id)
-        .eq("game", game)
-        .in_("from_user_id", outgoing_ids)
-        .execute()
-    )
-    blocked = get_blocked_ids(user_id, game)
-    mates_ids = [
-        r.get("from_user_id") for r in (in_res.data or [])
-        if r.get("from_user_id") and str(r.get("from_user_id")) not in blocked
-    ]
-
-    if not mates_ids:
-        return {"username": my_username, "game": game, "squadmates": []}
-
-    prof = (
-        supabase.table("profiles")
-        .select(
-            "username,display_username,in_game_username,discord_username,profile_pic_url,wallpaper_url,"
-            "region,city,languages,mic,favorite_mode,class_type,last_active,looking_until"
-        )
-        .eq("game", game)
-        .in_("user_id", mates_ids)
-        .execute()
-    )
-    mates = prof.data or []
-    for m in mates:
-        m["looking_now"] = is_looking_now(m.pop("looking_until", None))
-
-    return {"username": my_username, "game": game, "squadmates": mates}
-
-
-@app.get(f"{API_PREFIX}/pending-likes")
-def pending_likes(game: str = "battlefield", user_id: str = Depends(get_current_user_id)):
-    """People I liked who haven't liked me back yet (no in_game_username: not mutual)."""
-    game = (game or "battlefield").strip().lower()
-
-    out_res = (
-        supabase.table("likes")
-        .select("to_user_id, created_at")
-        .eq("from_user_id", user_id)
-        .eq("game", game)
-        .execute()
-    )
-    liked_at = {str(r["to_user_id"]): r.get("created_at") for r in (out_res.data or []) if r.get("to_user_id")}
-    if not liked_at:
-        return {"game": game, "pending": []}
-
-    in_res = (
-        supabase.table("likes")
-        .select("from_user_id")
-        .eq("to_user_id", user_id)
-        .eq("game", game)
-        .in_("from_user_id", list(liked_at))
-        .execute()
-    )
-    mutual_ids = {str(r["from_user_id"]) for r in (in_res.data or []) if r.get("from_user_id")}
-    blocked = get_blocked_ids(user_id, game)
-    pending_ids = [uid for uid in liked_at if uid not in mutual_ids and uid not in blocked]
-    if not pending_ids:
-        return {"game": game, "pending": []}
-
-    prof = (
-        supabase.table("profiles")
-        .select("user_id,username,display_username,region,favorite_mode,class_type,last_active")
-        .eq("game", game)
-        .in_("user_id", pending_ids)
-        .execute()
-    )
-    pending = []
-    for p in prof.data or []:
-        uid = str(p.pop("user_id"))
-        pending.append({**p, "liked_at": liked_at.get(uid)})
-    pending.sort(key=lambda x: x.get("liked_at") or "", reverse=True)
-
-    return {"game": game, "pending": pending}
-
-
-# ----------------- Public: profile squad (mutual) -----------------
-@app.get("/profile-squad")
-def profile_squad(username: str = Query(...), game: str = "battlefield"):
-    username = (username or "").strip().lower()
-    game = (game or "battlefield").strip().lower()
-
-    if not username:
-        raise HTTPException(status_code=400, detail="username is required")
-
-    # 0) map username -> user_id (per-game)
-    me = (
-        supabase.table("profiles")
-        .select("user_id, username")
-        .eq("username", username)
-        .eq("game", game)
-        .limit(1)
-        .execute()
-    )
-    if not me.data:
-        return {"username": username, "game": game, "squadmates": []}
-
-    my_user_id = me.data[0].get("user_id")
-    if not my_user_id:
-        return {"username": username, "game": game, "squadmates": []}
-
-    # 1) outgoing likes from me (by user_id)
-    out_res = (
-        supabase.table("likes")
-        .select("to_user_id")
-        .eq("from_user_id", my_user_id)
-        .eq("game", game)
-        .execute()
-    )
-    outgoing_ids = [r.get("to_user_id") for r in (out_res.data or []) if r.get("to_user_id")]
-    if not outgoing_ids:
-        return {"username": username, "game": game, "squadmates": []}
-
-    # 2) incoming likes from those ids back to me => mutual
-    in_res = (
-        supabase.table("likes")
-        .select("from_user_id")
-        .eq("to_user_id", my_user_id)
-        .eq("game", game)
-        .in_("from_user_id", outgoing_ids)
-        .execute()
-    )
-    mates_ids = [r.get("from_user_id") for r in (in_res.data or []) if r.get("from_user_id")]
-    if not mates_ids:
-        return {"username": username, "game": game, "squadmates": []}
-
-    prof = (
-        supabase.table("profiles")
-        .select(
-            # public endpoint: never expose in_game_username here
-            "username,display_username,profile_pic_url,wallpaper_url,"
-            "region,city,languages,mic,favorite_mode,class_type,last_active"
-        )
-        .eq("game", game)
-        .in_("user_id", mates_ids)
-        .execute()
-    )
-
-    return {"username": username, "game": game, "squadmates": prof.data or []}
-
-
-
-# ----------------- مدل لایک / افزودن اسکادمیت -----------------
-class LikeRequest(BaseModel):
-    from_user: str | None = None   # legacy (optional)
-    to_user: str
-    game: str | None = "battlefield"
-
-
-@app.post("/api/like")
-def add_like(like: LikeRequest, user_id: str = Depends(get_current_user_id)):
-        # from_user identity comes from Auth token (user_id)
-    to_user = (like.to_user or "").strip().lower()
-    game = (like.game or "battlefield").strip().lower()
-
-    if not to_user:
-        raise HTTPException(status_code=400, detail="to_user is required")
-
-    # Lookup my username (legacy) from profiles using user_id+game
-    me = (
-        supabase.table("profiles")
-        .select("username")
-        .eq("user_id", user_id)
-        .eq("game", game)
-        .limit(1)
-        .execute()
-    )
-    if not me.data:
-        raise HTTPException(status_code=404, detail="Profile not found for this user")
-
-    from_user = (me.data[0].get("username") or "").strip().lower()
-
-    if from_user == to_user:
-        raise HTTPException(status_code=400, detail="You cannot like yourself")
-
-    # Lookup target user's user_id (NEW)
-    target = (
-        supabase.table("profiles")
-        .select("user_id")
-        .eq("username", to_user)
-        .eq("game", game)
-        .limit(1)
-        .execute()
-    )
-    if not target.data or not target.data[0].get("user_id"):
-        raise HTTPException(status_code=404, detail="Target user not found")
-
-    to_user_id = str(target.data[0]["user_id"])
-
-    if to_user_id in get_blocked_ids(user_id, game):
-        raise HTTPException(status_code=403, detail="You can't like this player")
-
-    payload = {
-        "from_user": from_user,       # legacy
-        "to_user": to_user,           # legacy
-        "from_user_id": user_id,      # NEW
-        "to_user_id": to_user_id,     # NEW
-        "game": game
-    }
-
-
-    # 0) آیا طرف مقابل قبلاً منو لایک کرده؟ (برای mutual)
-    reverse = (
-    supabase
-    .table("likes")
-    .select("id")
-    .eq("from_user_id", to_user_id)
-    .eq("to_user_id", user_id)
-    .eq("game", game)
-    .limit(1)
-    .execute()
-    )
-
-    reverse_exists = bool(reverse.data)
-
-    # 1) اگر قبلاً وجود دارد، دوباره insert نکن
-    exists = (
-    supabase
-    .table("likes")
-    .select("id")
-    .eq("from_user_id", user_id)
-    .eq("to_user_id", to_user_id)
-    .eq("game", game)
-    .limit(1)
-    .execute()
-    )
-
-    if exists.data:
-        return {"status": "already_exists", "mutual": reverse_exists, "data": payload}
-
-    # 2) insert
-    supabase.table("likes").insert(payload).execute()
-
-    # 3) نتیجه نهایی
-    if reverse_exists:
-        return {"status": "mutual", "mutual": True, "data": payload}
-    return {"status": "liked", "mutual": False, "data": payload}
 
 
 class LookingRequest(BaseModel):
     minutes: int = 60          # 0 = stop looking
-    game: str | None = "battlefield"
+    game: str | None = DEFAULT_GAME
 
 
 @app.post(f"{API_PREFIX}/looking")
 def set_looking(req: LookingRequest, user_id: str = Depends(get_current_user_id)):
     """Toggle "Looking for a squad now" for a limited time (max 3h)."""
-    game = (req.game or "battlefield").strip().lower()
+    game = norm_game(req.game)
     minutes = max(0, min(int(req.minutes or 0), 180))
-    until = (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat() if minutes else None
-
-    res = (
-        supabase.table("profiles")
-        .update({"looking_until": until})
-        .eq("user_id", user_id)
-        .eq("game", game)
-        .execute()
-    )
+    until = (now_utc() + timedelta(minutes=minutes)).isoformat() if minutes else None
+    res = supabase.table("profiles").update({"looking_until": until}).eq("user_id", user_id).eq("game", game).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Profile not found for this user")
     return {"looking_now": bool(until), "looking_until": until}
 
 
+# =========================================================
+# matching
+# =========================================================
+class MatchRequest(BaseModel):
+    game: str | None = DEFAULT_GAME
+    same_language_only: bool = False
+    looking_only: bool = False
+
+
+def score_pair(me: dict, other: dict, game: str) -> tuple[int, list[str]]:
+    g = GAMES[game]
+    score, reasons = 0, []
+
+    if me.get("region") and other.get("region") == me.get("region"):
+        score += 35
+        reasons.append(f"Same region: {region_label(me['region'])}")
+        if me.get("city") and other.get("city") == me.get("city"):
+            score += 5
+            reasons.append(f"Same city: {me['city']}")
+
+    langs = sorted(set(parse_languages(me.get("languages"))) & set(parse_languages(other.get("languages"))))
+    if langs:
+        score += 15 + min(5, 5 * (len(langs) - 1))
+        reasons.append("Speaks " + ", ".join(langs))
+
+    if (me.get("mic") or "") in VOICE and (other.get("mic") or "") in VOICE:
+        score += 10
+        reasons.append("Both use voice chat")
+
+    if len(g["platforms"]) > 1 and me.get("platform") and other.get("platform") == me.get("platform"):
+        score += 5
+        reasons.append(f"Same platform: {me['platform']}")
+
+    mine, theirs = profile_fields(me), profile_fields(other)
+    for f in g["fields"]:
+        v = mine.get(f["id"])
+        if v and theirs.get(f["id"]) == v:
+            score += f["weight"]
+            reasons.append(f"Same {f['label'].lower()}: {v}")
+
+    return min(score, 100), reasons
+
+
+@app.post(f"{API_PREFIX}/match")
+def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)):
+    """Ranks other players of the same game against MY saved profile (the request only carries options)."""
+    game = norm_game(req.game)
+    me = require_profile(user_id, game)
+    my_langs = set(parse_languages(me.get("languages")))
+
+    liked = supabase.table("likes").select("to_user_id").eq("from_user_id", user_id).eq("game", game).execute()
+    hidden = {str(r["to_user_id"]) for r in (liked.data or []) if r.get("to_user_id")} | get_blocked_ids(user_id) | {user_id}
+
+    players = supabase.table("profiles").select("*").eq("game", game).execute().data or []
+    matches = []
+    for p in players:
+        if not p.get("user_id") or str(p["user_id"]) in hidden:
+            continue
+        if req.same_language_only and not (my_langs & set(parse_languages(p.get("languages")))):
+            continue
+        view = public_view(p)
+        if req.looking_only and not view["looking_now"]:
+            continue
+        score, reasons = score_pair(me, p, game)
+        if view["looking_now"]:
+            reasons.insert(0, "Looking for a squad right now")
+        matches.append({
+            "username": p.get("username"),
+            "match_percent": score,
+            "reasons": reasons,
+            "looking_now": view["looking_now"],
+            "profile": view,
+        })
+
+    # players looking right now first, then by score
+    matches.sort(key=lambda m: (m["looking_now"], m["match_percent"]), reverse=True)
+    return {"target_user": me.get("username"), "game": game, "total": len(matches), "matches": matches[:20]}
+
+
+# =========================================================
+# likes / squad
+# =========================================================
+class LikeRequest(BaseModel):
+    to_user: str
+    game: str | None = DEFAULT_GAME
+    from_user: str | None = None   # ignored (identity comes from the token)
+
+
+@app.post(f"{API_PREFIX}/like")
+def add_like(like: LikeRequest, user_id: str = Depends(get_current_user_id)):
+    game = norm_game(like.game)
+    to_user = (like.to_user or "").strip().lower()
+    if not to_user:
+        raise HTTPException(status_code=400, detail="to_user is required")
+
+    me = require_profile(user_id, game, "username")
+    from_user = (me.get("username") or "").strip().lower()
+    if from_user == to_user:
+        raise HTTPException(status_code=400, detail="You cannot like yourself")
+
+    target = supabase.table("profiles").select("user_id").eq("username", to_user).eq("game", game).limit(1).execute()
+    if not target.data or not target.data[0].get("user_id"):
+        raise HTTPException(status_code=404, detail="Target user not found")
+    to_user_id = str(target.data[0]["user_id"])
+    if to_user_id in get_blocked_ids(user_id):
+        raise HTTPException(status_code=403, detail="You can't like this player")
+
+    payload = {"from_user": from_user, "to_user": to_user, "from_user_id": user_id, "to_user_id": to_user_id, "game": game}
+    reverse = (
+        supabase.table("likes").select("id")
+        .eq("from_user_id", to_user_id).eq("to_user_id", user_id).eq("game", game).limit(1).execute()
+    )
+    mutual = bool(reverse.data)
+    exists = (
+        supabase.table("likes").select("id")
+        .eq("from_user_id", user_id).eq("to_user_id", to_user_id).eq("game", game).limit(1).execute()
+    )
+    if exists.data:
+        return {"status": "already_exists", "mutual": mutual, "data": payload}
+
+    supabase.table("likes").insert(payload).execute()
+    return {"status": "mutual" if mutual else "liked", "mutual": mutual, "data": payload}
+
+
+@app.get(f"{API_PREFIX}/my-squad-details")
+def my_squad_details(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user_id)):
+    game = norm_game(game)
+    me = require_profile(user_id, game, "username")
+    blocked = get_blocked_ids(user_id)
+    ids = [i for i in mutual_ids(user_id, game) if i not in blocked]
+    if not ids:
+        return {"username": me.get("username"), "game": game, "squadmates": []}
+
+    rows = (
+        supabase.table("profiles")
+        .select("*").eq("game", game).in_("user_id", ids).execute().data or []
+    )
+    mates = []
+    for p in rows:
+        v = public_view(p)
+        # mutual squadmates may see how to reach each other
+        v["in_game_username"] = p.get("in_game_username")
+        v["discord_username"] = p.get("discord_username")
+        mates.append(v)
+    return {"username": me.get("username"), "game": game, "squadmates": mates}
+
+
+@app.get(f"{API_PREFIX}/pending-likes")
+def pending_likes(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user_id)):
+    """People I liked who haven't liked me back yet (no in-game name: not mutual)."""
+    game = norm_game(game)
+    out_res = supabase.table("likes").select("to_user_id,created_at").eq("from_user_id", user_id).eq("game", game).execute()
+    liked_at = {str(r["to_user_id"]): r.get("created_at") for r in (out_res.data or []) if r.get("to_user_id")}
+    if not liked_at:
+        return {"game": game, "pending": []}
+
+    mutual = set(mutual_ids(user_id, game))
+    blocked = get_blocked_ids(user_id)
+    pending_ids = [uid for uid in liked_at if uid not in mutual and uid not in blocked]
+    if not pending_ids:
+        return {"game": game, "pending": []}
+
+    rows = (
+        supabase.table("profiles")
+        .select("user_id,username,display_username,region,last_active,looking_until")
+        .eq("game", game).in_("user_id", pending_ids).execute().data or []
+    )
+    pending = [{
+        "username": p.get("username"),
+        "display_username": p.get("display_username") or p.get("username"),
+        "region": p.get("region"),
+        "last_active": p.get("last_active"),
+        "liked_at": liked_at.get(str(p["user_id"])),
+    } for p in rows]
+    pending.sort(key=lambda x: x.get("liked_at") or "", reverse=True)
+    return {"game": game, "pending": pending}
+
+
 class BlockRequest(BaseModel):
     to_user: str
-    game: str | None = "battlefield"
+    game: str | None = DEFAULT_GAME
     report: bool = False
     reason: str | None = None
 
 
 @app.post(f"{API_PREFIX}/block")
 def block_player(req: BlockRequest, user_id: str = Depends(get_current_user_id)):
-    """Block (and optionally report) a player: both are hidden from each other from now on."""
-    game = (req.game or "battlefield").strip().lower()
-    to_user = (req.to_user or "").strip().lower()
-
-    target = (
-        supabase.table("profiles")
-        .select("user_id")
-        .eq("username", to_user)
-        .eq("game", game)
-        .limit(1)
-        .execute()
-    )
-    if not target.data or not target.data[0].get("user_id"):
+    """Block (and optionally report) a player: both are hidden from each other everywhere from now on."""
+    game = norm_game(req.game)
+    blocked_id = user_id_for_username(req.to_user)
+    if not blocked_id:
         raise HTTPException(status_code=404, detail="Player not found")
-    blocked_id = str(target.data[0]["user_id"])
     if blocked_id == user_id:
         raise HTTPException(status_code=400, detail="You cannot block yourself")
-
     supabase.table("blocks").upsert(
         {
             "blocker_id": user_id,
@@ -815,36 +686,148 @@ def block_player(req: BlockRequest, user_id: str = Depends(get_current_user_id))
     return {"status": "blocked", "reported": bool(req.report)}
 
 
-BATTLEFIELD_META = {
-    "game": "battlefield",
-    "regions": [
-        {"id": "na-west", "label": "North America West", "cities": ["Vancouver", "Seattle", "San Francisco", "Los Angeles"]},
-        {"id": "na-east", "label": "North America East", "cities": ["Toronto", "New York", "Montreal"]},
-        {"id": "eu-west", "label": "Europe West", "cities": ["London", "Paris", "Amsterdam"]},
-        {"id": "eu-central", "label": "Europe Central", "cities": ["Frankfurt", "Berlin", "Vienna"]},
-        {"id": "middle-east", "label": "Middle East", "cities": ["Istanbul", "Dubai"]},
-    ],
-    "languages": [
-        {"code": "en", "label": "English"},
-        {"code": "fa", "label": "Persian"},
-        {"code": "tr", "label": "Turkish"},
-        {"code": "de", "label": "German"},
-        {"code": "fr", "label": "French"},
-        {"code": "ar", "label": "Arabic"},
-    ],
-    "favorite_modes": ["Conquest", "Rush", "Breakthrough", "TDM", "Redsec"],
-}
+# =========================================================
+# account (bio, banner, avatar, links, invites)
+# =========================================================
+class AccountUpdate(BaseModel):
+    bio: str | None = None
+    banner: str | None = None
+    avatar: str | None = None
+    links: dict | None = None
 
 
-def region_label(region_id: str | None) -> str:
-    for r in BATTLEFIELD_META["regions"]:
-        if r["id"] == region_id:
-            return r["label"]
-    return region_id or ""
+def my_account_payload(user_id: str) -> dict:
+    user = auth_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Account not found")
+    games = supabase.table("profiles").select("game,username,display_username").eq("user_id", user_id).execute().data or []
+    username = games[0]["username"] if games else None
+    mutual_count = sum(len(mutual_ids(user_id, r["game"])) for r in games)
+    referrals = 0
+    if username:
+        try:
+            for u in supabase.auth.admin.list_users(page=1, per_page=1000):
+                if ((u.app_metadata or {}).get("playmate") or {}).get("referred_by") == username:
+                    referrals += 1
+        except Exception:
+            pass
+    return {
+        **account_data(user),
+        "username": username,
+        "display_username": games[0].get("display_username") if games else None,
+        "member_since": getattr(user, "created_at", None),
+        "games": [r["game"] for r in games],
+        "squad_count": mutual_count,
+        "badges": badges_for(user, mutual_count),
+        "invite_path": f"/?ref={username}" if username else None,
+        "referrals": referrals,
+    }
 
 
-@app.get(f"{API_PREFIX}/meta/{{game}}")
-def get_game_meta(game: str):
-    if game.lower().strip() != "battlefield":
-        return {"error": "Unsupported game"}
-    return BATTLEFIELD_META
+@app.get(f"{API_PREFIX}/account")
+def get_account(user_id: str = Depends(get_current_user_id)):
+    return my_account_payload(user_id)
+
+
+@app.put(f"{API_PREFIX}/account")
+def update_account(req: AccountUpdate, user_id: str = Depends(get_current_user_id)):
+    user = auth_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Account not found")
+    changes = {}
+    if req.bio is not None:
+        bio = req.bio.strip()
+        if len(bio) > 280 or re.search(r"[<>]", bio):
+            raise HTTPException(status_code=422, detail="Bio must be up to 280 characters and cannot contain < or >")
+        changes["bio"] = bio
+    if req.banner is not None:
+        if req.banner not in BANNERS:
+            raise HTTPException(status_code=422, detail="Unknown banner")
+        changes["banner"] = req.banner
+    if req.avatar is not None:
+        if req.avatar and req.avatar not in AVATARS:
+            raise HTTPException(status_code=422, detail="Unknown avatar")
+        changes["avatar"] = req.avatar
+    if req.links is not None:
+        links = {}
+        for k in ("twitch", "youtube", "instagram", "steam"):
+            v = clean_optional_text((req.links or {}).get(k), k.capitalize())
+            if v:
+                links[k] = v
+        changes["links"] = links
+    if changes:
+        save_account_meta(user, changes)
+    return my_account_payload(user_id)
+
+
+class ReferralRequest(BaseModel):
+    ref: str
+
+
+@app.post(f"{API_PREFIX}/account/referral")
+def set_referral(req: ReferralRequest, user_id: str = Depends(get_current_user_id)):
+    """Remember who invited me (only once, never myself)."""
+    user = auth_user(user_id)
+    ref = (req.ref or "").strip().lower()
+    if not user or not USERNAME_RE.match(ref):
+        return {"status": "ignored"}
+    if account_data(user).get("referred_by"):
+        return {"status": "already_set"}
+    ref_id = user_id_for_username(ref)
+    if not ref_id or ref_id == user_id:
+        return {"status": "ignored"}
+    save_account_meta(user, {"referred_by": ref})
+    return {"status": "saved"}
+
+
+# =========================================================
+# public profile page data (no in-game names / discord)
+# =========================================================
+@app.get(f"{API_PREFIX}/public-profile")
+def public_profile(username: str):
+    uid = user_id_for_username(username)
+    if not uid:
+        raise HTTPException(status_code=404, detail="Player not found")
+    user = auth_user(uid)
+    rows = supabase.table("profiles").select(PUBLIC_PROFILE_FIELDS).eq("user_id", uid).execute().data or []
+    mutual_count = sum(len(mutual_ids(uid, r["game"])) for r in rows)
+    acc = account_data(user) if user else account_data(None)
+    last_active = max((r.get("last_active") or "" for r in rows), default="") or None
+    return {
+        "username": rows[0]["username"] if rows else username.lower(),
+        "display_username": (rows[0].get("display_username") or rows[0]["username"]) if rows else username,
+        "bio": acc["bio"],
+        "banner": acc["banner"],
+        "avatar": acc["avatar"],
+        "links": {k: v for k, v in acc["links"].items() if k != "steam"},
+        "member_since": getattr(user, "created_at", None) if user else None,
+        "last_active": last_active,
+        "looking_now": any(is_looking_now(r.get("looking_until")) for r in rows),
+        "squad_count": mutual_count,
+        "badges": badges_for(user, mutual_count),
+        "games": [{**game_summary(r["game"]), **public_view(r)} for r in rows if r.get("game") in GAMES],
+    }
+
+
+# old profile page endpoints (kept for compatibility)
+@app.get("/profile-full")
+def profile_full(username: str):
+    u = (username or "").strip().lower()
+    res = supabase.table("profiles").select(PUBLIC_PROFILE_FIELDS).eq("username", u).limit(1).execute()
+    if not res.data:
+        return {"error": "user not found"}
+    return public_view(res.data[0])
+
+
+@app.get("/profile-squad")
+def profile_squad(username: str = Query(...), game: str = DEFAULT_GAME):
+    game = norm_game(game)
+    uid = user_id_for_username(username)
+    if not uid:
+        return {"username": username, "game": game, "squadmates": []}
+    ids = mutual_ids(uid, game)
+    if not ids:
+        return {"username": username, "game": game, "squadmates": []}
+    rows = supabase.table("profiles").select(PUBLIC_PROFILE_FIELDS).eq("game", game).in_("user_id", ids).execute().data or []
+    # public endpoint: never expose in-game names / discord here
+    return {"username": username, "game": game, "squadmates": [public_view(p) for p in rows]}
