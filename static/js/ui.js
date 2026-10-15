@@ -469,6 +469,8 @@ async function loadProfileForGame() {
     const pending = (localStorage.getItem("pm_username") || "").trim();
     els.usernameRow.style.display = "";
     els.usernameInput.value = pending;
+    $("pm-username-display").textContent = pending || "New player";
+    paintAvatar($("me-avatar"), pending || "?");
   }
   renderLookingButton();
 }
@@ -526,6 +528,7 @@ async function saveProfile() {
     renderGameChrome();
     renderLookingButton();
     startRealtime();
+    await captureReferral();
     refreshInvite();
   } catch (e) {
     if (e.message !== "AUTH_EXPIRED" && e.message !== "AUTH_MISSING") showToast(e.message || "Failed to save profile", "error");
@@ -802,6 +805,7 @@ async function refreshSquad(opts = {}) {
           display_username: mate.display_username || mate.username,
           in_game_username: mate.in_game_username,
         });
+        notifyBackgroundMatch(mate.display_username || mate.username);
         if (window.innerWidth <= 760) $("tab-squad-dot").hidden = false;
       }
     }
@@ -945,6 +949,10 @@ async function toggleLooking() {
   if (!state.hasProfile) return showToast("Save your profile first", "error");
   const until = state.profile.looking_until ? new Date(state.profile.looking_until).getTime() : 0;
   const turningOn = !(until > Date.now());
+  // ask once, so we can tell them about matches while they're in another tab
+  if (turningOn && "Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission().catch(() => { });
+  }
   try {
     const d = await postJson(`${API_BASE}/looking`, { minutes: turningOn ? 60 : 0, game: state.game });
     state.profile.looking_until = d.looking_until;
@@ -1011,12 +1019,37 @@ async function refreshInvite() {
 /* =========================================================
    REALTIME
 ========================================================= */
+const BACKGROUND_INTERVAL_MS = 60000;
+let baseTitle = document.title;
+
 function canRealtimeRun() {
-  return state.hasProfile && document.visibilityState !== "hidden";
+  return state.hasProfile;
+}
+
+// New match while the tab is in the background: flag the tab title + optional system notification
+function notifyBackgroundMatch(name) {
+  if (document.visibilityState !== "hidden") return;
+  baseTitle = document.title.startsWith("🎮") ? baseTitle : document.title;
+  document.title = "🎮 New match! — PlayMate";
+  if ("Notification" in window && Notification.permission === "granted") {
+    try {
+      const n = new Notification("It's a match! 🎮", {
+        body: `You and ${name} liked each other on PlayMate.`,
+        icon: "/static/img/logo.svg",
+        tag: "playmate-match",
+      });
+      n.onclick = () => { window.focus(); n.close(); };
+    } catch { }
+  }
 }
 
 async function realtimeTick() {
   if (!canRealtimeRun()) return;
+  if (document.visibilityState === "hidden") {
+    // background: only look for new squadmates (no ping, so we don't show as online)
+    try { await refreshSquad({ silent: true }); } catch { }
+    return;
+  }
   if (!inFlight.ping) {
     inFlight.ping = true;
     try {
@@ -1038,8 +1071,9 @@ async function realtimeTick() {
 
 function startRealtime() {
   if (realtimeTimer || !state.hasProfile) return;
-  realtimeTick();
-  realtimeTimer = setInterval(realtimeTick, REALTIME_INTERVAL_MS);
+  const hidden = document.visibilityState === "hidden";
+  if (!hidden) realtimeTick();
+  realtimeTimer = setInterval(realtimeTick, hidden ? BACKGROUND_INTERVAL_MS : REALTIME_INTERVAL_MS);
 }
 
 function stopRealtime() {
@@ -1131,8 +1165,10 @@ function setupEventListeners() {
   document.querySelectorAll(".tabbar button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") stopRealtime();
-    else startRealtime();
+    // slower polling in the background, normal speed when visible
+    stopRealtime();
+    startRealtime();
+    if (document.visibilityState === "visible" && document.title.startsWith("🎮")) document.title = baseTitle;
   });
   window.addEventListener("beforeunload", stopRealtime);
 }
