@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#070b10">
+  <title>Page not found | PlayMate</title>
+  <link rel="icon" href="/static/img/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/ui.css?v=10">
+  <style>
+    body {
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+      text-align: center;
+      padding: 24px;
+    }
+
+    .nf {
+      max-width: 460px;
+    }
+
+    .nf-code {
+      font-size: clamp(5rem, 18vw, 9rem);
+      font-weight: 900;
+      line-height: 1;
+      background: linear-gradient(90deg, var(--lime), var(--green), var(--cyan));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      filter: drop-shadow(0 0 24px rgba(45, 255, 179, 0.35));
+    }
+
+    .nf h1 {
+      margin-top: 10px;
+      font-size: 1.6rem;
+    }
+
+    .nf p {
+      color: var(--muted);
+      margin: 10px 0 26px;
+      line-height: 1.6;
+    }
+
+    .nf .btn-primary {
+      display: inline-flex;
+      width: auto;
+      padding: 14px 26px;
+      text-decoration: none;
+    }
+  </style>
+</head>
+
+<body>
+  <main class="nf">
+    <img src="/static/img/logo.svg" alt="" width="56" height="56">
+    <div class="nf-code">404</div>
+    <h1>Respawn point not found</h1>
+    <p>This page doesn't exist — maybe the link is old or mistyped. Let's get you back in the game.</p>
+    <a class="btn-primary" href="/app">Find your squad</a>
+  </main>
+</body>
+
+</html>

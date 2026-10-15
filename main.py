@@ -14,7 +14,8 @@ import httpx
 import jwt
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
 from jwt import PyJWTError
 from pydantic import BaseModel
@@ -284,6 +285,19 @@ def profile_page(username: str | None = None):
 @app.get("/privacy", response_class=HTMLResponse)
 def legal_page():
     return page("legal.html")
+
+
+@app.get("/robots.txt", response_class=PlainTextResponse)
+def robots():
+    return "User-agent: *\nAllow: /\nDisallow: /app\nDisallow: /api/\n"
+
+
+@app.exception_handler(StarletteHTTPException)
+async def not_found_page(request, exc):
+    # pages get a friendly 404 page; API calls keep their JSON errors
+    if exc.status_code == 404 and not request.url.path.startswith(("/api/", "/static/")):
+        return HTMLResponse((BASE_DIR / "404.html").read_text(encoding="utf-8"), status_code=404)
+    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=getattr(exc, "headers", None))
 
 
 @app.get("/health")
