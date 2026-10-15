@@ -700,7 +700,7 @@ def logo():
          f'<text x="330" y="330" {FONT} font-size="132" font-weight="900" letter-spacing="-3" fill="{TEXT}">Play<tspan fill="url(#t)">Mate</tspan></text>'
          f'<text x="336" y="400" {FONT} font-size="40" font-weight="800" fill="{TEXT}" fill-opacity=".78">Find your squad. Stop playing solo.</text>'
          f'<rect x="336" y="436" width="180" height="6" rx="3" fill="url(#t)" filter="url(#gl2)"/>'
-         f'<g stroke="{GREEN}" stroke-opacity=".35" stroke-width="2"><path d="M960 120L1060 170L1010 260L920 230Z"/></g>'
+         f'<g fill="none" stroke="{GREEN}" stroke-opacity=".35" stroke-width="2"><path d="M960 120L1060 170L1010 260L920 230Z"/></g>'
          + "".join(f'<circle cx="{x}" cy="{y}" r="16" fill="{BG2}" stroke="{c}" stroke-width="4" filter="url(#gl)"/>'
                    for x, y, c in [(960, 120, GREEN), (1060, 170, CYAN), (1010, 260, LIME), (920, 230, AMBER)]) +
          f'<rect x="12" y="12" width="1176" height="606" rx="28" fill="none" stroke="url(#t)" stroke-opacity=".4" stroke-width="2"/>')
