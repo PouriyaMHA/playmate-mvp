@@ -2432,3 +2432,14 @@ a.sm-name:hover {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* only shown on phones */
+.mobile-only {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .mobile-only {
+    display: block;
+  }
+}

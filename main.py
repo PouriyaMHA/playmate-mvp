@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from supabase import create_client
 from supabase.lib.client_options import SyncClientOptions
 
-from games import GAME_ORDER, GAMES, LANGUAGES, clean_fields, game_meta, game_summary, region_label
+from games import GAME_ORDER, GAMES, LANGUAGES, REGIONS, clean_fields, game_meta, game_summary, region_label
 
 LANGUAGE_LABELS = {lang["code"]: lang["label"] for lang in LANGUAGES}
 
@@ -99,8 +99,8 @@ def parse_languages(lang_str: str | None) -> list[str]:
     return [x.strip().lower() for x in (lang_str or "").split(",") if x.strip()]
 
 
-def clean_optional_text(value: str | None, field: str) -> str | None:
-    v = (value or "").strip()
+def clean_optional_text(value, field: str) -> str | None:
+    v = ("" if value is None else str(value)).strip()
     if not v:
         return None
     if not FREE_TEXT_RE.match(v):
@@ -167,7 +167,8 @@ def require_profile(user_id: str, game: str, columns: str = "*") -> dict:
     return row
 
 
-def mutual_ids(user_id: str, game: str) -> list[str]:
+def mutual_ids(user_id: str, game: str, blocked: set[str] | None = None) -> list[str]:
+    """Players who liked me back in this game (blocked players excluded)."""
     out_res = supabase.table("likes").select("to_user_id").eq("from_user_id", user_id).eq("game", game).execute()
     outgoing = [str(r["to_user_id"]) for r in (out_res.data or []) if r.get("to_user_id")]
     if not outgoing:
@@ -176,7 +177,9 @@ def mutual_ids(user_id: str, game: str) -> list[str]:
         supabase.table("likes").select("from_user_id")
         .eq("to_user_id", user_id).eq("game", game).in_("from_user_id", outgoing).execute()
     )
-    return [str(r["from_user_id"]) for r in (in_res.data or []) if r.get("from_user_id")]
+    if blocked is None:
+        blocked = get_blocked_ids(user_id)
+    return [str(r["from_user_id"]) for r in (in_res.data or []) if r.get("from_user_id") and str(r["from_user_id"]) not in blocked]
 
 
 def user_id_for_username(username: str) -> str | None:
@@ -294,13 +297,16 @@ def health(deep: bool = False):
 # =========================================================
 # games / meta (public)
 # =========================================================
+def count_profiles(**filters) -> int:
+    q = supabase.table("profiles").select("id", count="exact", head=True)
+    for col, (op, val) in filters.items():
+        q = getattr(q, op)(col, val)
+    return q.execute().count or 0
+
+
 @app.get(f"{API_PREFIX}/games")
 def list_games():
-    counts: dict[str, int] = {}
-    rows = supabase.table("profiles").select("game").execute().data or []
-    for r in rows:
-        counts[r["game"]] = counts.get(r["game"], 0) + 1
-    return {"games": [{**game_summary(g), "players": counts.get(g, 0)} for g in GAME_ORDER]}
+    return {"games": [{**game_summary(g), "players": count_profiles(game=("eq", g))} for g in GAME_ORDER]}
 
 
 @app.get(f"{API_PREFIX}/meta/{{game}}")
@@ -312,14 +318,14 @@ def get_game_meta(game: str):
 def stats(game: str = DEFAULT_GAME, region: str | None = None):
     """Small 'the site is alive' numbers for empty states."""
     game = norm_game(game)
-    rows = supabase.table("profiles").select("region,looking_until,last_active").eq("game", game).execute().data or []
-    day_ago = now_utc() - timedelta(days=1)
+    now_iso = now_utc().isoformat()
+    day_ago = (now_utc() - timedelta(days=1)).isoformat()
     return {
         "game": game,
-        "players": len(rows),
-        "in_region": sum(1 for r in rows if region and r.get("region") == region),
-        "looking_now": sum(1 for r in rows if is_looking_now(r.get("looking_until"))),
-        "active_today": sum(1 for r in rows if (parse_ts(r.get("last_active")) or datetime.min.replace(tzinfo=timezone.utc)) > day_ago),
+        "players": count_profiles(game=("eq", game)),
+        "in_region": count_profiles(game=("eq", game), region=("eq", region)) if region else 0,
+        "looking_now": count_profiles(game=("eq", game), looking_until=("gt", now_iso)),
+        "active_today": count_profiles(game=("eq", game), last_active=("gt", day_ago)),
     }
 
 
@@ -368,14 +374,19 @@ def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)
     # common fields
     missing = []
     region = (profile.region or "").strip()
-    if not region:
+    region_def = next((r for r in REGIONS if r["id"] == region), None)
+    if not region_def:
         missing.append("Region")
     mic = (profile.mic or "").strip()
     if mic not in ("voice", "both", "none"):
         missing.append("Mic")
-    languages = ",".join(parse_languages(profile.languages))
+    allowed_langs = {lang["code"] for lang in LANGUAGES}
+    languages = ",".join(dict.fromkeys(c for c in parse_languages(profile.languages) if c in allowed_langs))
     if not languages:
         missing.append("Languages")
+    city = (profile.city or "").strip() or None
+    if city and (not region_def or city not in region_def["cities"]):
+        city = None
     platform = (profile.platform or "").strip() or None
     if platform and platform not in g["platforms"]:
         platform = None
@@ -399,7 +410,7 @@ def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)
         "discord_username": clean_optional_text(profile.discord_username, "Discord username"),
         "platform": platform,
         "region": region,
-        "city": (profile.city or "").strip()[:40] or None,
+        "city": city,
         "mic": mic,
         "languages": languages,
         "game_meta": {"fields": fields},
@@ -540,7 +551,15 @@ def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)
     liked = supabase.table("likes").select("to_user_id").eq("from_user_id", user_id).eq("game", game).execute()
     hidden = {str(r["to_user_id"]) for r in (liked.data or []) if r.get("to_user_id")} | get_blocked_ids(user_id) | {user_id}
 
-    players = supabase.table("profiles").select("*").eq("game", game).execute().data or []
+    near = (
+        supabase.table("profiles").select("*").eq("game", game).eq("region", me.get("region") or "")
+        .order("last_active", desc=True, nullsfirst=False).limit(500).execute().data or []
+    )
+    far = (
+        supabase.table("profiles").select("*").eq("game", game).neq("region", me.get("region") or "")
+        .order("last_active", desc=True, nullsfirst=False).limit(300).execute().data or []
+    )
+    players = near + far
     matches = []
     for p in players:
         if not p.get("user_id") or str(p["user_id"]) in hidden:
@@ -616,7 +635,7 @@ def my_squad_details(game: str = DEFAULT_GAME, user_id: str = Depends(get_curren
     game = norm_game(game)
     me = require_profile(user_id, game, "username")
     blocked = get_blocked_ids(user_id)
-    ids = [i for i in mutual_ids(user_id, game) if i not in blocked]
+    ids = mutual_ids(user_id, game, blocked)
     if not ids:
         return {"username": me.get("username"), "game": game, "squadmates": []}
 
@@ -710,15 +729,9 @@ def my_account_payload(user_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Account not found")
     games = supabase.table("profiles").select("game,username,display_username").eq("user_id", user_id).execute().data or []
     username = games[0]["username"] if games else None
-    mutual_count = sum(len(mutual_ids(user_id, r["game"])) for r in games)
-    referrals = 0
-    if username:
-        try:
-            for u in supabase.auth.admin.list_users(page=1, per_page=1000):
-                if ((u.app_metadata or {}).get("playmate") or {}).get("referred_by") == username:
-                    referrals += 1
-        except Exception:
-            pass
+    blocked = get_blocked_ids(user_id)
+    mutual_count = sum(len(mutual_ids(user_id, r["game"], blocked)) for r in games)
+    referrals = int(((getattr(user, "app_metadata", None) or {}).get("playmate") or {}).get("referral_count") or 0)
     return {
         **account_data(user),
         "username": username,
@@ -781,10 +794,18 @@ def set_referral(req: ReferralRequest, user_id: str = Depends(get_current_user_i
         return {"status": "ignored"}
     if account_data(user).get("referred_by"):
         return {"status": "already_set"}
+    created = parse_ts(getattr(user, "created_at", None))
+    if not created or now_utc() - created > timedelta(days=3):
+        return {"status": "ignored"}
     ref_id = user_id_for_username(ref)
     if not ref_id or ref_id == user_id:
         return {"status": "ignored"}
     save_account_meta(user, {"referred_by": ref})
+    # keep a counter on the inviter (no need to scan every user to count invites)
+    inviter = auth_user(ref_id)
+    if inviter:
+        count = int(((inviter.app_metadata or {}).get("playmate") or {}).get("referral_count") or 0)
+        save_account_meta(inviter, {"referral_count": count + 1})
     return {"status": "saved"}
 
 
@@ -798,7 +819,8 @@ def public_profile(username: str):
         raise HTTPException(status_code=404, detail="Player not found")
     user = auth_user(uid)
     rows = supabase.table("profiles").select(PUBLIC_PROFILE_FIELDS).eq("user_id", uid).execute().data or []
-    mutual_count = sum(len(mutual_ids(uid, r["game"])) for r in rows)
+    blocked = get_blocked_ids(uid)
+    mutual_count = sum(len(mutual_ids(uid, r["game"], blocked)) for r in rows)
     acc = account_data(user) if user else account_data(None)
     last_active = max((r.get("last_active") or "" for r in rows), default="") or None
     return {

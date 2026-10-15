@@ -110,7 +110,9 @@ const state = {
   loading: false,
 };
 
-const inFlight = { match: false, like: false, ping: false, pending: false, squadPromise: null };
+const inFlight = { match: false, like: false, ping: false, pending: false, squadPromise: null, squadGame: null };
+const announced = new Set();   // squadmates we already showed a match modal for (per game: "game:user")
+let inviteLoaded = false;
 let realtimeTimer = null;
 let lastSquadSignature = "";
 let lastSquadUsernames = new Set();
@@ -354,6 +356,8 @@ async function selectGame(gameId) {
   lastSquadSignature = "";
   lastSquadUsernames = new Set();
   squadBootstrapped = false;
+  inFlight.squadPromise = null;
+  state.loadFailed = false;
   renderSquadList();
   renderPendingList([]);
 
@@ -449,7 +453,11 @@ async function loadProfileForGame() {
     els.status.textContent = "";
   } catch (e) {
     if (e.status !== 404) {
-      showToast(e.message || "Could not load your profile", "error");
+      state.loadFailed = true;
+      els.btnFind.disabled = true;
+      els.cardWrapper.innerHTML = `<div class="empty-state"><h3>Couldn't load your profile</h3>
+        <p>Check your connection and try again.</p>
+        <div style="margin-top:16px;"><button class="btn-primary" type="button" data-action="retry-load">Try again</button></div></div>`;
       return;
     }
     // new game: prefill what is shared between games (from another game profile, else the local cache)
@@ -503,6 +511,10 @@ function validateProfile(p) {
 }
 
 async function saveProfile() {
+  if (state.loadFailed) {
+    showToast("Your profile didn't load — tap Try again first", "error");
+    throw new Error("Validation");
+  }
   const payload = collectProfile();
   const missing = validateProfile(payload);
   if (missing.length) {
@@ -566,6 +578,7 @@ function renderIdleCenter() {
         <img class="empty-cover" src="${esc(g?.cover || "")}" alt="">
         <h3>Set up your ${esc(g?.name || "")} profile</h3>
         <p>Fill in the form — region, game details and languages — then hit <b>Find Matches</b>.</p>
+        <div class="mobile-only" style="margin-top:16px;"><button class="btn-primary" type="button" data-action="edit-profile">Set up profile</button></div>
       </div>`;
 }
 
@@ -591,6 +604,7 @@ function renderNoMatches(total) {
 async function findMatches() {
   if (state.loading || inFlight.match || !state.game) return;
   inFlight.match = true;
+  if (window.innerWidth <= 760) setTab("match");   // results (and errors) are shown on the Match tab
   try {
     setLoading(true);
     const data = await postJson(`${API_BASE}/match`, {
@@ -604,7 +618,6 @@ async function findMatches() {
     await refreshStats();
     if (!state.matches.length) return renderNoMatches(data.total);
     renderCard();
-    if (window.innerWidth <= 760) setTab("match");
   } catch (e) {
     setLoading(false);
     if (e.status === 404) {
@@ -730,7 +743,8 @@ async function handleLike() {
     if (isMutual) {
       // the in-game name is only revealed by the squad endpoint
       const key = (matchUser.username || "").toLowerCase();
-      lastSquadUsernames.add(key);
+      announced.add(`${state.game}:${key}`);
+      try { await inFlight.squadPromise; } catch { }
       try { await refreshSquad({ silent: true }); } catch { }
       const fromSquad = (state.squad || []).find(m => (m.username || "").toLowerCase() === key);
       if (fromSquad?.in_game_username) mate.in_game_username = fromSquad.in_game_username;
@@ -769,8 +783,9 @@ function computeSquadSignature(squad) {
 
 async function refreshSquad(opts = {}) {
   if (!state.game || !state.hasProfile) return;
-  if (inFlight.squadPromise) return inFlight.squadPromise;
+  if (inFlight.squadPromise && inFlight.squadGame === state.game) return inFlight.squadPromise;
   const game = state.game;
+  inFlight.squadGame = game;
 
   inFlight.squadPromise = (async () => {
     const res = await authFetch(`${API_BASE}/my-squad-details?game=${encodeURIComponent(game)}`);
@@ -784,8 +799,9 @@ async function refreshSquad(opts = {}) {
     const newSquad = (await res.json()).squadmates || [];
 
     const newSet = new Set(newSquad.map(m => (m.username || "").toLowerCase()).filter(Boolean));
-    const newlyAdded = [...newSet].filter(u => !lastSquadUsernames.has(u));
+    const newlyAdded = [...newSet].filter(u => !lastSquadUsernames.has(u) && !announced.has(`${game}:${u}`));
     lastSquadUsernames = newSet;
+    newSet.forEach(u => announced.add(`${game}:${u}`));
 
     // first successful refresh = baseline (no auto modal for existing squadmates)
     const wasBootstrapped = squadBootstrapped;
@@ -818,7 +834,7 @@ async function refreshSquad(opts = {}) {
     if (!String(err.message).startsWith("AUTH")) showNetError();
     throw err;
   } finally {
-    inFlight.squadPromise = null;
+    if (inFlight.squadGame === game) inFlight.squadPromise = null;
   }
 }
 
@@ -1004,10 +1020,11 @@ async function captureReferral() {
 }
 
 async function refreshInvite() {
-  if (!state.username) return;
+  if (!state.username || inviteLoaded) return;
   try {
     const acc = await apiJson(`${API_BASE}/account`);
     if (!acc.invite_path) return;
+    inviteLoaded = true;
     $("invite-card").style.display = "";
     $("invite-link").value = location.origin + acc.invite_path;
     $("invite-meta").textContent = acc.referrals
@@ -1138,6 +1155,12 @@ function setupEventListeners() {
       case "like": return handleLike();
       case "find": return runFind();
       case "switch": return openGamePicker();
+      case "edit-profile": return setTab("profile");
+      case "retry-load": {
+        const g = state.game;
+        state.game = null;
+        return selectGame(g).then(() => { els.btnFind.disabled = false; });
+      }
       case "looking": return toggleLooking();
       case "clear-filters":
         els.optSameLang.checked = false;

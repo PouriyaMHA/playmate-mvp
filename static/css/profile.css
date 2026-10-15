@@ -330,6 +330,26 @@ body.profile-page {
   text-decoration: none;
 }
 
+.pp-game-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pp-game-remove {
+  margin-top: 14px;
+  background: none;
+  border: none;
+  color: var(--faint);
+  font-size: 0.8rem;
+  text-decoration: underline;
+}
+
+.pp-game-remove:hover {
+  color: var(--red);
+}
+
 .pp-game-link .icon {
   width: 16px;
   height: 16px;

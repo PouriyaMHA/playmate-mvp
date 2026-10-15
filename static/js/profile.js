@@ -149,7 +149,10 @@ function renderTab() {
                 ${g.mic ? `<span class="info-pill">${icon("mic")}<b>${esc(MIC_LABELS[g.mic] || g.mic)}</b></span>` : ""}
                 ${langs ? `<span class="info-pill">${icon("chat")}<b>${esc(langs)}</b></span>` : ""}
               </div>
-              <a class="pp-game-link" href="/app?game=${encodeURIComponent(g.id)}">${page.isOwner ? "Open in Find squad" : "Find a squad in this game"} ${icon("arrow")}</a>
+              <div class="pp-game-foot">
+                <a class="pp-game-link" href="/app?game=${encodeURIComponent(g.id)}">${page.isOwner ? "Open in Find squad" : "Find a squad in this game"} ${icon("arrow")}</a>
+                ${page.isOwner ? `<button type="button" class="pp-game-remove" data-remove-game="${esc(g.id)}" data-game-name="${esc(g.name)}">Remove</button>` : ""}
+              </div>
             </div>
           </article>`;
     }).join("")}
@@ -261,6 +264,20 @@ async function saveEdit() {
   }
 }
 
+async function removeGame(gameId, name) {
+  if (!confirm(`Remove ${name} from your profile? Your ${name} likes and squad will be removed too.`)) return;
+  try {
+    const res = await authFetch(`${API}/profile?game=${encodeURIComponent(gameId)}`, { method: "DELETE" });
+    if (!res.ok) throw new Error("Could not remove this game");
+    page.data.games = page.data.games.filter(g => g.id !== gameId);
+    if (localStorage.getItem("pm_game") === gameId) localStorage.removeItem("pm_game");
+    render();
+    toast(`${name} removed`, "success");
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
 /* ---------------- events ---------------- */
 document.addEventListener("click", async (e) => {
   if (!(e.target instanceof Element)) return;
@@ -284,6 +301,8 @@ document.addEventListener("click", async (e) => {
   if (bn) { $("banner-pick").querySelectorAll("button").forEach(b => b.classList.toggle("active", b === bn)); return; }
   if (t.closest("#edit-close") || t.closest("#edit-cancel") || t === $("edit-modal")) return closeEdit();
   if (t.closest("#edit-save")) return saveEdit();
+  const rm = t.closest("[data-remove-game]");
+  if (rm && page.isOwner) return removeGame(rm.dataset.removeGame, rm.dataset.gameName);
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeEdit(); });
 $("edit-bio").addEventListener("input", () => { $("bio-count").textContent = `${$("edit-bio").value.length}/280`; });
