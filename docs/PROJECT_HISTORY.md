@@ -39,11 +39,26 @@ Same day, deployed to Render (`SUPABASE_JWT_SECRET` added there): `/api/my-profi
 
 Later same day: RLS enabled on `likes` (was fully open to the public anon key); legacy unauthenticated endpoints removed; new `Looking now` status (`profiles.looking_until`, `/api/looking`), optional Discord (`profiles.discord_username`, mutual-only) with copy buttons, Block/Report (`blocks` table, `/api/block`); XSS fixes in ui.html/profile.html; stale HTTP/2 Supabase connection (random 500s) fixed; GitHub Actions keep-alive every 10 min. Confirm email intentionally still OFF until public launch. Next: full UI/UX redesign (target 10/10, mobile, onboarding, split ui.html).
 
+2026-10-12/13: Find Matches page redesigned (neon glass, per the user's mockup), match modal with energy beam + original fireworks, compact layout for short laptop screens; live E2E passed.
+
+2026-10-14/15 (6-hour build session, based on the planning summary `PlayMate-Summary.pdf`):
+- **Multi-game:** 9 games in `games.py` (Battlefield 6, CS2, Fortnite, Apex, PUBG Mobile, CODM, Minecraft, LoL, Helldivers 2), each with its own platforms, in-game-name label and field template (mode/rank/role/server…), stored in `profiles.game_meta.fields`. Username shared across games. Game picker with cover art; prefill shared fields from another game.
+- **Matching:** uses my saved profile; region 35, city +5, languages 15–20, voice 10, platform 5, game fields (weights per game). Filters: same language only, looking-now only. No minimum score (small user base) — instead a smart empty state (Looking now / invite / add game) and live stats.
+- **Profiles:** `/u/<name>` with banner, avatar (12 presets; photo upload = placeholder), bio, links (Twitch/YouTube/Instagram), badges (Early Member, First Match, Squad Leader; Verified/Legendary = placeholders), per-game cards, Highlights tab (placeholder), Squad tab. Owner edit drawer. Account data in auth `app_metadata.playmate`.
+- **Invites:** `/?ref=<username>` captured on landing, saved after first profile save; invite card with referral count.
+- **Landing** rebuilt (games showcase, how it works, safety), inline auth errors, password reset, removed public "Quick Dev Account". Draft `/terms` `/privacy`.
+- **Mobile:** bottom tabs (Profile / Match / Squad), sticky Skip/Like.
+- **Background alerts:** 60s polling in hidden tabs, tab-title flag + optional system notification.
+- Original SVG art in `static/img` (`tools/gen_art.py`).
+
+Decision log from the planning summary: mobile app postponed (responsive web first); per-game cards inside one profile (no page per game); in-person meetups NOT pursued for now (minors/safety) — city is only for ping/region; add games gradually but all 9 are listed.
+
 ## Roadmap
-1. ~~Fix the ❌ items above, restore Supabase, deploy, two-account E2E~~ (done 2026-10-11). Manual check of Sign up / Log in.
-2. **Pending Likes** section under My Squad (incoming vs outgoing — undecided).
-3. Step 10A finish (user_id everywhere, drop legacy endpoints) → 10B multi-game → 10C smarter scoring + analytics.
-4. Later: UI/UX polish, account/settings pages (`/account`, `/settings`), squad chat, notifications, customization (wallpapers/themes store), referrals, mobile, i18n at the end (UI text English only for now).
+1. Before public launch: turn on Supabase **Confirm email**; reliable keep-alive (cron-job.org / UptimeRobot, or Render paid); finalise Terms/Privacy; manual check of Sign up / Log in / password reset.
+2. Grow: invite rewards (badges for referrals), share cards, Persian community marketing.
+3. Profile photo upload (Supabase Storage + report/moderation), highlights upload.
+4. Squad chat / notifications by email, rank verification ("Verified" badge), account deletion self-service.
+5. Later: i18n (UI English only for now), mobile app.
 
 ## Decisions to respect
 - Platform optional/display-only (cross-play). Playstyle & available-time dropped.
