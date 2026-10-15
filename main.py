@@ -21,7 +21,9 @@ from pydantic import BaseModel
 from supabase import create_client
 from supabase.lib.client_options import SyncClientOptions
 
-from games import GAME_ORDER, GAMES, clean_fields, game_meta, game_summary, get_game, region_label
+from games import GAME_ORDER, GAMES, LANGUAGES, clean_fields, game_meta, game_summary, region_label
+
+LANGUAGE_LABELS = {lang["code"]: lang["label"] for lang in LANGUAGES}
 
 BASE_DIR = Path(__file__).parent
 load_dotenv(BASE_DIR / ".env")
@@ -275,6 +277,12 @@ def profile_page(username: str | None = None):
     return page("profile.html")
 
 
+@app.get("/terms", response_class=HTMLResponse)
+@app.get("/privacy", response_class=HTMLResponse)
+def legal_page():
+    return page("legal.html")
+
+
 @app.get("/health")
 def health(deep: bool = False):
     # deep=1 also touches the database (used by keep-alive pings so Supabase doesn't pause)
@@ -502,7 +510,7 @@ def score_pair(me: dict, other: dict, game: str) -> tuple[int, list[str]]:
     langs = sorted(set(parse_languages(me.get("languages"))) & set(parse_languages(other.get("languages"))))
     if langs:
         score += 15 + min(5, 5 * (len(langs) - 1))
-        reasons.append("Speaks " + ", ".join(langs))
+        reasons.append("Speaks " + ", ".join(LANGUAGE_LABELS.get(l, l) for l in langs))
 
     if (me.get("mic") or "") in VOICE and (other.get("mic") or "") in VOICE:
         score += 10

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#070b10">
+  <title>PlayMate | Terms &amp; Privacy</title>
+  <link rel="icon" href="/static/img/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/ui.css?v=9">
+  <link rel="stylesheet" href="/static/css/landing.css?v=1">
+  <style>
+    .legal {
+      max-width: 760px;
+      margin: 40px auto 80px;
+      padding: 0 20px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+
+    .legal h1 {
+      color: var(--text);
+      font-size: 2rem;
+      margin-bottom: 4px;
+    }
+
+    .legal h2 {
+      color: var(--text);
+      font-size: 1.15rem;
+      margin: 28px 0 6px;
+    }
+
+    .legal ul {
+      padding-left: 20px;
+    }
+
+    .legal .draft {
+      display: inline-block;
+      margin: 10px 0 6px;
+      padding: 6px 12px;
+      border-radius: 10px;
+      color: var(--amber);
+      background: rgba(255, 181, 71, 0.08);
+      border: 1px solid rgba(255, 181, 71, 0.35);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+
+<body class="landing">
+  <header class="lp-header">
+    <div class="lp-container lp-nav">
+      <a class="brand" href="/"><img class="brand-mark" src="/static/img/logo.svg" alt=""><span>PlayMate</span></a>
+      <nav class="lp-links"><a href="/terms">Terms</a><a href="/privacy">Privacy</a></nav>
+      <a href="/" class="btn-logout lp-login">Back to PlayMate</a>
+    </div>
+  </header>
+
+  <main class="legal">
+    <section id="terms">
+      <h1>Terms of use</h1>
+      <div class="draft">Draft — these terms will be finalised before PlayMate's public launch.</div>
+      <h2>Using PlayMate</h2>
+      <p>PlayMate helps players find teammates. Use it to meet people to play with — not to harass, spam, scam,
+        impersonate others or share content that is hateful, sexual or illegal.</p>
+      <h2>Your account</h2>
+      <ul>
+        <li>Keep your login details safe; you are responsible for activity on your account.</li>
+        <li>Your PlayMate username is public. Pick one that doesn't impersonate anyone.</li>
+        <li>We may suspend accounts that break these rules or are reported for abuse.</li>
+      </ul>
+      <h2>Games and trademarks</h2>
+      <p>PlayMate is an independent service and is not affiliated with, endorsed by or sponsored by any game
+        publisher. Game names belong to their owners and are used only to describe which games you play.</p>
+      <h2>No guarantees</h2>
+      <p>We do our best to keep PlayMate running and safe, but the service is provided "as is". Be careful when
+        meeting people online and never share passwords or payment details.</p>
+    </section>
+
+    <section id="privacy">
+      <h1 style="margin-top:56px;">Privacy</h1>
+      <div class="draft">Draft — this policy will be finalised before PlayMate's public launch.</div>
+      <h2>What we store</h2>
+      <ul>
+        <li><b>Account:</b> your email address and a password (handled by our login provider, Supabase). Your email is
+          never shown to other players.</li>
+        <li><b>Public profile:</b> username, avatar, banner, bio and links you add, and for each game: region, city
+          (optional), platform, languages, mic preference and game details like mode or rank.</li>
+        <li><b>Private until you match:</b> your in-game name and Discord — only shown to players you have both
+          liked.</li>
+        <li><b>Activity:</b> who you liked, who you blocked or reported, when you were last active, and whether you
+          turned on "Looking now".</li>
+      </ul>
+      <h2>What we don't do</h2>
+      <ul>
+        <li>We don't sell your data or show you third-party ads.</li>
+        <li>We don't read your messages on other apps — PlayMate only shares the names you choose to add.</li>
+      </ul>
+      <h2>Your choices</h2>
+      <ul>
+        <li>Edit your profile any time, remove a game profile, or block players.</li>
+        <li>To delete your account and all its data, contact the PlayMate team from the email you signed up with.</li>
+      </ul>
+    </section>
+  </main>
+  <script>
+    if (location.pathname === "/privacy") document.getElementById("privacy").scrollIntoView();
+  </script>
+</body>
+
+</html>

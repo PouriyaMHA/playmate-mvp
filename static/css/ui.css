@@ -46,6 +46,10 @@ body {
   height: 100%;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   font-family: var(--font);
   color: var(--text);
@@ -1708,7 +1712,488 @@ input::placeholder {
   }
 }
 
-/* ---------- responsive (full mobile layout comes in the next step) ---------- */
+/* ---------- header nav ---------- */
+.topnav {
+  display: flex;
+  gap: 6px;
+  margin-left: 28px;
+  margin-right: auto;
+}
+
+.topnav-link {
+  padding: 8px 14px;
+  border-radius: 999px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: color 0.2s, background 0.2s;
+}
+
+.topnav-link:hover {
+  color: var(--text);
+  background: var(--field);
+}
+
+.topnav-link.active {
+  color: var(--text);
+  background: rgba(45, 255, 179, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(45, 255, 179, 0.3);
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.me-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  max-width: 200px;
+}
+
+.me-chip:hover {
+  border-color: var(--line-strong);
+}
+
+.me-chip-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+  font-weight: 800;
+  flex: none;
+}
+
+.me-chip-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-logout .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.net-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  background: #7c2d12;
+  color: #fff;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.net-banner button {
+  background: #fff;
+  color: #7c2d12;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+}
+
+/* ---------- game chip (switcher) ---------- */
+button.game-chip {
+  width: 100%;
+  text-align: left;
+  color: var(--text);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+button.game-chip:hover {
+  border-color: var(--game-accent, var(--green));
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.game-chip img.game-thumb {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: none;
+  flex: none;
+}
+
+.game-chip-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  flex: 1;
+  min-width: 0;
+}
+
+.game-chip-text .game-state {
+  font-size: 0.75rem;
+}
+
+.game-chip .icon {
+  color: var(--muted);
+}
+
+.identity .profile-link {
+  margin-top: 2px;
+  text-align: left;
+  font-size: 0.78rem;
+}
+
+/* ---------- match options (switches) ---------- */
+.match-options {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.switch-ui {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--line);
+  flex: none;
+  transition: background 0.2s;
+}
+
+.switch-ui::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.2s, background 0.2s;
+}
+
+.switch input:checked + .switch-ui {
+  background: rgba(45, 255, 179, 0.25);
+  border-color: var(--green);
+}
+
+.switch input:checked + .switch-ui::after {
+  transform: translateX(16px);
+  background: var(--green);
+}
+
+.switch input:focus-visible + .switch-ui {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+/* ---------- game bar (top of the match stage) ---------- */
+.game-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: min(100%, 560px);
+  margin: 0 auto;
+  padding: 8px 10px 8px 8px;
+  border-radius: var(--radius);
+  background: rgba(18, 27, 37, 0.7);
+  border: 1px solid var(--line);
+  flex: none;
+}
+
+.game-bar-cover {
+  width: 84px;
+  height: 47px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex: none;
+}
+
+.game-bar-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.game-bar-name {
+  font-weight: 800;
+}
+
+.game-bar-stats {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+
+.game-bar-switch,
+.btn-secondary {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.game-bar-switch:hover,
+.btn-secondary:hover {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.card-brand {
+  text-decoration: none;
+}
+
+.card-brand:hover {
+  color: var(--green);
+}
+
+/* ---------- richer empty states ---------- */
+.empty-cover {
+  width: 100%;
+  max-width: 340px;
+  border-radius: var(--radius);
+  margin-bottom: 18px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+}
+
+.empty-state.wide {
+  max-width: 520px;
+}
+
+.empty-state p {
+  line-height: 1.55;
+}
+
+.empty-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  text-align: left;
+}
+
+.empty-actions .btn-primary {
+  margin: 0 auto 4px;
+}
+
+.empty-action {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--field);
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: left;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.empty-action b {
+  color: var(--text);
+}
+
+.empty-action .icon {
+  width: 22px;
+  height: 22px;
+  color: var(--green);
+}
+
+.empty-action:hover {
+  border-color: rgba(45, 255, 179, 0.45);
+  background: rgba(45, 255, 179, 0.06);
+}
+
+/* ---------- squad extras ---------- */
+a.sm-avatar,
+a.sm-name {
+  color: inherit;
+  text-decoration: none;
+}
+
+a.sm-name:hover {
+  color: var(--green);
+}
+
+.invite-card {
+  margin-top: 24px;
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(46, 230, 255, 0.25);
+  background: linear-gradient(135deg, rgba(46, 230, 255, 0.08), rgba(45, 255, 179, 0.04));
+}
+
+.invite-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+}
+
+.invite-title .icon {
+  color: var(--cyan);
+}
+
+.invite-card p {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 6px 0 10px;
+  line-height: 1.5;
+}
+
+.invite-row {
+  display: flex;
+  gap: 8px;
+}
+
+.invite-row input {
+  font-size: 0.78rem;
+  padding: 7px 10px;
+}
+
+.invite-meta {
+  margin-top: 8px;
+  font-size: 0.75rem;
+  color: var(--faint);
+}
+
+.match-sub .hl {
+  color: #fff;
+}
+
+/* ---------- game picker ---------- */
+.game-modal {
+  position: relative;
+  width: min(980px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 30px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(22, 33, 45, 0.98), rgba(12, 18, 25, 0.98));
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  animation: modal-pop 0.35s cubic-bezier(0.2, 1.3, 0.4, 1);
+}
+
+.game-modal-title {
+  font-size: 1.6rem;
+  font-weight: 900;
+}
+
+.game-modal-sub {
+  color: var(--muted);
+  margin: 6px 0 20px;
+}
+
+.game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.game-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--panel-solid);
+  text-align: left;
+  color: var(--text);
+  transition: transform 0.15s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.game-card img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  display: block;
+}
+
+.game-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 14px 30px rgba(0, 0, 0, 0.45);
+}
+
+.game-card.current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.game-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px 12px;
+}
+
+.game-card-name {
+  font-weight: 800;
+}
+
+.game-card-meta {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.game-card-tag {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #06140e;
+  background: var(--green);
+}
+
+/* ---------- mobile tab bar ---------- */
+.tabbar {
+  display: none;
+}
+
+/* ---------- tablet: single column ---------- */
 @media (max-width: 1180px) {
   body {
     display: block;
@@ -1728,7 +2213,213 @@ input::placeholder {
 
   .match-area {
     order: -1;
-    padding-top: 30px;
+    padding-top: 10px;
+  }
+
+  .card-stack {
+    margin-top: 80px;
+  }
+}
+
+/* ---------- phones: one section at a time + bottom tabs ---------- */
+@media (max-width: 760px) {
+  .topbar {
+    padding: 12px 16px 0;
+  }
+
+  .topnav,
+  .me-chip-name,
+  .btn-logout span {
+    display: none;
+  }
+
+  .me-chip {
+    padding: 2px;
+  }
+
+  .app-container {
+    padding: 12px 12px calc(84px + env(safe-area-inset-bottom));
+    gap: 12px;
+  }
+
+  body[data-view="match"] .profile-panel,
+  body[data-view="match"] .squad-panel,
+  body[data-view="profile"] .match-area,
+  body[data-view="profile"] .squad-panel,
+  body[data-view="squad"] .match-area,
+  body[data-view="squad"] .profile-panel {
+    display: none;
+  }
+
+  .match-area {
+    padding: 0;
+  }
+
+  .game-bar {
+    width: 100%;
+  }
+
+  .game-bar-cover {
+    width: 64px;
+    height: 36px;
+  }
+
+  .card-stack {
+    margin-top: 72px;
+  }
+
+  .match-card {
+    padding: 70px 16px 16px;
+  }
+
+  .card-avatar {
+    top: -54px;
+    width: 112px;
+    height: 112px;
+  }
+
+  .card-avatar .avatar-face {
+    font-size: 2.4rem;
+  }
+
+  .match-percent {
+    width: 64px;
+    height: 64px;
+    top: 10px;
+    right: 10px;
+  }
+
+  .match-percent .pct-value {
+    font-size: 1rem;
+  }
+
+  .player-name {
+    font-size: 1.55rem;
+  }
+
+  .info-pill {
+    font-size: 0.76rem;
+    padding: 5px 9px;
+  }
+
+  /* keep Skip / Like reachable above the tab bar */
+  .actions {
+    position: sticky;
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    z-index: 5;
+    gap: 40px;
+    margin-top: 12px;
+    padding: 10px 0 6px;
+    background: linear-gradient(180deg, transparent, var(--bg) 35%);
+  }
+
+  .action-btn {
+    width: 66px;
+    height: 66px;
+  }
+
+  .action-wrap {
+    font-size: 0.72rem;
+    gap: 4px;
+  }
+
+  .field-row {
+    grid-template-columns: 112px 1fr;
+  }
+
+  .match-modal {
+    padding: 34px 18px 22px;
+  }
+
+  .match-title {
+    font-size: 1.8rem;
+  }
+
+  .modal-avatar {
+    width: 84px;
+    height: 84px;
+  }
+
+  .modal-avatar-img {
+    font-size: 1.8rem;
+  }
+
+  .connector {
+    height: 84px;
+  }
+
+  .modal-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .game-modal {
+    padding: 22px 16px;
+  }
+
+  .game-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .toast-container {
+    left: 12px;
+    right: 12px;
+    bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+
+  .toast {
+    max-width: none;
+  }
+
+  .tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2000;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    background: rgba(10, 15, 21, 0.94);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--line);
+  }
+
+  .tabbar button {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 6px 0;
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    border-radius: 12px;
+  }
+
+  .tabbar button .icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .tabbar button.active {
+    color: var(--green);
+    background: rgba(45, 255, 179, 0.08);
+  }
+
+  .tab-dot {
+    position: absolute;
+    top: 4px;
+    right: calc(50% - 18px);
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--red);
+    box-shadow: 0 0 8px var(--red);
   }
 }
 
