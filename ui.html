@@ -8,7 +8,7 @@
   <title>PlayMate | Find your squad</title>
   <link rel="icon" href="/static/img/logo.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
-  <link rel="stylesheet" href="/static/css/ui.css?v=14">
+  <link rel="stylesheet" href="/static/css/ui.css?v=16">
 </head>
 
 <body data-view="match">
@@ -51,6 +51,7 @@
     <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></symbol>
     <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><circle cx="17" cy="9" r="2.8" /><path d="M16 14.2a5 5 0 0 1 5.5 5.8" /></symbol>
     <symbol id="i-cards" viewBox="0 0 24 24"><rect x="7" y="3" width="13" height="16" rx="2" /><path d="M4 7v12a2 2 0 0 0 2 2h10" /></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></symbol>
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
     <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></symbol>
     <symbol id="i-logout" viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4" /></symbol>
@@ -76,6 +77,9 @@
         <span class="me-chip-avatar avatar-face" id="me-chip-avatar">?</span>
         <span class="me-chip-name" id="me-chip-name"></span>
       </a>
+      <a class="btn-logout icon-only" href="/settings" title="Settings" aria-label="Settings"><svg class="icon">
+          <use href="#i-gear" />
+        </svg></a>
       <button type="button" id="btn-logout" class="btn-logout" title="Log out"><svg class="icon">
           <use href="#i-logout" />
         </svg><span>Log out</span></button>
@@ -234,6 +238,14 @@
         </button>
       </div>
 
+      <div id="incoming-section" class="incoming-section" hidden>
+        <div class="pending-title incoming-title">
+          <span>💚 Liked you</span>
+          <span id="incoming-count" class="pending-count">0</span>
+        </div>
+        <div id="incoming-list" class="squad-list"></div>
+      </div>
+
       <div id="squad-list" class="squad-list">
         <div class="squad-empty">No squadmates yet. Start matching!</div>
       </div>
@@ -284,6 +296,28 @@
   </div>
 
   <!-- IT'S A MATCH -->
+  <div class="modal-overlay" id="report-modal" role="dialog" aria-modal="true" aria-labelledby="report-title">
+    <form class="report-dialog" id="report-form">
+      <h2 id="report-title">Report <span id="report-name"></span></h2>
+      <p class="report-sub">They'll also be blocked, so you stop seeing each other. Your report is saved for the
+        PlayMate team; they won't see that it was you.</p>
+      <div class="report-reasons" id="report-reasons" role="radiogroup" aria-label="What happened?">
+        <button type="button" role="radio" aria-checked="false" data-reason="Harassment or hate">Harassment or hate</button>
+        <button type="button" role="radio" aria-checked="false" data-reason="Cheating">Cheating</button>
+        <button type="button" role="radio" aria-checked="false" data-reason="Scam or spam">Scam or spam</button>
+        <button type="button" role="radio" aria-checked="false" data-reason="Inappropriate name or profile">Inappropriate name or profile</button>
+        <button type="button" role="radio" aria-checked="false" data-reason="Seems underage">Seems underage</button>
+        <button type="button" role="radio" aria-checked="false" data-reason="Other">Other</button>
+      </div>
+      <label class="report-label" for="report-details">Details <span class="field-hint">(optional)</span></label>
+      <textarea id="report-details" maxlength="250" rows="3" placeholder="What happened?"></textarea>
+      <div class="report-actions">
+        <button type="button" class="btn-secondary" id="report-cancel">Cancel</button>
+        <button type="submit" class="btn-danger" id="report-send" disabled>Report &amp; block</button>
+      </div>
+    </form>
+  </div>
+
   <div class="modal-overlay" id="match-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="match-modal">
       <div class="fireworks-container" aria-hidden="true">
@@ -345,7 +379,7 @@
 
   <!-- Supabase JS: keeps the login session fresh (access tokens expire after 1 hour) -->
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
-  <script src="/static/js/ui.js?v=17"></script>
+  <script src="/static/js/ui.js?v=20"></script>
 </body>
 
 </html>

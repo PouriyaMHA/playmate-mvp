@@ -97,6 +97,7 @@ async function clearAuthAndRedirect() {
     await Promise.race([supabaseClient?.auth.signOut(), new Promise(r => setTimeout(r, 1500))]);
   } catch { }
   clearAccountCache();
+  try { sessionStorage.clear(); } catch { }
   window.location.href = "/";
 }
 
@@ -152,11 +153,25 @@ const state = {
   loading: false,
 };
 
-const inFlight = { match: false, like: false, swipe: false, find: false, ping: false, pending: false, squadPromise: null, squadGame: null };
+const inFlight = { match: false, like: false, swipe: false, find: false, ping: false, pending: false, incoming: false, squadPromise: null, squadGame: null };
+
+/* players skipped this session, per game — "Show more" asks the server for the ones after them */
+function skippedKey(game) { return `pm_skipped:${game}`; }
+function getSkipped(game = state.game) {
+  try { return new Set(JSON.parse(sessionStorage.getItem(skippedKey(game)) || "[]")); } catch { return new Set(); }
+}
+function addSkipped(username, game = state.game) {
+  const s = getSkipped(game);
+  s.add(String(username).toLowerCase());
+  try { sessionStorage.setItem(skippedKey(game), JSON.stringify([...s].slice(-1000))); } catch { }
+}
+function clearSkipped(game = state.game) {
+  try { sessionStorage.removeItem(skippedKey(game)); } catch { }
+}
 const announced = new Set();   // squadmates we already showed a match modal for (per game: "game:user")
 let inviteLoaded = false;
 let realtimeTimer = null;
-let lastSquadSignature = "";
+let lastSquadSignature = null;   // null = "redraw on the next refresh" ("" is a real value: the empty squad)
 let lastSquadUsernames = new Set();
 let squadBootstrapped = false;
 
@@ -169,6 +184,9 @@ const els = {
   cardWrapper: $("card-wrapper"),
   squadList: $("squad-list"),
   pendingSection: $("pending-section"),
+  incomingSection: $("incoming-section"),
+  incomingList: $("incoming-list"),
+  incomingCount: $("incoming-count"),
   pendingList: $("pending-list"),
   pendingCount: $("pending-count"),
   modal: $("match-modal"),
@@ -417,13 +435,15 @@ async function selectGame(gameId) {
   state.matches = [];
   state.currentMatchIndex = 0;
   state.squad = [];
-  lastSquadSignature = "";
+  lastSquadSignature = null;
   lastSquadUsernames = new Set();
   squadBootstrapped = false;
   inFlight.squadPromise = null;
   state.loadFailed = false;
   renderSquadList();
   renderPendingList([]);
+  state.incomingLoaded = false;
+  renderIncomingList([]);
 
   let meta;
   try {
@@ -448,6 +468,7 @@ async function selectGame(gameId) {
     startRealtime();
     refreshSquad().catch(() => { });
     refreshPending();
+    refreshIncoming();
     // returning player: show matches straight away instead of making them press Find Matches
     findMatches({ keepTab: true });
   }
@@ -659,6 +680,9 @@ async function saveProfile() {
       discord_username: payload.discord_username,
     }));
     els.status.textContent = "";
+    if (!payload.in_game_username && !payload.discord_username) {
+      showToast(`Tip: add your ${state.meta?.ign_label || "in-game name"} or Discord so squadmates can reach you`, "info");
+    }
     renderGameChrome();
     renderLookingButton();
     startRealtime();
@@ -705,8 +729,17 @@ function renderIdleCenter() {
 }
 
 function renderNoMatches(total) {
-  const s = state.stats || {};
   const filtered = els.optSameLang.checked || els.optLookingOnly.checked;
+  const skipped = getSkipped().size;
+  if (state.hasMore) {
+    els.cardWrapper.innerHTML = `
+    <div class="empty-state">
+      <h3>That's this batch</h3>
+      <p>There are more ${esc(gameInfo(state.game)?.name || "")} players to see.</p>
+      <div style="margin-top:16px;"><button class="btn-primary" type="button" data-action="more">Show more players</button></div>
+    </div>`;
+    return;
+  }
   els.cardWrapper.innerHTML = `
     <div class="empty-state wide">
       <h3>${total === 0 ? "No new players right now" : "You're all caught up"}</h3>
@@ -719,7 +752,9 @@ function renderNoMatches(total) {
         <button class="empty-action" type="button" data-action="invite">${svgIcon("link")}<span><b>Invite friends</b><br>Copy your invite link</span></button>
         <button class="empty-action" type="button" data-action="switch">${svgIcon("gamepad")}<span><b>Add another game</b><br>More games, more squads</span></button>
       </div>
-      <div style="margin-top:16px;"><button class="btn-secondary" type="button" data-action="find">Scan again</button></div>
+      <div style="margin-top:16px;">${skipped
+      ? `<button class="btn-secondary" type="button" data-action="reset-skipped">See the ${skipped} player${skipped === 1 ? "" : "s"} you skipped again</button>`
+      : `<button class="btn-secondary" type="button" data-action="find">Scan again</button>`}</div>
     </div>`;
 }
 
@@ -734,8 +769,10 @@ async function findMatches({ keepTab = false } = {}) {
       game,
       same_language_only: els.optSameLang.checked,
       looking_only: els.optLookingOnly.checked,
+      exclude: [...getSkipped(game)],
     });
     if (state.game !== game) { setLoading(false); return; }   // switched game while loading
+    state.hasMore = !!data.has_more;
     state.matches = data.matches || [];
     state.currentMatchIndex = 0;
     setLoading(false);
@@ -794,6 +831,7 @@ function renderCard() {
     <a class="card-brand" href="/u/${encodeURIComponent(match.username)}" target="_blank" rel="noopener" title="View profile"><svg><use href="#i-logo"/></svg>View profile</a>
     <div class="player-name">${esc(name)}</div>
     ${match.looking_now ? '<div style="margin-top:8px;"><span class="looking-badge">● Looking for a squad now</span></div>' : ""}
+    ${match.likes_you ? '<div style="margin-top:8px;"><span class="likes-you-badge">💚 Already likes you</span></div>' : ""}
 
     <div class="pill-container">
       <span class="info-pill">${svgIcon("globe")}<b>${esc(regionLabel(p.region))}</b>${p.city || p.country ? ` · ${esc([p.city, p.country].filter(Boolean).join(", "))}` : ""}</span>
@@ -821,8 +859,8 @@ function renderCard() {
     Skip
   </div>
   <div class="action-wrap">
-    <button class="action-btn btn-like" type="button" data-action="like" aria-label="Add to squad" title="Add to squad (→)">${svgIcon("heart")}</button>
-    Add to squad
+    <button class="action-btn btn-like" type="button" data-action="like" aria-label="Like" title="Like (→) — you match when they like you too">${svgIcon("heart")}</button>
+    Like
   </div>
 </div>
 
@@ -843,9 +881,11 @@ function handleSkip() {
   const index = state.currentMatchIndex;
   card.classList.add("swipe-left");
   document.querySelectorAll(".action-btn").forEach(b => b.disabled = true);
+  const skippedUser = state.matches[index]?.username;
   setTimeout(() => {
     inFlight.swipe = false;
     if (state.game !== game || state.currentMatchIndex !== index) return;
+    if (skippedUser) addSkipped(skippedUser, game);
     state.currentMatchIndex++;
     renderCard();
   }, 280);
@@ -1002,10 +1042,13 @@ function renderSquadList() {
         <div class="sm-info">
           <a class="sm-name" href="/u/${encodeURIComponent(mate.username)}" target="_blank" rel="noopener">${esc(name)}</a>
           <span class="sm-status ${status}">${esc(statusText)}</span>
-          <span class="sm-ign">${esc(state.meta?.ign_label || "In-game")}: <b>${esc(ign || "—")}</b>${discord ? `<br>Discord: <b>${esc(discord)}</b>` : ""}</span>
+          ${ign || discord
+      ? `<span class="sm-ign">${ign ? `${esc(state.meta?.ign_label || "In-game")}: <b>${esc(ign)}</b>` : ""}${ign && discord ? "<br>" : ""}${discord ? `Discord: <b>${esc(discord)}</b>` : ""}</span>`
+      : `<span class="sm-ign muted">No contact added yet — check back soon</span>`}
           <div class="sm-actions">
             ${ign ? `<button type="button" class="sm-btn" data-copy="${esc(ign)}" data-copy-label="${esc(state.meta?.ign_label || "In-game name")}">Copy ${esc(state.meta?.ign_label || "name")}</button>` : ""}
             ${discord ? `<button type="button" class="sm-btn" data-copy="${esc(discord)}" data-copy-label="Discord">Copy Discord</button>` : ""}
+            <button type="button" class="sm-btn" data-unmatch-user="${esc(mate.username)}">Unmatch</button>
             <button type="button" class="sm-btn danger" data-block-user="${esc(mate.username)}">Block</button>
           </div>
         </div>
@@ -1014,7 +1057,11 @@ function renderSquadList() {
 }
 
 async function refreshPending() {
-  if (!state.game || !state.hasProfile || inFlight.pending) return;
+  if (!state.game || !state.hasProfile) return;
+  if (inFlight.pending) {
+    inFlight.pendingAgain = true;
+    return;
+  }
   inFlight.pending = true;
   const game = state.game;
   try {
@@ -1025,6 +1072,108 @@ async function refreshPending() {
     console.warn("Pending likes fetch failed", e);
   } finally {
     inFlight.pending = false;
+    if (inFlight.pendingAgain) {
+      inFlight.pendingAgain = false;
+      refreshPending();
+    }
+  }
+}
+
+async function refreshIncoming() {
+  if (!state.game || !state.hasProfile) return;
+  if (inFlight.incoming) {
+    inFlight.incomingAgain = true;   // something changed while a request was running: fetch again after it
+    return;
+  }
+  inFlight.incoming = true;
+  const game = state.game;
+  try {
+    const res = await authFetch(`${API_BASE}/incoming-likes?game=${encodeURIComponent(game)}`);
+    if (!res.ok || game !== state.game) return;
+    renderIncomingList((await res.json()).incoming || []);
+  } catch (e) {
+    console.warn("Incoming likes fetch failed", e);
+  } finally {
+    inFlight.incoming = false;
+    if (inFlight.incomingAgain) {
+      inFlight.incomingAgain = false;
+      refreshIncoming();
+    }
+  }
+}
+
+function renderIncomingList(list) {
+  const known = state.incomingNames || new Set();
+  state.incomingNames = new Set(list.map(p => (p.username || "").toLowerCase()));
+  els.incomingSection.hidden = !list.length;
+  els.incomingCount.textContent = String(list.length);
+  // new like while on the Match tab (phone): dot on the Squad tab
+  const hasNew = list.some(p => !known.has((p.username || "").toLowerCase()));
+  if (hasNew && state.incomingLoaded && window.innerWidth <= 760) $("tab-squad-dot").hidden = false;
+  state.incomingLoaded = true;
+  els.incomingList.innerHTML = list.map(p => {
+    const name = p.display_username || p.username || "";
+    const where = [p.city, p.country].filter(Boolean).join(", ");
+    return `
+      <div class="squad-member incoming">
+        <a class="sm-avatar avatar-face${avatarClass(p.avatar)}" href="/u/${encodeURIComponent(p.username)}" target="_blank" rel="noopener" style="--hue:${avatarHue(name)}">${avatarInner(name, p.avatar)}</a>
+        <div class="sm-info">
+          <a class="sm-name" href="/u/${encodeURIComponent(p.username)}" target="_blank" rel="noopener">${esc(name)}</a>
+          <span class="sm-status">${p.looking_now ? "Looking for a squad now" : "Likes you"}${where ? " · " + esc(where) : ""}</span>
+          <div class="sm-actions">
+            <button type="button" class="sm-btn primary" data-like-back="${esc(p.username)}">💚 Like back</button>
+            <button type="button" class="sm-btn" data-unmatch-user="${esc(p.username)}" data-unmatch-kind="decline">Pass</button>
+          </div>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+async function likeBack(username, btn) {
+  if (inFlight.like) return;
+  inFlight.like = true;
+  if (btn) btn.disabled = true;
+  const game = state.game;
+  const key = String(username).toLowerCase();
+  try {
+    const data = await postJson(`${API_BASE}/like`, { to_user: username, game });
+    if (state.game !== game) return;
+    // they're no longer a card to swipe
+    state.matches = state.matches.filter((m, i) => {
+      const drop = (m.username || "").toLowerCase() === key;
+      if (drop && i < state.currentMatchIndex) state.currentMatchIndex--;
+      return !drop;
+    });
+    if ($("active-card")) renderCard();
+    announced.add(`${game}:${key}`);
+    try { await refreshSquad({ silent: true }); } catch { }
+    const mate = (state.squad || []).find(m => (m.username || "").toLowerCase() === key);
+    if (data?.mutual && mate) triggerMatchModal(mate, { kind: "match" });
+    refreshIncoming();
+    refreshPending();
+  } catch (e) {
+    if (btn) btn.disabled = false;
+    if (!String(e.message).startsWith("AUTH")) showToast(e.message || "Could not like back", "error");
+  } finally {
+    inFlight.like = false;
+  }
+}
+
+async function unmatchPlayer(username, kind) {
+  const decline = kind === "decline";
+  if (!decline && !confirm(`Unmatch ${username}? You'll leave each other's squad in ${gameInfo(state.game)?.name || "this game"} and your contact info is hidden again.`)) return;
+  const game = state.game;
+  try {
+    await apiJson(`${API_BASE}/like?to_user=${encodeURIComponent(username)}&game=${encodeURIComponent(game)}`, { method: "DELETE" });
+    if (state.game !== game) return;
+    addSkipped(username, game);   // don't bring them straight back as a card
+    showToast(decline ? "Passed" : "Unmatched", "success");
+    lastSquadSignature = null;
+    refreshSquad().catch(() => { });
+    refreshIncoming();
+    refreshPending();
+  } catch (e) {
+    if (!String(e.message).startsWith("AUTH")) showToast(e.message || "Could not unmatch", "error");
   }
 }
 
@@ -1123,13 +1272,39 @@ async function toggleLooking() {
   }
 }
 
-async function blockPlayer(username, report) {
-  let reason = null;
-  if (report) {
-    reason = prompt(`Report ${username}: what happened? (they will also be blocked)`);
-    if (reason === null) return;
-  } else if (!confirm(`Block ${username}? You won't see each other anymore.`)) {
-    return;
+function openReport(username) {
+  const m = $("report-modal");
+  m.dataset.user = username;
+  $("report-name").textContent = username;
+  $("report-details").value = "";
+  m.querySelectorAll("[data-reason]").forEach(b => b.setAttribute("aria-checked", "false"));
+  $("report-send").disabled = true;
+  state.reportReturnFocus = document.activeElement;
+  m.classList.add("active");
+  m.querySelector("[data-reason]").focus();
+}
+
+function closeReport() {
+  $("report-modal").classList.remove("active");
+  state.reportReturnFocus?.focus?.();
+}
+
+async function sendReport(e) {
+  e.preventDefault();
+  const m = $("report-modal");
+  const reason = m.querySelector('[data-reason][aria-checked="true"]')?.dataset.reason;
+  if (!reason) return;
+  const details = $("report-details").value.trim();
+  $("report-send").disabled = true;
+  const ok = await blockPlayer(m.dataset.user, true, details ? `${reason}: ${details}` : reason);
+  $("report-send").disabled = false;
+  if (ok) closeReport();
+}
+
+async function blockPlayer(username, report, reason = null) {
+  if (!report && !confirm(`Block ${username}? You'll stop seeing each other in matches, likes and squads in every game. ` +
+    `Their public profile page stays visible to people who aren't logged in.`)) {
+    return false;
   }
   try {
     await postJson(`${API_BASE}/block`, { to_user: username, game: state.game, report: !!report, reason });
@@ -1142,11 +1317,14 @@ async function blockPlayer(username, report) {
       return !drop;
     });
     if (state.matches.length !== before) renderCard();
-    lastSquadSignature = "";
+    lastSquadSignature = null;
     refreshSquad().catch(() => { });
     refreshPending();
+    refreshIncoming();
+    return true;
   } catch (e) {
     if (!String(e.message).startsWith("AUTH")) showToast(e.message || "Could not block this player", "error");
+    return false;
   }
 }
 
@@ -1231,6 +1409,7 @@ async function realtimeTick() {
     hideNetError();
   } catch { }
   refreshPending();
+  refreshIncoming();
   renderLookingButton();
 }
 
@@ -1293,7 +1472,7 @@ function setupEventListeners() {
   $("btn-refresh-squad").addEventListener("click", async () => {
     const btn = $("btn-refresh-squad");
     btn.classList.add("spinning");
-    lastSquadSignature = "";
+    lastSquadSignature = null;
     try { await refreshSquad(); await refreshPending(); } catch { } finally { btn.classList.remove("spinning"); }
   });
   $("btn-copy-invite").addEventListener("click", () => copyText($("invite-link").value, "Invite link"));
@@ -1302,11 +1481,18 @@ function setupEventListeners() {
   // delegated actions (card buttons, empty states, copy, block, report)
   document.addEventListener("click", (e) => {
     if (!(e.target instanceof Element)) return;
-    const t = e.target.closest("[data-action],[data-copy],[data-block-user],[data-report-user]");
+    const t = e.target.closest("[data-action],[data-copy],[data-block-user],[data-report-user],[data-like-back],[data-unmatch-user],[data-reason]");
     if (!t) return;
     if (t.dataset.copy) return copyText(t.dataset.copy, t.dataset.copyLabel || "Text");
     if (t.dataset.blockUser) return blockPlayer(t.dataset.blockUser, false);
-    if (t.dataset.reportUser) return blockPlayer(t.dataset.reportUser, true);
+    if (t.dataset.reportUser) return openReport(t.dataset.reportUser);
+    if (t.dataset.likeBack) return likeBack(t.dataset.likeBack, t);
+    if (t.dataset.unmatchUser) return unmatchPlayer(t.dataset.unmatchUser, t.dataset.unmatchKind);
+    if (t.dataset.reason) {
+      t.closest("[role=radiogroup]").querySelectorAll("[data-reason]").forEach(b => b.setAttribute("aria-checked", String(b === t)));
+      $("report-send").disabled = false;
+      return;
+    }
     switch (t.dataset.action) {
       case "skip": return handleSkip();
       case "like": return handleLike();
@@ -1319,6 +1505,10 @@ function setupEventListeners() {
         return selectGame(g).then(() => { els.btnFind.disabled = false; });
       }
       case "looking": return toggleLooking();
+      case "more": return findMatches();
+      case "reset-skipped":
+        clearSkipped();
+        return findMatches();
       case "clear-filters":
         els.optSameLang.checked = false;
         els.optLookingOnly.checked = false;
@@ -1334,15 +1524,20 @@ function setupEventListeners() {
   document.addEventListener("keydown", (e) => {
     if (e.target instanceof Element && e.target.closest("input, select, textarea")) return;
     if (e.key === "Escape") {
+      if ($("report-modal").classList.contains("active")) return closeReport();
       if (els.modal.classList.contains("active")) return closeModal();
       if (els.gameModal.classList.contains("active")) return closeGamePicker();
     }
-    if (els.modal.classList.contains("active") || els.gameModal.classList.contains("active") || !$("active-card")) return;
+    if (els.modal.classList.contains("active") || els.gameModal.classList.contains("active") ||
+        $("report-modal").classList.contains("active") || !$("active-card")) return;
     if (e.key === "ArrowLeft") handleSkip();
     if (e.key === "ArrowRight") handleLike();
   });
 
   document.querySelectorAll(".tabbar button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
+  $("report-form").addEventListener("submit", sendReport);
+  $("report-cancel").addEventListener("click", closeReport);
+  $("report-modal").addEventListener("click", (e) => { if (e.target === $("report-modal")) closeReport(); });
 
   document.addEventListener("visibilitychange", () => {
     // slower polling in the background, normal speed when visible

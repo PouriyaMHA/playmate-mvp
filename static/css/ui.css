@@ -2501,3 +2501,135 @@ input.field-invalid {
   flex: none;
   margin-top: 1px;
 }
+
+/* ---------- "Liked you" (incoming likes) ---------- */
+.incoming-section {
+  margin-bottom: 14px;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(45, 255, 179, 0.35);
+  background: rgba(45, 255, 179, 0.05);
+}
+
+.incoming-title {
+  color: var(--green);
+}
+
+.sm-btn.primary {
+  color: #06140e;
+  background: var(--grad-cta, var(--green));
+  border-color: transparent;
+  font-weight: 800;
+}
+
+.sm-ign.muted {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.likes-you-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--green);
+  background: rgba(45, 255, 179, 0.1);
+  border: 1px solid rgba(45, 255, 179, 0.4);
+}
+
+.btn-logout.icon-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 10px;
+}
+
+/* ---------- report dialog ---------- */
+.report-dialog {
+  width: min(460px, 100%);
+  padding: 26px 24px 22px;
+  border-radius: 20px;
+  background: var(--panel-solid);
+  border: 1px solid var(--line);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+}
+
+.report-dialog h2 {
+  font-size: 1.25rem;
+}
+
+.report-sub {
+  margin: 8px 0 14px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.report-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.report-reasons button {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.report-reasons button[aria-checked="true"] {
+  border-color: var(--red);
+  color: #fff;
+  background: rgba(255, 77, 109, 0.18);
+}
+
+.report-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.report-dialog textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm, 12px);
+  background: var(--field);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+.report-dialog textarea:focus {
+  outline: none;
+  border-color: var(--red);
+}
+
+.report-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.btn-danger {
+  padding: 10px 18px;
+  border-radius: 12px;
+  border: none;
+  background: var(--red);
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.btn-danger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#070b10">
+  <meta name="robots" content="noindex">
+  <title>PlayMate | Settings</title>
+  <link rel="icon" href="/static/img/logo.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
+  <link rel="stylesheet" href="/static/css/ui.css?v=16">
+  <link rel="stylesheet" href="/static/css/profile.css?v=4">
+  <link rel="stylesheet" href="/static/css/settings.css?v=2">
+</head>
+
+<body class="profile-page">
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="brandGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#2dffb3" />
+        <stop offset="1" stop-color="#2ee6ff" />
+      </linearGradient>
+    </defs>
+    <symbol id="i-logo" viewBox="0 0 32 32">
+      <path d="M9 27V7.5A2.5 2.5 0 0 1 11.5 5H18a7 7 0 0 1 0 14h-5" fill="none" stroke="url(#brandGrad)" stroke-width="3.2"
+        stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M14 11h3.5a2 2 0 0 1 0 4H14" fill="none" stroke="url(#brandGrad)" stroke-width="2.6" stroke-linecap="round" />
+      <circle cx="9" cy="27" r="2.4" fill="#2dffb3" />
+    </symbol>
+  </svg>
+
+  <header class="topbar">
+    <a class="brand" href="/app"><svg class="brand-mark">
+        <use href="#i-logo" />
+      </svg><span>PlayMate</span></a>
+    <nav class="topnav" aria-label="Main">
+      <a class="topnav-link" href="/app">Find squad</a>
+      <a class="topnav-link" id="nav-my-profile" href="/app">My profile</a>
+      <a class="topnav-link active" href="/settings" aria-current="page">Settings</a>
+    </nav>
+    <div class="topbar-right">
+      <a class="btn-logout" href="/app">Back to app</a>
+    </div>
+  </header>
+
+  <main class="settings-wrap">
+    <h1 class="settings-title">Settings</h1>
+
+    <section class="settings-card" aria-labelledby="acc-h">
+      <h2 id="acc-h">Account</h2>
+      <div class="acc-row" id="acc-summary"><span class="muted">Loading…</span></div>
+      <div class="settings-actions">
+        <a class="btn-secondary" id="acc-profile-link" href="/app" hidden>View my public profile</a>
+        <button type="button" class="btn-secondary" id="btn-logout">Log out</button>
+      </div>
+    </section>
+
+    <section class="settings-card" aria-labelledby="priv-h">
+      <h2 id="priv-h">What other players see</h2>
+      <ul class="settings-list">
+        <li><b>Public</b> (anyone with your link): username, avatar, banner, bio, links, and for each game your region,
+          country, city if you set one, platform, languages, mic, game details and when you were last active.</li>
+        <li><b>Only squadmates</b> (after you both like each other): your in-game name and Discord.</li>
+        <li><b>Never shown</b>: your email address.</li>
+      </ul>
+    </section>
+
+    <section class="settings-card" aria-labelledby="blk-h">
+      <h2 id="blk-h">Blocked players</h2>
+      <p class="muted">Blocked players don't see you in matches, likes or squads in any game, and you don't see them.
+        When you're logged in, their profile pages are hidden from you too.</p>
+      <div id="blocked-list" class="blocked-list"><span class="muted">Loading…</span></div>
+    </section>
+
+    <section class="settings-card danger-zone" aria-labelledby="del-h">
+      <h2 id="del-h">Delete account</h2>
+      <p>Deletes your PlayMate account and everything in it: all game profiles, likes, squads, blocks and your login.
+        This can't be undone.</p>
+      <button type="button" class="btn-danger-outline" id="delete-start">Delete my account</button>
+      <div class="delete-confirm" id="delete-confirm" hidden>
+        <label for="delete-input">Type <b>DELETE</b> to confirm</label>
+        <div class="delete-row">
+          <input type="text" id="delete-input" autocomplete="off" spellcheck="false" placeholder="DELETE">
+          <button type="button" class="btn-danger" id="delete-go" disabled>Delete forever</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
+
+  <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
+  <script src="/static/js/settings.js?v=1"></script>
+</body>
+
+</html>

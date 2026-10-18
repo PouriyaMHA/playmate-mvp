@@ -245,37 +245,7 @@ function openEdit() {
   $("edit-modal").classList.add("active");
 }
 
-function closeEdit() {
-  $("edit-modal").classList.remove("active");
-  $("delete-confirm").hidden = true;
-  $("delete-start").hidden = false;
-  $("delete-input").value = "";
-  $("delete-go").disabled = true;
-}
-
-async function deleteAccount() {
-  if ($("delete-input").value.trim().toUpperCase() !== "DELETE") return;
-  const btn = $("delete-go");
-  btn.disabled = true;
-  btn.textContent = "Deleting…";
-  try {
-    const res = await authFetch(`${API}/account`, {
-      method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: "DELETE" }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Could not delete your account");
-    // forget everything about this account on this device
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const k = localStorage.key(i);
-      if (k && (k.startsWith("pm_") || k.startsWith("playmate_") || k.startsWith("sb-"))) localStorage.removeItem(k);
-    }
-    location.href = "/?deleted=1";
-  } catch (e) {
-    toast(e.message, "error");
-    btn.disabled = false;
-    btn.textContent = "Delete forever";
-  }
-}
+function closeEdit() { $("edit-modal").classList.remove("active"); }
 
 async function saveEdit() {
   const body = {
@@ -339,21 +309,11 @@ document.addEventListener("click", async (e) => {
   if (bn) { $("banner-pick").querySelectorAll("button").forEach(b => b.classList.toggle("active", b === bn)); return; }
   if (t.closest("#edit-close") || t.closest("#edit-cancel") || t === $("edit-modal")) return closeEdit();
   if (t.closest("#edit-save")) return saveEdit();
-  if (t.closest("#delete-start")) {
-    $("delete-start").hidden = true;
-    $("delete-confirm").hidden = false;
-    $("delete-input").focus();
-    return;
-  }
-  if (t.closest("#delete-go")) return deleteAccount();
   const rm = t.closest("[data-remove-game]");
   if (rm && page.isOwner) return removeGame(rm.dataset.removeGame, rm.dataset.gameName);
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeEdit(); });
 $("edit-bio").addEventListener("input", () => { $("bio-count").textContent = `${$("edit-bio").value.length}/280`; });
-$("delete-input").addEventListener("input", () => {
-  $("delete-go").disabled = $("delete-input").value.trim().toUpperCase() !== "DELETE";
-});
 
 /* ---------------- init ---------------- */
 (async function init() {
@@ -377,10 +337,12 @@ $("delete-input").addEventListener("input", () => {
     } catch { }
   }
   if (!page.account?.username) $("nav-my-profile").style.display = "none";
+  if (page.account) $("nav-settings").hidden = false;
   if (page.isOwner) $("nav-my-profile").classList.add("active");
 
   try {
-    const res = await fetch(`${API}/public-profile?username=${encodeURIComponent(username)}`);
+    const url = `${API}/public-profile?username=${encodeURIComponent(username)}`;
+    const res = token() ? await authFetch(url) : await fetch(url);
     if (res.status === 404) {
       $("pp-main").innerHTML = `<div class="pp-loading"><h2>Player not found</h2><p>No PlayMate player called “${esc(username)}”.</p><p><a class="profile-link" href="/app">Find a squad →</a></p></div>`;
       return;

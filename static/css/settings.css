@@ -1,0 +1,125 @@
+/* PlayMate — /settings (builds on ui.css tokens and profile.css danger-zone/buttons) */
+.settings-wrap {
+  max-width: 720px;
+  margin: 26px auto 80px;
+  padding: 0 16px;
+}
+
+.settings-title {
+  font-size: 1.8rem;
+  margin-bottom: 16px;
+}
+
+.settings-card {
+  margin-bottom: 16px;
+  padding: 20px 20px 18px;
+  border-radius: 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.settings-card h2 {
+  font-size: 1.1rem;
+  margin-bottom: 10px;
+}
+
+.settings-card.danger-zone {
+  margin-top: 0;
+  border-color: rgba(255, 77, 109, 0.35);
+}
+
+.settings-card.danger-zone h2 {
+  color: var(--red);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 0.82rem;
+}
+
+.acc-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.acc-row b {
+  display: block;
+  font-size: 1.05rem;
+}
+
+.acc-row .muted {
+  font-size: 0.86rem;
+}
+
+.set-face {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.settings-actions .btn-secondary {
+  text-decoration: none;
+}
+
+.settings-list {
+  padding-left: 18px;
+  color: var(--muted);
+  line-height: 1.6;
+  font-size: 0.9rem;
+}
+
+.settings-list b {
+  color: var(--text);
+}
+
+.blocked-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.blocked-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.blocked-row .set-face {
+  width: 38px;
+  height: 38px;
+  font-size: 0.9rem;
+}
+
+.blocked-row b {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-secondary.small {
+  padding: 6px 12px;
+  width: auto;
+}
+
+.settings-card > p {
+  font-size: 0.9rem;
+  line-height: 1.55;
+}

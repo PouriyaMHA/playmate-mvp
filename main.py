@@ -313,6 +313,16 @@ def badges_for(user, mutual_count: int) -> list[dict]:
 # =========================================================
 # auth
 # =========================================================
+def optional_user_id(authorization: str | None = Header(default=None)) -> str | None:
+    """The viewer's user_id when a valid token is sent, else None (public pages work without login)."""
+    if not authorization:
+        return None
+    try:
+        return get_current_user_id(authorization)
+    except HTTPException:
+        return None
+
+
 def get_current_user_id(authorization: str | None = Header(default=None)) -> str:
     """Reads the Supabase access token from the Authorization header and returns user_id (sub)."""
     if not authorization:
@@ -365,6 +375,11 @@ def profile_page(username: str | None = None):
     return page("profile.html")
 
 
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page():
+    return page("settings.html")
+
+
 @app.get("/terms", response_class=HTMLResponse)
 @app.get("/privacy", response_class=HTMLResponse)
 def legal_page():
@@ -373,7 +388,7 @@ def legal_page():
 
 @app.get("/robots.txt", response_class=PlainTextResponse)
 def robots():
-    return "User-agent: *\nAllow: /\nDisallow: /app\nDisallow: /api/\n"
+    return "User-agent: *\nAllow: /\nDisallow: /app\nDisallow: /settings\nDisallow: /api/\n"
 
 
 @app.exception_handler(StarletteHTTPException)
@@ -613,6 +628,7 @@ class MatchRequest(BaseModel):
     game: str | None = DEFAULT_GAME
     same_language_only: bool = False
     looking_only: bool = False
+    exclude: list[str] | None = None   # usernames the player skipped this session ("Show more" pages past them)
 
 
 FLEX_VALUES = {"Fill", "Any"}
@@ -672,6 +688,11 @@ def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)
 
     liked = supabase.table("likes").select("to_user_id").eq("from_user_id", user_id).eq("game", game).execute()
     hidden = {str(r["to_user_id"]) for r in (liked.data or []) if r.get("to_user_id")} | get_blocked_ids(user_id) | {user_id}
+    skipped = {str(u).strip().lower() for u in (req.exclude or [])[:1000] if u}
+    likes_me = {
+        str(r["from_user_id"]) for r in
+        (supabase.table("likes").select("from_user_id").eq("to_user_id", user_id).eq("game", game).execute().data or [])
+    }
 
     near = (
         supabase.table("profiles").select("*").eq("game", game).eq("region", me.get("region") or "")
@@ -687,6 +708,8 @@ def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)
     for p in players:
         if not p.get("user_id") or str(p["user_id"]) in hidden:
             continue
+        if (p.get("username") or "").lower() in skipped:
+            continue
         # no crossplay between our platforms / different Minecraft edition / different LoL server
         if not can_play_together(game, me.get("platform"), p.get("platform"), my_fields, profile_fields(p)):
             continue
@@ -696,6 +719,9 @@ def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)
         if req.looking_only and not view["looking_now"]:
             continue
         score, reasons = score_pair(me, p, game)
+        likes_you = str(p["user_id"]) in likes_me
+        if likes_you:
+            reasons.insert(0, "Already likes you — like back to match")
         if view["looking_now"]:
             reasons.insert(0, "Looking for a squad right now")
         matches.append({
@@ -703,12 +729,14 @@ def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)
             "match_percent": score,
             "reasons": reasons,
             "looking_now": view["looking_now"],
+            "likes_you": likes_you,
             "profile": view,
         })
 
-    # players looking right now first, then by score
-    matches.sort(key=lambda m: (m["looking_now"], m["match_percent"]), reverse=True)
-    return {"target_user": me.get("username"), "game": game, "total": len(matches), "matches": matches[:20]}
+    # players looking right now first, then people who already like me, then by score
+    matches.sort(key=lambda m: (m["looking_now"], m["likes_you"], m["match_percent"]), reverse=True)
+    return {"target_user": me.get("username"), "game": game, "total": len(matches), "has_more": len(matches) > 20,
+            "matches": matches[:20]}
 
 
 # =========================================================
@@ -740,20 +768,64 @@ def add_like(like: LikeRequest, user_id: str = Depends(get_current_user_id)):
         raise HTTPException(status_code=403, detail="You can't like this player")
 
     payload = {"from_user": from_user, "to_user": to_user, "from_user_id": user_id, "to_user_id": to_user_id, "game": game}
+    exists = (
+        supabase.table("likes").select("id")
+        .eq("from_user_id", user_id).eq("to_user_id", to_user_id).eq("game", game).limit(1).execute()
+    )
+    already = bool(exists.data)
+    if not already:
+        try:
+            supabase.table("likes").insert(payload).execute()
+        except Exception as e:
+            if "duplicate key" not in str(e):   # a double click that raced us is fine
+                raise
+            already = True
+    # checked after our like is stored, so two people liking each other at the same moment both see "mutual"
     reverse = (
         supabase.table("likes").select("id")
         .eq("from_user_id", to_user_id).eq("to_user_id", user_id).eq("game", game).limit(1).execute()
     )
     mutual = bool(reverse.data)
-    exists = (
-        supabase.table("likes").select("id")
-        .eq("from_user_id", user_id).eq("to_user_id", to_user_id).eq("game", game).limit(1).execute()
-    )
-    if exists.data:
-        return {"status": "already_exists", "mutual": mutual, "data": payload}
+    status = "already_exists" if already else ("mutual" if mutual else "liked")
+    return {"status": status, "mutual": mutual, "data": payload}
 
-    supabase.table("likes").insert(payload).execute()
-    return {"status": "mutual" if mutual else "liked", "mutual": mutual, "data": payload}
+
+@app.delete(f"{API_PREFIX}/like")
+def unmatch(to_user: str, game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user_id)):
+    """Unmatch / take back a like in one game: removes the likes in both directions between us."""
+    game = norm_game(game)
+    other = supabase.table("profiles").select("user_id").eq("username", (to_user or "").strip().lower()).eq("game", game).limit(1).execute()
+    if not other.data:
+        raise HTTPException(status_code=404, detail="Player not found")
+    other_id = str(other.data[0]["user_id"])
+    supabase.table("likes").delete().eq("from_user_id", user_id).eq("to_user_id", other_id).eq("game", game).execute()
+    supabase.table("likes").delete().eq("from_user_id", other_id).eq("to_user_id", user_id).eq("game", game).execute()
+    return {"status": "unmatched", "game": game}
+
+
+@app.get(f"{API_PREFIX}/incoming-likes")
+def incoming_likes(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user_id)):
+    """People who liked me in this game and I haven't answered yet (no contact info: not mutual)."""
+    game = norm_game(game)
+    require_profile(user_id, game, "username")
+    in_res = supabase.table("likes").select("from_user_id,created_at").eq("to_user_id", user_id).eq("game", game).execute()
+    liked_me_at = {str(r["from_user_id"]): r.get("created_at") for r in (in_res.data or []) if r.get("from_user_id")}
+    if not liked_me_at:
+        return {"game": game, "incoming": []}
+    out_res = supabase.table("likes").select("to_user_id").eq("from_user_id", user_id).eq("game", game).execute()
+    answered = {str(r["to_user_id"]) for r in (out_res.data or [])}
+    blocked = get_blocked_ids(user_id)
+    ids = [uid for uid in liked_me_at if uid not in answered and uid not in blocked]
+    if not ids:
+        return {"game": game, "incoming": []}
+    rows = supabase.table("profiles").select("*").eq("game", game).in_("user_id", ids).execute().data or []
+    incoming = []
+    for p in rows:
+        v = public_view(p)
+        v["liked_at"] = liked_me_at.get(str(p["user_id"]))
+        incoming.append(v)
+    incoming.sort(key=lambda x: x.get("liked_at") or "", reverse=True)
+    return {"game": game, "incoming": incoming}
 
 
 @app.get(f"{API_PREFIX}/my-squad-details")
@@ -839,6 +911,44 @@ def block_player(req: BlockRequest, user_id: str = Depends(get_current_user_id))
         on_conflict="blocker_id,blocked_id,game",
     ).execute()
     return {"status": "blocked", "reported": reported}
+
+
+@app.get(f"{API_PREFIX}/blocks")
+def my_blocks(user_id: str = Depends(get_current_user_id)):
+    """Players I blocked (one entry per player, whatever game the block was made in)."""
+    rows = supabase.table("blocks").select("blocked_id,reported,created_at").eq("blocker_id", user_id).execute().data or []
+    by_user = {}
+    for r in rows:
+        b = by_user.setdefault(str(r["blocked_id"]), {"reported": False, "blocked_at": r.get("created_at")})
+        b["reported"] = b["reported"] or bool(r.get("reported"))
+    if not by_user:
+        return {"blocked": []}
+    profiles = supabase.table("profiles").select("user_id,username,display_username,game_meta").in_("user_id", list(by_user)).execute().data or []
+    names = {}
+    for p in profiles:
+        names.setdefault(str(p["user_id"]), p)
+    out = []
+    for uid, b in by_user.items():
+        p = names.get(uid)
+        if not p:
+            continue   # that player deleted their account
+        out.append({"username": p.get("username"), "display_username": p.get("display_username") or p.get("username"),
+                    "avatar": profile_avatar(p), "reported": b["reported"], "blocked_at": b["blocked_at"]})
+    out.sort(key=lambda x: x.get("blocked_at") or "", reverse=True)
+    return {"blocked": out}
+
+
+@app.delete(f"{API_PREFIX}/block")
+def unblock(to_user: str, user_id: str = Depends(get_current_user_id)):
+    """Unblock a player everywhere. Players you reported stay blocked (the report must stay on record)."""
+    other_id = user_id_for_username(to_user)
+    if not other_id:
+        raise HTTPException(status_code=404, detail="Player not found")
+    rows = supabase.table("blocks").select("reported").eq("blocker_id", user_id).eq("blocked_id", other_id).execute().data or []
+    if any(r.get("reported") for r in rows):
+        raise HTTPException(status_code=409, detail="You reported this player, so they stay blocked.")
+    supabase.table("blocks").delete().eq("blocker_id", user_id).eq("blocked_id", other_id).execute()
+    return {"status": "unblocked"}
 
 
 # =========================================================
@@ -966,10 +1076,12 @@ def set_referral(req: ReferralRequest, user_id: str = Depends(get_current_user_i
 # public profile page data (no in-game names / discord)
 # =========================================================
 @app.get(f"{API_PREFIX}/public-profile")
-def public_profile(username: str):
+def public_profile(username: str, viewer_id: str | None = Depends(optional_user_id)):
     uid = user_id_for_username(username)
     if not uid:
         raise HTTPException(status_code=404, detail="Player not found")
+    if viewer_id and viewer_id != uid and viewer_id in get_blocked_ids(uid):
+        raise HTTPException(status_code=404, detail="Player not found")   # blocked either way
     user = auth_user(uid)
     rows = supabase.table("profiles").select(PUBLIC_PROFILE_FIELDS).eq("user_id", uid).execute().data or []
     blocked = get_blocked_ids(uid)

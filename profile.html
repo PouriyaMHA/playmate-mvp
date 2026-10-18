@@ -8,8 +8,8 @@
   <title>PlayMate | Player profile</title>
   <link rel="icon" href="/static/img/logo.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
-  <link rel="stylesheet" href="/static/css/ui.css?v=14">
-  <link rel="stylesheet" href="/static/css/profile.css?v=4">
+  <link rel="stylesheet" href="/static/css/ui.css?v=16">
+  <link rel="stylesheet" href="/static/css/profile.css?v=5">
 </head>
 
 <body class="profile-page">
@@ -51,6 +51,7 @@
     <nav class="topnav" aria-label="Main">
       <a class="topnav-link" href="/app">Find squad</a>
       <a class="topnav-link" id="nav-my-profile" href="#">My profile</a>
+      <a class="topnav-link" id="nav-settings" href="/settings" hidden>Settings</a>
     </nav>
     <div class="topbar-right">
       <a class="btn-logout" id="nav-cta" href="/">Join PlayMate</a>
@@ -109,26 +110,14 @@
         <button type="button" class="btn-primary" id="edit-save">Save profile</button>
       </div>
 
-      <section class="edit-section danger-zone">
-        <h3>Danger zone</h3>
-        <p>Delete your PlayMate account and everything in it: all game profiles, likes, squads and your login.
-          This can't be undone.</p>
-        <button type="button" class="btn-danger-outline" id="delete-start">Delete my account</button>
-        <div class="delete-confirm" id="delete-confirm" hidden>
-          <label for="delete-input">Type <b>DELETE</b> to confirm</label>
-          <div class="delete-row">
-            <input type="text" id="delete-input" autocomplete="off" spellcheck="false" placeholder="DELETE">
-            <button type="button" class="btn-danger" id="delete-go" disabled>Delete forever</button>
-          </div>
-        </div>
-      </section>
+      <p class="edit-settings-link"><a href="/settings">Account settings →</a> log out, blocked players, delete account</p>
     </div>
   </div>
 
   <div class="toast-container" id="toast-container"></div>
 
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
-  <script src="/static/js/profile.js?v=7"></script>
+  <script src="/static/js/profile.js?v=8"></script>
 </body>
 
 </html>

@@ -60,9 +60,14 @@ M03 double Skip; M04 Find Matches locked while saving; M01 platform required ser
 Enhanced/Legacy; M07 JWT must have aud=authenticated, exp, UUID sub; M09 Auth outages return 503 instead of "not found"
 (avatar no longer wiped); M11 a later plain block keeps an earlier report; M12 password recovery can't be hijacked by the
 Sign up tab; M15 CSP/nosniff/frame/HSTS headers, API `no-store`, SRI on supabase-js; L06 test_env.py no longer prints
-keys; L07 avatar in LIKE SENT modal. Still open from the review — phase 2: incoming likes ("who liked you"),
-pagination, standalone Settings (delete account without a game profile, unblock, unmatch), honest Block copy, "Like"
-instead of "Add to squad", report as a form. Phase 3: accounts table for usernames (H03), pinned deps + automated
+keys; L07 avatar in LIKE SENT modal. Phase 2 (same day): "Liked you" list with Like back / Pass (`/api/incoming-likes`),
+people who already like you are flagged and sorted first in the deck; skipped players are remembered per tab and
+"Show more" pages past them (`exclude`, `has_more`); Unmatch (`DELETE /api/like`, removes both likes); standalone
+`/settings` (account, log out, what's public, blocked players + Unblock via `GET /api/blocks` / `DELETE /api/block` —
+reported players stay blocked, delete account); a logged-in blocked viewer gets 404 on the other's public profile;
+honest Block copy; "Like" instead of "Add to squad"; Report is an in-app form with reasons; squad shows "No contact
+added yet" and saving without IGN/Discord nudges; likes are idempotent and "mutual" is decided after the insert; fixed
+the squad list not redrawing after the last squadmate was removed (empty-signature bug). Phase 3: accounts table for usernames (H03), pinned deps + automated
 tests + schema in repo (M14), fewer Supabase round trips (M08), accessibility (M13).
 
 ## Roadmap
