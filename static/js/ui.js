@@ -181,6 +181,7 @@ const state = {
   loading: false,
   gen: 0,    // bumped on every game selection (and account change): answers for an older one are dropped
   deck: 0,   // bumped on every new match list: swipe timers for an older list do nothing
+  gameReady: false,   // the selected game's form + profile are loaded (no saving a half-loaded/old form)
 };
 const isCurrent = (gen) => gen === state.gen;
 
@@ -479,6 +480,7 @@ async function selectGame(gameId) {
   state.deck++;   // old swipe/like timers must not move the new game's list
   state.game = gameId;
   state.hasProfile = false;
+  state.gameReady = false;
   state.profile = {};
   els.btnFind.disabled = true;   // no saving a half-loaded form; re-enabled once this game is ready
   localStorage.setItem("pm_game", gameId);
@@ -515,6 +517,7 @@ async function selectGame(gameId) {
   await loadProfileForGame(gen);
   if (!isCurrent(gen)) return;
   if (state.loadFailed) return;   // keep the "Couldn't load — Try again" message on screen
+  state.gameReady = true;
   els.btnFind.disabled = false;
   renderGameChrome();
   refreshStats();
@@ -716,6 +719,7 @@ document.addEventListener("click", (e) => {
 });
 
 async function saveProfile() {
+  if (!state.gameReady && !state.loadFailed) throw new Error("STALE");   // e.g. Enter pressed while a game loads
   if (state.loadFailed) {
     showToast("Your profile didn't load — tap Try again first", "error");
     throw new Error("Validation");
@@ -1003,7 +1007,7 @@ async function handleLike() {
     refreshPending();
   } catch (e) {
     liked = false;
-    if (!String(e.message).startsWith("AUTH")) showToast(e.message || "Could not send like", "error");
+    if (isCurrent(gen) && !String(e.message).startsWith("AUTH")) showToast(e.message || "Could not send like", "error");
   } finally {
     setTimeout(() => {
       if (state.deck !== deck || state.matches[state.currentMatchIndex]?.username !== matchUser.username) {
@@ -1223,7 +1227,7 @@ async function likeBack(username, btn) {
     refreshPending();
   } catch (e) {
     if (btn) btn.disabled = false;
-    if (!String(e.message).startsWith("AUTH")) showToast(e.message || "Could not like back", "error");
+    if (isCurrent(gen) && !String(e.message).startsWith("AUTH")) showToast(e.message || "Could not like back", "error");
   } finally {
     inFlight.like = false;
   }
@@ -1244,7 +1248,7 @@ async function unmatchPlayer(username, kind) {
     refreshIncoming();
     refreshPending();
   } catch (e) {
-    if (!String(e.message).startsWith("AUTH")) showToast(e.message || "Could not unmatch", "error");
+    if (isCurrent(gen) && !String(e.message).startsWith("AUTH")) showToast(e.message || "Could not unmatch", "error");
   }
 }
 
@@ -1333,8 +1337,8 @@ async function toggleLooking() {
   if (turningOn && "Notification" in window && Notification.permission === "default") {
     Notification.requestPermission().catch(() => { });
   }
+  const game = state.game, gen = state.gen;
   try {
-    const game = state.game, gen = state.gen;
     const d = await postJson(`${API_BASE}/looking`, { minutes: turningOn ? 60 : 0, game });
     if (!isCurrent(gen)) return;
     state.profile.looking_until = d.looking_until;
@@ -1342,7 +1346,7 @@ async function toggleLooking() {
     refreshStats();
     showToast(turningOn ? "You're shown as looking for 1 hour" : "Stopped looking", "success");
   } catch (e) {
-    if (!String(e.message).startsWith("AUTH")) showToast(e.message || "Could not update your status", "error");
+    if (isCurrent(gen) && !String(e.message).startsWith("AUTH")) showToast(e.message || "Could not update your status", "error");
   }
 }
 
@@ -1504,13 +1508,16 @@ function setupEventListeners() {
     e?.preventDefault();
     if (inFlight.find) return;
     inFlight.find = true;
+    const gen = state.gen;
     els.btnFind.disabled = true;
     try {
       try { await saveProfile(); } catch { return; }
+      if (!isCurrent(gen)) return;
       await findMatches();
     } finally {
       inFlight.find = false;
-      els.btnFind.disabled = !!state.loadFailed;
+      // another game was picked meanwhile: its own loading decides when Find is usable again
+      if (isCurrent(gen)) els.btnFind.disabled = !state.gameReady;
     }
   };
   els.btnFind.addEventListener("click", runFind);
@@ -1549,7 +1556,7 @@ function setupEventListeners() {
       case "retry-load": {
         const g = state.game;
         state.game = null;
-        return selectGame(g).then(() => { els.btnFind.disabled = false; });
+        return selectGame(g).then(() => { els.btnFind.disabled = !state.gameReady; });
       }
       case "looking": return toggleLooking();
       case "more": return findMatches();

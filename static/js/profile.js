@@ -215,7 +215,8 @@ function renderTab() {
 async function loadSquad() {
   const box = $("pp-squad");
   try {
-    const res = await fetch(`/profile-squad?username=${encodeURIComponent(page.data.username)}&game=${encodeURIComponent(page.squadGame)}`);
+    const url = `/profile-squad?username=${encodeURIComponent(page.data.username)}&game=${encodeURIComponent(page.squadGame)}`;
+    const res = token() ? await authFetch(url) : await fetch(url);   // logged in: hides players blocked either way
     const mates = (await res.json()).squadmates || [];
     box.innerHTML = mates.length
       ? mates.map(m => {

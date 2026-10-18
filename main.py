@@ -1230,12 +1230,17 @@ def profile_full(username: str):
 
 
 @app.get("/profile-squad")
-def profile_squad(username: str = Query(...), game: str = DEFAULT_GAME):
+def profile_squad(username: str = Query(...), game: str = DEFAULT_GAME,
+                  viewer_id: str | None = Depends(optional_user_id)):
     game = norm_game(game)
     uid = user_id_for_username(username)
     if not uid:
         return {"username": username, "game": game, "squadmates": []}
-    ids = mutual_ids(uid, game)
+    # a logged-in viewer never sees (through someone's squad) a player they blocked or who blocked them
+    viewer_blocks = get_blocked_ids(viewer_id) if viewer_id and viewer_id != uid else set()
+    if uid in viewer_blocks:
+        raise HTTPException(status_code=404, detail="Player not found")
+    ids = [i for i in mutual_ids(uid, game) if i not in viewer_blocks]
     if not ids:
         return {"username": username, "game": game, "squadmates": []}
     rows = supabase.table("profiles").select(PUBLIC_PROFILE_FIELDS).eq("game", game).in_("user_id", ids).execute().data or []
