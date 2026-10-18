@@ -50,11 +50,18 @@ def test_pass_during_a_pending_skip_never_skips_the_next_player(open_page, users
     wait_for(page, "() => document.querySelectorAll('[data-like-back]').length === 3")
     order = page.evaluate("state.matches.map(m => m.username)")
     first, second = order[0], order[1]
+    third = order[2]
     page.click('[data-action="skip"]')                                  # 280 ms swipe animation starts...
+    assert page.evaluate("document.getElementById('active-card').classList.contains('swipe-left') && inFlight.swipe")
     page.evaluate(f"document.querySelector('[data-unmatch-user=\"{first}\"]').click()")   # ...and Pass removes it
     page.wait_for_timeout(700)
     assert page.evaluate("state.matches[state.currentMatchIndex].username") == second
     assert second not in page.evaluate("[...getSkipped()]")
+    # and Skip itself still works afterwards: it moves on and remembers who was skipped
+    page.click('[data-action="skip"]')
+    page.wait_for_timeout(500)
+    assert page.evaluate("state.matches[state.currentMatchIndex].username") == third
+    assert second in page.evaluate("[...getSkipped()]")
 
 
 def test_old_scan_failing_after_A_B_A_switch_is_ignored_and_rescanned(open_page, users, make_profile):
