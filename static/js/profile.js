@@ -72,7 +72,7 @@ function lastSeenText(iso) {
 }
 
 // avatar-1..12 are our SVG art, avatar-13 and up are illustrated WebP images
-const AVATAR_COUNT = 14;
+const AVATAR_COUNT = 25;
 function avatarSrc(id) {
   const n = Number(String(id).split("-")[1]);
   return `/static/img/avatars/${id}.${n > 12 ? "webp" : "svg"}`;
