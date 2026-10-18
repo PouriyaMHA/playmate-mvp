@@ -70,6 +70,7 @@ def db(monkeypatch):   # overrides the fake-DB fixture from conftest for every t
     real = RealDB()
     monkeypatch.setattr(main, "supabase", real)
     main._cache.clear()
+    main._hits.clear()
     return real
 
 

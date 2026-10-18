@@ -23,6 +23,10 @@ Full background, decisions and open issues: `docs/PROJECT_HISTORY.md`. Raw ChatG
 - Authenticated pages (`ui.js`, `profile.js`, `settings.js`) pin the page's account (`pageUid`): never send a request,
   including a 401-refresh retry, with a token of another account — reload instead.
 - `requirements.txt` pins exact versions; upgrade on purpose and run the tests.
+- Rate limits (`main.check_rate`, in memory — one Render process): every write route has `dependencies=[limit(...)]`
+  (per account) and public reads `limit_ip(...)`. Give every new route one; 429 + Retry-After when exceeded.
+- CI has two jobs: `test` (fake DB + real Chromium) and `integration` (real Postgres + PostgREST from
+  `tests/integration/schema.sql` + all migrations; `tests/test_integration_pg.py`). A new migration must keep both green.
 
 ## Rules
 - Identity comes from the JWT `user_id`, never from request bodies or query params.

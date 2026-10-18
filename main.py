@@ -8,15 +8,18 @@ which only the server (secret key) can write.
 import html
 import logging
 import os
+import math
 import re
+import threading
 import time
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
 import jwt
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
@@ -391,6 +394,58 @@ def get_current_user_id(authorization: str | None = Header(default=None)) -> str
 
 
 # =========================================================
+# rate limits
+# =========================================================
+# One server process (Render), so a sliding window in memory is enough. Accounts are limited by user id (from the
+# verified token); public pages by IP. Generous: a real player never gets near them, a script does.
+_hits: dict[str, deque] = {}
+_hits_lock = threading.Lock()
+_clock = time.monotonic   # tests replace it
+RATE_LIMIT_DETAIL = "Too many requests. Please slow down and try again in a minute."
+
+
+def check_rate(who: str, name: str, rules: tuple[tuple[int, int], ...]) -> None:
+    """rules = ((max requests, per seconds), ...). Raises 429 (with Retry-After) once any rule is exceeded."""
+    now = _clock()
+    longest = max(sec for _, sec in rules)
+    with _hits_lock:
+        q = _hits.setdefault(f"{name}:{who}", deque())
+        while q and q[0] <= now - longest:
+            q.popleft()
+        for limit, sec in rules:
+            recent = [t for t in q if t > now - sec] if sec != longest else q
+            if len(recent) >= limit:
+                retry = max(1, math.ceil(recent[0] + sec - now))
+                raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers={"Retry-After": str(retry)})
+        q.append(now)
+        if len(_hits) > 50_000:   # forget idle keys
+            for k in [k for k, v in _hits.items() if not v or v[-1] <= now - 3600]:
+                del _hits[k]
+
+
+def client_ip(request: Request) -> str:
+    # Render runs behind Cloudflare: the visitor's address is in CF-Connecting-IP / the first X-Forwarded-For entry
+    fwd = request.headers.get("cf-connecting-ip") or (request.headers.get("x-forwarded-for") or "").split(",")[0]
+    return fwd.strip() or (request.client.host if request.client else "?")
+
+
+def limit(name: str, *rules: tuple[int, int]):
+    """Route dependency: per-account limit (the token is verified once per request; FastAPI caches it)."""
+    def dep(user_id: str = Depends(get_current_user_id)) -> None:
+        check_rate(f"u:{user_id}", name, rules)
+    return Depends(dep)
+
+
+def limit_ip(name: str, *rules: tuple[int, int]):
+    def dep(request: Request) -> None:
+        check_rate(f"ip:{client_ip(request)}", name, rules)
+    return Depends(dep)
+
+
+MINUTE, HOUR = 60, 3600
+
+
+# =========================================================
 # pages
 # =========================================================
 def page(name: str) -> HTMLResponse:
@@ -526,7 +581,7 @@ def get_game_meta(game: str):
     return game_meta(norm_game(game))
 
 
-@app.get(f"{API_PREFIX}/stats")
+@app.get(f"{API_PREFIX}/stats", dependencies=[limit_ip("stats", (120, MINUTE))])
 def stats(game: str = DEFAULT_GAME, region: str | None = None):
     """Small 'the site is alive' numbers for empty states."""
     game = norm_game(game)
@@ -566,7 +621,7 @@ class ProfileIn(BaseModel):
     class_type: str | None = None
 
 
-@app.post(f"{API_PREFIX}/profile")
+@app.post(f"{API_PREFIX}/profile", dependencies=[limit("profile", (30, MINUTE), (300, HOUR))])
 def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)):
     game = norm_game(profile.game)
     g = GAMES[game]
@@ -670,7 +725,7 @@ def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)
     return {"status": "saved", "locked_username": locked, "data": saved}
 
 
-@app.delete(f"{API_PREFIX}/profile")
+@app.delete(f"{API_PREFIX}/profile", dependencies=[limit("profile-delete", (20, MINUTE))])
 def delete_game_profile(game: str, user_id: str = Depends(get_current_user_id)):
     """Remove one game from my profile (my likes in that game go too)."""
     game = norm_game(game)
@@ -705,7 +760,7 @@ def my_games(user_id: str = Depends(get_current_user_id)):
     }
 
 
-@app.post(f"{API_PREFIX}/ping")
+@app.post(f"{API_PREFIX}/ping", dependencies=[limit("ping", (30, MINUTE))])
 def ping(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user_id)):
     game = norm_game(game)
     me = require_profile(user_id, game, "username,display_username")
@@ -725,7 +780,7 @@ class LookingRequest(BaseModel):
     game: str | None = DEFAULT_GAME
 
 
-@app.post(f"{API_PREFIX}/looking")
+@app.post(f"{API_PREFIX}/looking", dependencies=[limit("looking", (20, MINUTE))])
 def set_looking(req: LookingRequest, user_id: str = Depends(get_current_user_id)):
     """Toggle "Looking for a squad now" for a limited time (max 3h)."""
     game = norm_game(req.game)
@@ -795,7 +850,7 @@ def score_pair(me: dict, other: dict, game: str) -> tuple[int, list[str]]:
     return min(score, 100), reasons
 
 
-@app.post(f"{API_PREFIX}/match")
+@app.post(f"{API_PREFIX}/match", dependencies=[limit("match", (60, MINUTE), (600, HOUR))])
 def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)):
     """Ranks other players of the same game against MY saved profile (the request only carries options)."""
     game = norm_game(req.game)
@@ -864,7 +919,7 @@ class LikeRequest(BaseModel):
     from_user: str | None = None   # ignored (identity comes from the token)
 
 
-@app.post(f"{API_PREFIX}/like")
+@app.post(f"{API_PREFIX}/like", dependencies=[limit("like", (60, MINUTE), (600, HOUR))])
 def add_like(like: LikeRequest, user_id: str = Depends(get_current_user_id)):
     game = norm_game(like.game)
     to_user = (like.to_user or "").strip().lower()
@@ -908,7 +963,7 @@ def add_like(like: LikeRequest, user_id: str = Depends(get_current_user_id)):
     return {"status": status, "mutual": mutual, "data": payload}
 
 
-@app.delete(f"{API_PREFIX}/like")
+@app.delete(f"{API_PREFIX}/like", dependencies=[limit("unlike", (60, MINUTE), (600, HOUR))])
 def unmatch(to_user: str, game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user_id)):
     """Unmatch / take back a like in one game: removes the likes in both directions between us."""
     game = norm_game(game)
@@ -957,7 +1012,7 @@ def social_state(user_id: str, game: str, me: dict | None = None) -> dict:
     return {"squadmates": squad, "pending": waiting, "incoming": liked_you}
 
 
-@app.get(f"{API_PREFIX}/poll")
+@app.get(f"{API_PREFIX}/poll", dependencies=[limit("poll", (60, MINUTE))])
 def poll(game: str = DEFAULT_GAME, ping: bool = False, user_id: str = Depends(get_current_user_id)):
     """Everything the app refreshes every few seconds, in one request: marks me active (ping=1),
     and returns my squad (with contacts), my pending likes and who liked me."""
@@ -997,7 +1052,7 @@ class BlockRequest(BaseModel):
     reason: str | None = None
 
 
-@app.post(f"{API_PREFIX}/block")
+@app.post(f"{API_PREFIX}/block", dependencies=[limit("block", (20, MINUTE), (200, HOUR))])
 def block_player(req: BlockRequest, user_id: str = Depends(get_current_user_id)):
     """Block (and optionally report) a player: both are hidden from each other everywhere from now on."""
     game = norm_game(req.game)
@@ -1049,7 +1104,7 @@ def my_blocks(user_id: str = Depends(get_current_user_id)):
     return {"blocked": out}
 
 
-@app.delete(f"{API_PREFIX}/block")
+@app.delete(f"{API_PREFIX}/block", dependencies=[limit("unblock", (20, MINUTE), (200, HOUR))])
 def unblock(to_user: str, user_id: str = Depends(get_current_user_id)):
     """Unblock a player everywhere. Players you reported stay blocked (the report must stay on record)."""
     other_id = user_id_for_username(to_user)
@@ -1101,7 +1156,7 @@ def get_account(user_id: str = Depends(get_current_user_id)):
     return my_account_payload(user_id)
 
 
-@app.put(f"{API_PREFIX}/account")
+@app.put(f"{API_PREFIX}/account", dependencies=[limit("account", (30, MINUTE))])
 def update_account(req: AccountUpdate, user_id: str = Depends(get_current_user_id)):
     user = auth_user(user_id)
     if not user:
@@ -1138,7 +1193,7 @@ class DeleteAccountRequest(BaseModel):
     confirm: str
 
 
-@app.delete(f"{API_PREFIX}/account")
+@app.delete(f"{API_PREFIX}/account", dependencies=[limit("account-delete", (5, MINUTE))])
 def delete_account(req: DeleteAccountRequest, user_id: str = Depends(get_current_user_id)):
     """Permanently delete my account: every game profile, my likes (sent and received), blocks/reports that
     involve me, and the login itself. The client must send confirm="DELETE"."""
@@ -1162,7 +1217,7 @@ class ReferralRequest(BaseModel):
     ref: str
 
 
-@app.post(f"{API_PREFIX}/account/referral")
+@app.post(f"{API_PREFIX}/account/referral", dependencies=[limit("referral", (10, MINUTE))])
 def set_referral(req: ReferralRequest, user_id: str = Depends(get_current_user_id)):
     """Remember who invited me (only once, never myself)."""
     user = auth_user(user_id)
@@ -1189,7 +1244,7 @@ def set_referral(req: ReferralRequest, user_id: str = Depends(get_current_user_i
 # =========================================================
 # public profile page data (no in-game names / discord)
 # =========================================================
-@app.get(f"{API_PREFIX}/public-profile")
+@app.get(f"{API_PREFIX}/public-profile", dependencies=[limit_ip("public", (120, MINUTE))])
 def public_profile(username: str, viewer_id: str | None = Depends(optional_user_id)):
     uid = user_id_for_username(username)
     if not uid:
@@ -1220,7 +1275,7 @@ def public_profile(username: str, viewer_id: str | None = Depends(optional_user_
 
 
 # old profile page endpoints (kept for compatibility)
-@app.get("/profile-full")
+@app.get("/profile-full", dependencies=[limit_ip("public", (120, MINUTE))])
 def profile_full(username: str):
     u = (username or "").strip().lower()
     res = supabase.table("profiles").select(PUBLIC_PROFILE_FIELDS).eq("username", u).limit(1).execute()
@@ -1229,7 +1284,7 @@ def profile_full(username: str):
     return public_view(res.data[0])
 
 
-@app.get("/profile-squad")
+@app.get("/profile-squad", dependencies=[limit_ip("public", (120, MINUTE))])
 def profile_squad(username: str = Query(...), game: str = DEFAULT_GAME,
                   viewer_id: str | None = Depends(optional_user_id)):
     game = norm_game(game)
