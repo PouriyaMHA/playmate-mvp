@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from jwt import PyJWTError
 from pydantic import BaseModel
 from supabase import create_client
+from supabase_auth.errors import AuthApiError
 from supabase.lib.client_options import SyncClientOptions
 
 from games import (GAME_ORDER, GAMES, LANGUAGES, REGIONS, can_play_together, clean_fields, game_meta, game_summary,
@@ -54,6 +55,37 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY, options=SyncClientOptions(h
 app = FastAPI(title="PlayMate")
 API_PREFIX = "/api"
 
+_SUPABASE_HOST = (os.getenv("SUPABASE_URL") or "").rstrip("/")
+# 'unsafe-inline' is still needed for a few inline onclick/onerror handlers; everything else is locked down
+CSP = "; ".join([
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://unpkg.com",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    f"connect-src 'self' {_SUPABASE_HOST} {_SUPABASE_HOST.replace('https://', 'wss://')}".strip(),
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+])
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    h = response.headers
+    h.setdefault("X-Content-Type-Options", "nosniff")
+    h.setdefault("X-Frame-Options", "DENY")
+    h.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    h.setdefault("Strict-Transport-Security", "max-age=31536000")
+    h.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if "text/html" in h.get("content-type", ""):
+        h.setdefault("Content-Security-Policy", CSP)
+    if request.url.path.startswith(API_PREFIX + "/"):
+        h["Cache-Control"] = "no-store"   # API answers can contain private data
+    return response
+
 # CSS / JS / images (bump the ?v= in the HTML when these change, to bust browser caches)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
@@ -63,6 +95,7 @@ BANNERS = [f"banner-{i}" for i in range(1, 9)]
 AVATARS = [f"avatar-{i}" for i in range(1, 26)]  # 1-12 SVG art, 13+ illustrated WebP (see avatarSrc in profile.js)
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{3,24}$")
+UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 FREE_TEXT_RE = re.compile(r"^[^<>\"'`]{1,40}$")  # IGN / Discord / handles: no HTML-ish characters
 VOICE = {"voice", "both"}
 
@@ -138,6 +171,14 @@ def profile_avatar(p: dict) -> str:
     """The player's chosen avatar, copied onto each game profile (game_meta.avatar) so match lists need no extra lookups."""
     a = (p.get("game_meta") or {}).get("avatar")
     return a if a in AVATARS else ""
+
+
+def current_avatar(user_id: str, existing_row: dict | None) -> str:
+    """Account avatar for copying onto a game profile; if Auth is down, keep what the profile already had."""
+    try:
+        return account_data(auth_user(user_id)).get("avatar") or ""
+    except HTTPException:
+        return profile_avatar(existing_row or {})
 
 
 def sync_profile_avatar(user_id: str, avatar: str) -> None:
@@ -223,10 +264,18 @@ def user_id_for_username(username: str) -> str | None:
 
 
 def auth_user(user_id: str):
+    """The Supabase auth user, or None if it doesn't exist. An Auth outage raises 503 instead of looking
+    like "no such user" (which could otherwise make us save default values over real ones)."""
     try:
         return supabase.auth.admin.get_user_by_id(user_id).user
-    except Exception:
-        return None
+    except AuthApiError as e:
+        if getattr(e, "status", None) == 404 or getattr(e, "code", None) == "user_not_found":
+            return None
+        logger.warning("auth_user(%s) failed: %s", user_id, e)
+        raise HTTPException(status_code=503, detail="Account service unavailable, please try again")
+    except Exception as e:
+        logger.warning("auth_user(%s) failed: %s", user_id, e)
+        raise HTTPException(status_code=503, detail="Account service unavailable, please try again")
 
 
 def account_data(user) -> dict:
@@ -274,13 +323,16 @@ def get_current_user_id(authorization: str | None = Header(default=None)) -> str
     if not SUPABASE_JWT_SECRET:
         raise HTTPException(status_code=500, detail="Server missing SUPABASE_JWT_SECRET")
     try:
-        payload = jwt.decode(parts[1].strip(), SUPABASE_JWT_SECRET, algorithms=["HS256"], options={"verify_aud": False})
+        # Supabase user tokens: HS256 with the project secret, aud "authenticated", always exp + sub.
+        # (The issuer isn't pinned: the secret is unique to this project already.)
+        payload = jwt.decode(parts[1].strip(), SUPABASE_JWT_SECRET, algorithms=["HS256"], audience="authenticated",
+                             options={"require": ["exp", "sub"]})
     except PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Token missing sub")
-    return str(user_id)
+    user_id = str(payload.get("sub") or "")
+    if not UUID_RE.match(user_id):
+        raise HTTPException(status_code=401, detail="Invalid token subject")
+    return user_id
 
 
 # =========================================================
@@ -401,9 +453,9 @@ def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)
     g = GAMES[game]
 
     # username: locked once chosen (same name in every game)
-    existing = my_profile_row(user_id, game, "username,display_username")
+    existing = my_profile_row(user_id, game, "username,display_username,game_meta")
     if not existing:
-        any_game = supabase.table("profiles").select("username,display_username").eq("user_id", user_id).limit(1).execute()
+        any_game = supabase.table("profiles").select("username,display_username,game_meta").eq("user_id", user_id).limit(1).execute()
         existing = any_game.data[0] if any_game.data else None
     if existing:
         username = (existing.get("username") or "").strip().lower()
@@ -438,8 +490,10 @@ def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)
     if city and (not country_def or city not in country_def["cities"]):
         city = None
     platform = (profile.platform or "").strip() or None
-    if platform and platform not in g["platforms"]:
-        platform = None
+    if platform not in g["platforms"]:
+        platform = g["platforms"][0] if len(g["platforms"]) == 1 else None
+    if not platform:
+        missing.append("Platform")   # crossplay filters depend on it
 
     raw_fields = dict(profile.fields or {})
     if profile.favorite_mode and "favorite_mode" not in raw_fields:
@@ -466,7 +520,7 @@ def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)
         "game_meta": {
             "fields": fields,
             "country": country_def["name"] if country_def else None,
-            "avatar": account_data(auth_user(user_id)).get("avatar") or "",
+            "avatar": current_avatar(user_id, existing),
         },
     }
     for f in g["fields"]:
@@ -773,17 +827,18 @@ def block_player(req: BlockRequest, user_id: str = Depends(get_current_user_id))
         raise HTTPException(status_code=404, detail="Player not found")
     if blocked_id == user_id:
         raise HTTPException(status_code=400, detail="You cannot block yourself")
+    prev = (
+        supabase.table("blocks").select("reported,reason")
+        .eq("blocker_id", user_id).eq("blocked_id", blocked_id).eq("game", game).limit(1).execute().data or []
+    )
+    prev = prev[0] if prev else {}
+    reported = bool(req.report) or bool(prev.get("reported"))   # a report is never withdrawn by a later block
+    reason = ((req.reason or "").strip()[:300] or None) if req.report else prev.get("reason")
     supabase.table("blocks").upsert(
-        {
-            "blocker_id": user_id,
-            "blocked_id": blocked_id,
-            "game": game,
-            "reported": bool(req.report),
-            "reason": (req.reason or "").strip()[:300] or None,
-        },
+        {"blocker_id": user_id, "blocked_id": blocked_id, "game": game, "reported": reported, "reason": reason},
         on_conflict="blocker_id,blocked_id,game",
     ).execute()
-    return {"status": "blocked", "reported": bool(req.report)}
+    return {"status": "blocked", "reported": reported}
 
 
 # =========================================================

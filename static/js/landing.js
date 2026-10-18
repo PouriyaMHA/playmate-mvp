@@ -19,6 +19,15 @@ function goToApp() {
 }
 
 function storeSession(session) {
+  const uid = session.user?.id || "";
+  const owner = localStorage.getItem("pm_uid");
+  if (uid && owner && owner !== uid) {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith("pm_") || k.startsWith("playmate_")) && k !== "pm_ref") localStorage.removeItem(k);
+    }
+  }
+  if (uid) localStorage.setItem("pm_uid", uid);
   localStorage.setItem("pm_access_token", session.access_token);
   const u = session.user?.user_metadata?.pm_username || session.user?.user_metadata?.username || "";
   if (u) localStorage.setItem("pm_username", u);
@@ -68,6 +77,7 @@ function setOk(msg) {
 }
 
 function setAuthMode(mode) {
+  if (recovering) return;   // finish (or reload to leave) the password reset first
   AUTH_MODE = mode;
   const signup = mode === "signup";
   $("mode-login").classList.toggle("active", !signup);
@@ -84,7 +94,7 @@ function setAuthMode(mode) {
 
 async function handleAuth(e) {
   e.preventDefault();
-  if (recovering) return saveNewPassword();
+  if (recovering || AUTH_MODE === "recovery") return saveNewPassword();
 
   const email = $("email").value.trim();
   const password = $("password").value;
@@ -137,13 +147,25 @@ async function handleAuth(e) {
 async function forgotPassword() {
   const email = $("email").value.trim();
   if (!/^\S+@\S+\.\S+$/.test(email)) return setError("Type your email above first, then tap “Forgot password?”.");
-  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}/` });
-  if (error) return setError(error.message);
-  setOk("If that email has an account, a reset link is on its way.");
+  const btn = $("forgot-btn");
+  btn.disabled = true;
+  try {
+    const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}/` });
+    if (error) return setError(error.message);
+    setOk("If that email has an account, a reset link is on its way.");
+  } catch {
+    setError("Network error. Check your connection and try again.");
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function showRecovery() {
-  setAuthMode("login");
+  AUTH_MODE = "recovery";
+  $("pm-username-group").hidden = true;
+  $("mode-login").closest("[role=tablist]").hidden = true;   // no Log in / Sign up tabs while resetting
+  setError("");
+  setOk("");
   $("authTitle").textContent = "Choose a new password";
   $("authSubtitle").textContent = "Enter a new password for your account.";
   $("email").closest(".form-group").hidden = true;
@@ -157,12 +179,20 @@ function showRecovery() {
 async function saveNewPassword() {
   const password = $("password").value;
   if (password.length < 6) return setError("Password must be at least 6 characters.");
-  const { data, error } = await supabaseClient.auth.updateUser({ password });
-  if (error) return setError(error.message);
-  const { data: s } = await supabaseClient.auth.getSession();
-  if (s?.session) storeSession(s.session);
-  setOk("Password updated. Taking you in…");
-  setTimeout(goToApp, 800);
+  const btn = $("auth-submit");
+  btn.disabled = true;
+  try {
+    const { error } = await supabaseClient.auth.updateUser({ password });
+    if (error) return setError(error.message);
+    const { data: s } = await supabaseClient.auth.getSession();
+    if (s?.session) storeSession(s.session);
+    setOk("Password updated. Taking you in…");
+    setTimeout(goToApp, 800);
+  } catch {
+    setError("Network error. Check your connection and try again.");
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 /* ---------------- games showcase ---------------- */

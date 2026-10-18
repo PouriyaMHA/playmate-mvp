@@ -53,6 +53,18 @@ Later same day: RLS enabled on `likes` (was fully open to the public anon key); 
 
 Decision log from the planning summary: mobile app postponed (responsive web first); per-game cards inside one profile (no page per game); in-person meetups NOT pursued for now (minors/safety) — city is only for ping/region; add games gradually but all 9 are listed.
 
+2026-10-18 — external review by Codex (`docs/CODEX_REVIEW.md`, 6.5/10, no Critical). Phase 1 fixed the same day:
+H01 logout now wipes every account cache + revokes the session, and a different account on the same device never sees
+the previous one's cached Discord/location (`pm_uid` owner check); H02 stale responses after a game switch are dropped;
+M03 double Skip; M04 Find Matches locked while saving; M01 platform required server-side + GTA PC split into
+Enhanced/Legacy; M07 JWT must have aud=authenticated, exp, UUID sub; M09 Auth outages return 503 instead of "not found"
+(avatar no longer wiped); M11 a later plain block keeps an earlier report; M12 password recovery can't be hijacked by the
+Sign up tab; M15 CSP/nosniff/frame/HSTS headers, API `no-store`, SRI on supabase-js; L06 test_env.py no longer prints
+keys; L07 avatar in LIKE SENT modal. Still open from the review — phase 2: incoming likes ("who liked you"),
+pagination, standalone Settings (delete account without a game profile, unblock, unmatch), honest Block copy, "Like"
+instead of "Add to squad", report as a form. Phase 3: accounts table for usernames (H03), pinned deps + automated
+tests + schema in repo (M14), fewer Supabase round trips (M08), accessibility (M13).
+
 ## Roadmap
 1. Before public launch: turn on Supabase **Confirm email**; ~~reliable keep-alive~~ done 2026-10-17 (cron-job.org, every 10 min, `/health?deep=1`); finalise Terms/Privacy; manual check of Sign up / Log in / password reset.
 2. Grow: invite rewards (badges for referrals), share cards, Persian community marketing.

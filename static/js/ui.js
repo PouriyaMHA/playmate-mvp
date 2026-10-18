@@ -49,14 +49,54 @@ async function syncTokenFromSession() {
   } catch { }
 }
 
-function clearAuthAndRedirect() {
-  ["pm_access_token", "pm_username", "pm_username_locked", "playmate_profile"].forEach(k => localStorage.removeItem(k));
-  // Supabase session keys, so the landing page doesn't log straight back in
+// Everything this device remembers about the signed-in account (token, name, last game, cached
+// profile/shared fields, pending referral, Supabase session). Must be wiped when the account changes.
+function clearAccountCache() {
   for (let i = localStorage.length - 1; i >= 0; i--) {
     const k = localStorage.key(i);
-    if (k && k.startsWith("sb-") && k.endsWith("-auth-token")) localStorage.removeItem(k);
+    if (k && (k.startsWith("pm_") || k.startsWith("playmate_") || (k.startsWith("sb-") && k.endsWith("-auth-token")))) {
+      localStorage.removeItem(k);
+    }
   }
+}
+
+// user id (JWT "sub") of the stored token, without verifying it — only used to tell accounts apart
+function tokenUserId(token = getAccessToken()) {
+  try {
+    return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).sub || "";
+  } catch {
+    return "";
+  }
+}
+
+// a different account than last time on this device: forget the previous account's cached data
+function ensureCacheOwner() {
+  const uid = tokenUserId();
+  const owner = localStorage.getItem("pm_uid");
+  if (uid && owner && owner !== uid) {
+    const token = getAccessToken();
+    const keep = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("sb-") && k.endsWith("-auth-token")) keep[k] = localStorage.getItem(k);
+    }
+    clearAccountCache();
+    localStorage.setItem("pm_access_token", token);
+    Object.entries(keep).forEach(([k, v]) => localStorage.setItem(k, v));
+  }
+  if (uid) localStorage.setItem("pm_uid", uid);
+}
+
+let loggingOut = false;
+async function clearAuthAndRedirect() {
+  if (loggingOut) return;
+  loggingOut = true;
   stopRealtime();
+  // revoke the refresh token on the server too (don't hang the logout if the network is slow)
+  try {
+    await Promise.race([supabaseClient?.auth.signOut(), new Promise(r => setTimeout(r, 1500))]);
+  } catch { }
+  clearAccountCache();
   window.location.href = "/";
 }
 
@@ -112,7 +152,7 @@ const state = {
   loading: false,
 };
 
-const inFlight = { match: false, like: false, ping: false, pending: false, squadPromise: null, squadGame: null };
+const inFlight = { match: false, like: false, swipe: false, find: false, ping: false, pending: false, squadPromise: null, squadGame: null };
 const announced = new Set();   // squadmates we already showed a match modal for (per game: "game:user")
 let inviteLoaded = false;
 let realtimeTimer = null;
@@ -385,17 +425,21 @@ async function selectGame(gameId) {
   renderSquadList();
   renderPendingList([]);
 
+  let meta;
   try {
     const res = await fetch(`${API_BASE}/meta/${encodeURIComponent(gameId)}`);
     if (!res.ok) throw new Error("meta");
-    state.meta = await res.json();
+    meta = await res.json();
   } catch {
-    showToast("Could not load this game", "error");
+    if (state.game === gameId) showToast("Could not load this game", "error");
     return;
   }
+  if (state.game !== gameId) return;   // switched again while loading
+  state.meta = meta;
 
   buildForm();
   await loadProfileForGame();
+  if (state.game !== gameId) return;
   renderGameChrome();
   refreshStats();
   renderIdleCenter();
@@ -486,10 +530,12 @@ function applyProfileToForm(p) {
 }
 
 async function loadProfileForGame() {
+  const game = state.game;
   state.hasProfile = false;
   state.profile = {};
   try {
-    const p = await apiJson(`${API_BASE}/my-profile?game=${encodeURIComponent(state.game)}`);
+    const p = await apiJson(`${API_BASE}/my-profile?game=${encodeURIComponent(game)}`);
+    if (state.game !== game) return;   // stale: another game was picked meanwhile
     state.profile = p;
     if (p.avatar) state.myAvatar = p.avatar;
     state.hasProfile = true;
@@ -497,6 +543,7 @@ async function loadProfileForGame() {
     applyProfileToForm(p);
     els.status.textContent = "";
   } catch (e) {
+    if (state.game !== game) return;
     if (e.status !== 404) {
       state.loadFailed = true;
       els.btnFind.disabled = true;
@@ -505,15 +552,21 @@ async function loadProfileForGame() {
         <div style="margin-top:16px;"><button class="btn-primary" type="button" data-action="retry-load">Try again</button></div></div>`;
       return;
     }
-    // new game: prefill what is shared between games (from another game profile, else the local cache)
-    let shared = JSON.parse(localStorage.getItem("playmate_shared") || "{}");
-    const other = state.myGames.find(g => g !== state.game);
+    // new game: prefill what is shared between games (from another game profile, else the local cache —
+    // only if that cache belongs to this account)
+    let shared = {};
+    try {
+      const cached = JSON.parse(localStorage.getItem("playmate_shared") || "{}");
+      if (cached.uid && cached.uid === tokenUserId()) shared = cached;
+    } catch { }
+    const other = state.myGames.find(g => g !== game);
     if (other) {
       try {
         const o = await apiJson(`${API_BASE}/my-profile?game=${encodeURIComponent(other)}`);
         shared = { region: o.region, country: o.country, city: o.city, mic: o.mic, languages: o.languages, discord_username: o.discord_username };
         setIdentity(o.display_username || o.username);
       } catch { }
+      if (state.game !== game) return;
     }
     applyProfileToForm({ ...shared, in_game_username: "", fields: {} });
     els.status.textContent = `New ${gameInfo(state.game)?.name || ""} profile — fill in the game details and hit Find Matches.`;
@@ -601,6 +654,7 @@ async function saveProfile() {
     if (!state.myGames.includes(state.game)) state.myGames.push(state.game);
     setIdentity(saved.display_username || saved.username);
     localStorage.setItem("playmate_shared", JSON.stringify({
+      uid: tokenUserId(),
       region: payload.region, country: payload.country, city: payload.city, mic: payload.mic, languages: payload.languages,
       discord_username: payload.discord_username,
     }));
@@ -781,11 +835,17 @@ function renderCard() {
 }
 
 function handleSkip() {
-  if (state.loading || inFlight.like) return;
+  if (state.loading || inFlight.like || inFlight.swipe) return;
   const card = $("active-card");
   if (!card) return;
+  inFlight.swipe = true;
+  const game = state.game;
+  const index = state.currentMatchIndex;
   card.classList.add("swipe-left");
+  document.querySelectorAll(".action-btn").forEach(b => b.disabled = true);
   setTimeout(() => {
+    inFlight.swipe = false;
+    if (state.game !== game || state.currentMatchIndex !== index) return;
     state.currentMatchIndex++;
     renderCard();
   }, 280);
@@ -795,10 +855,12 @@ function handleSkip() {
    LIKES
 ========================================================= */
 async function handleLike() {
-  if (state.loading || inFlight.like) return;
+  if (state.loading || inFlight.like || inFlight.swipe) return;
   const matchUser = state.matches[state.currentMatchIndex];
   if (!matchUser) return;
   inFlight.like = true;
+  const game = state.game;
+  const index = state.currentMatchIndex;
 
   const card = $("active-card");
   const buttons = document.querySelectorAll(".action-btn");
@@ -807,15 +869,19 @@ async function handleLike() {
   let liked = true;
 
   try {
-    const data = await postJson(`${API_BASE}/like`, { to_user: matchUser.username, game: state.game });
+    const data = await postJson(`${API_BASE}/like`, { to_user: matchUser.username, game });
+    if (state.game !== game) return;   // switched game while the like was in flight
     const isMutual = data?.mutual === true || data?.status === "mutual";
     const mp = matchUser.profile || {};
-    const mate = { username: matchUser.username, display_username: mp.display_username || matchUser.username, in_game_username: null };
+    const mate = {
+      username: matchUser.username, display_username: mp.display_username || matchUser.username,
+      avatar: mp.avatar || "", in_game_username: null,
+    };
 
     if (isMutual) {
       // the in-game name is only revealed by the squad endpoint
       const key = (matchUser.username || "").toLowerCase();
-      announced.add(`${state.game}:${key}`);
+      announced.add(`${game}:${key}`);
       try { await inFlight.squadPromise; } catch { }
       try { await refreshSquad({ silent: true }); } catch { }
       const fromSquad = (state.squad || []).find(m => (m.username || "").toLowerCase() === key);
@@ -831,7 +897,9 @@ async function handleLike() {
     if (!String(e.message).startsWith("AUTH")) showToast(e.message || "Could not send like", "error");
   } finally {
     setTimeout(() => {
-      if (liked) {
+      if (state.game !== game || state.currentMatchIndex !== index) {
+        // the deck changed meanwhile (other game / new scan): leave it alone
+      } else if (liked) {
         state.currentMatchIndex++;
         renderCard();
       } else {
@@ -891,6 +959,7 @@ async function refreshSquad(opts = {}) {
         triggerMatchModal({
           username: mate.username,
           display_username: mate.display_username || mate.username,
+          avatar: mate.avatar || "",
           in_game_username: mate.in_game_username,
         });
         notifyBackgroundMatch(mate.display_username || mate.username);
@@ -1042,7 +1111,9 @@ async function toggleLooking() {
     Notification.requestPermission().catch(() => { });
   }
   try {
-    const d = await postJson(`${API_BASE}/looking`, { minutes: turningOn ? 60 : 0, game: state.game });
+    const game = state.game;
+    const d = await postJson(`${API_BASE}/looking`, { minutes: turningOn ? 60 : 0, game });
+    if (state.game !== game) return;
     state.profile.looking_until = d.looking_until;
     renderLookingButton();
     refreshStats();
@@ -1087,8 +1158,8 @@ async function captureReferral() {
   if (!ref || !state.username) return;
   try {
     await postJson(`${API_BASE}/account/referral`, { ref });
-  } catch { }
-  localStorage.removeItem("pm_ref");
+    localStorage.removeItem("pm_ref");
+  } catch { }   // keep it and try again next time
 }
 
 async function refreshInvite() {
@@ -1205,8 +1276,16 @@ function setupEventListeners() {
 
   const runFind = async (e) => {
     e?.preventDefault();
-    try { await saveProfile(); } catch { return; }
-    await findMatches();
+    if (inFlight.find) return;
+    inFlight.find = true;
+    els.btnFind.disabled = true;
+    try {
+      try { await saveProfile(); } catch { return; }
+      await findMatches();
+    } finally {
+      inFlight.find = false;
+      els.btnFind.disabled = !!state.loadFailed;
+    }
   };
   els.btnFind.addEventListener("click", runFind);
   els.form.addEventListener("submit", runFind);
@@ -1284,6 +1363,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     return;
   }
   localStorage.removeItem("pm_last_squad_sig"); // old versions
+  ensureCacheOwner();
   setupEventListeners();
 
   const cachedName = (localStorage.getItem("pm_username") || "").trim();

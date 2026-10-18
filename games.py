@@ -178,9 +178,10 @@ GAMES = {
         "short": "GTA",
         "genre": "Open-world crime",
         "accent": "#ff5fa2",
-        "platforms": ["PC", "PlayStation", "Xbox"],
-        "crossplay": [["PC"], ["PlayStation"], ["Xbox"]],
-        "crossplay_note": "No crossplay in GTA Online — you'll only see players on your platform.",
+        # PC Legacy and PC Enhanced are separate GTA Online communities
+        "platforms": ["PC (Enhanced)", "PC (Legacy)", "PlayStation", "Xbox"],
+        "crossplay": [["PC (Enhanced)"], ["PC (Legacy)"], ["PlayStation"], ["Xbox"]],
+        "crossplay_note": "No crossplay in GTA Online (PC Enhanced and PC Legacy are separate too) — you'll only see players on your version.",
         "ign_label": "Rockstar ID",
         "fields": [
             _field("activity", "Activity", ["Heists", "Business / Grinding", "Races", "Missions", "Free roam", "PvP"], 14),
