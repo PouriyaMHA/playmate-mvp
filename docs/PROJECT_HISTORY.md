@@ -77,11 +77,23 @@ placeholder and the disabled photo-upload button removed; profile pages get the 
 real 404; the chosen game survives sign-up. Earlier phase-3 plan: accounts table for usernames (H03), pinned deps + automated
 tests + schema in repo (M14), fewer Supabase round trips (M08), accessibility (M13).
 
+2026-10-18 (later) — Claude ↔ Codex review loop (`docs/reviews/`, rounds 2–5; Codex tests the live site with throwaway
+`qa…@example.com` accounts and deletes them). Round 3/4 fixes: `social_snapshot` SQL function (migration 002) = likes +
+blocks + profiles in ONE statement (contact info can't be pieced together from different moments; no 1000-row cap);
+authenticated pages pin their account (`pageUid`) so nothing is ever sent with another account's token (incl. 401
+refresh retries, other tabs); game-switch generations cover errors/timers/A→B→A; Skip/Like timers check card identity;
+public squads respect the viewer's blocks; `state.gameReady`. Testing: real-Chromium browser tests (Playwright) and an
+`integration` CI job on a real Postgres + PostgREST (`tests/integration/schema.sql` copied from the production catalog +
+all migrations). Rate limits on every write route (per account) and public reads (per IP). Account deletion in one
+transaction (`delete_account_data`, migration 003). Migrations 001–003 have all been run on production.
+
 ## Roadmap
 1. Before public launch: turn on Supabase **Confirm email**; ~~reliable keep-alive~~ done 2026-10-17 (cron-job.org, every 10 min, `/health?deep=1`); finalise Terms/Privacy; manual check of Sign up / Log in / password reset.
 2. Grow: invite rewards (badges for referrals), share cards, Persian community marketing.
 3. Profile photo upload (Supabase Storage + report/moderation), highlights upload.
 4. Squad chat / notifications by email, rank verification ("Verified" badge). (Self-service account deletion: done 2026-10-18.)
+6. Open from the reviews: append-only reports/moderation queue + a support contact; Render "deploy only after CI passes"
+   (Render dashboard setting — owner); own domain.
 5. Later: i18n (UI English only for now), mobile app.
 
 ## Decisions to respect
