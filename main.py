@@ -189,13 +189,9 @@ def current_avatar(user_id: str, existing_row: dict | None) -> str:
 
 
 def sync_profile_avatar(user_id: str, avatar: str) -> None:
-    """Copy the account avatar onto every game profile of this user."""
-    rows = supabase.table("profiles").select("id,game_meta").eq("user_id", user_id).execute().data or []
-    for r in rows:
-        meta = dict(r.get("game_meta") or {})
-        if meta.get("avatar") != avatar:
-            meta["avatar"] = avatar
-            supabase.table("profiles").update({"game_meta": meta}).eq("id", r["id"]).execute()
+    """Copy the account avatar onto every game profile of this user — only the game_meta.avatar key, atomically
+    (db/migrations/004), so a profile edit saved at the same moment is never overwritten."""
+    supabase.rpc("set_profile_avatar", {"uid": user_id, "a": avatar or ""}).execute()
 
 
 def public_view(p: dict) -> dict:
@@ -721,6 +717,10 @@ def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)
             raise HTTPException(status_code=409, detail="This username is already taken.")
         raise
     saved = result.data[0] if result.data else payload
+    # the avatar may have been changed while we saved (we copied the one read above): copy the current one again
+    now = current_avatar(user_id, payload)
+    if now != payload["game_meta"]["avatar"]:
+        sync_profile_avatar(user_id, now)
     forget_counts()
     return {"status": "saved", "locked_username": locked, "data": saved}
 

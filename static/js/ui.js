@@ -473,7 +473,7 @@ async function selectGame(gameId) {
     els.gameModal.classList.remove("active");
     els.gameModal._returnFocus = null;
   }
-  if (sameGame) return;
+  if (sameGame && state.gameReady) return;   // not ready yet (still loading, or loading failed): load it again
 
   stopRealtime();
   const gen = ++state.gen;
@@ -487,6 +487,7 @@ async function selectGame(gameId) {
   const url = new URL(location.href);
   url.searchParams.set("game", gameId);
   history.replaceState(null, "", url);
+  renderGameChrome();   // the bar shows the game being loaded, not the previous one
 
   // reset per-game state
   state.matches = [];
@@ -507,7 +508,11 @@ async function selectGame(gameId) {
     if (!res.ok) throw new Error("meta");
     meta = await res.json();
   } catch {
-    if (isCurrent(gen)) showToast("Could not load this game", "error");
+    if (!isCurrent(gen)) return;
+    state.loadFailed = true;
+    els.cardWrapper.innerHTML = `<div class="empty-state"><h3>Couldn't load ${esc(gameInfo(gameId)?.name || "this game")}</h3>
+      <p>Check your connection and try again.</p>
+      <div style="margin-top:16px;"><button class="btn-primary" type="button" data-action="retry-load">Try again</button></div></div>`;
     return;
   }
   if (!isCurrent(gen)) return;   // switched again while loading
@@ -1084,7 +1089,7 @@ function startSocial(ping) {
   const p = run
     .catch(err => {
       console.error("Refresh failed", err);
-      if (!String(err.message).startsWith("AUTH")) showNetError();
+      if (isCurrent(gen) && !String(err.message).startsWith("AUTH")) showNetError();   // an old game's poll: ignore
       throw err;
     })
     .finally(() => {
@@ -1318,6 +1323,12 @@ window.goToSquad = goToSquad;
 /* =========================================================
    LOOKING NOW · BLOCK / REPORT
 ========================================================= */
+// keep the countdown (and its end) up to date without a reload; the server stays the source of truth
+setInterval(() => { if (state.hasProfile && state.profile.looking_until) renderLookingButton(); }, 15000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && state.hasProfile) renderLookingButton();
+});
+
 function renderLookingButton() {
   const btn = els.btnLooking;
   const until = state.profile.looking_until ? new Date(state.profile.looking_until).getTime() : 0;

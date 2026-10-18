@@ -3,7 +3,7 @@ Setup and helpers: tests/browser_support.py. Each test gets a fresh fake DB."""
 import json
 import time
 
-from browser_support import base_url, browser, context, open_page, wait_for  # noqa: F401  (fixtures)
+from browser_support import FAKE_SUPABASE_JS, base_url, browser, context, open_page, wait_for  # noqa: F401
 from conftest import make_token
 
 READY = "() => typeof state !== 'undefined' && state.game && !state.loading && !!document.getElementById('active-card')"
@@ -124,10 +124,12 @@ def test_settings_and_profile_never_act_with_another_accounts_token(open_page, u
         page.wait_for_function("() => typeof pageUid !== 'undefined' && pageUid !== ''")
         sent = record_requests(page)
         page.evaluate("t => localStorage.setItem('pm_access_token', t)", token_b)   # same tab: no storage event
-        try:
-            msg = page.evaluate(f"{call}.then(() => 'sent', e => e.message)")
-        except Exception:   # the page reloads itself while answering
-            msg = "AUTH_SWITCHED"
+        with page.expect_navigation():   # the page reloads itself as the account in storage...
+            try:
+                msg = page.evaluate(f"{call}.then(() => 'sent', e => e.message)")
+            except Exception as e:   # ...which may destroy the context before the answer arrives
+                assert "destroyed" in str(e) or "navigat" in str(e).lower(), e
+                msg = "AUTH_SWITCHED"
         assert msg == "AUTH_SWITCHED"
         assert [s for s in sent if s[0] in ("PUT", "DELETE")] == []
     assert users["alice"] in db.users and users["bob"] in db.users
@@ -139,45 +141,6 @@ def test_rejected_session_at_start_keeps_the_requested_game(open_page, users, ma
     page.evaluate("t => localStorage.setItem('pm_access_token', t)", make_token(users["alice"], exp=int(time.time()) - 60))
     page.goto(base_url + "/app?game=cs2")
     page.wait_for_url("**/?game=cs2", timeout=8000)
-
-
-def test_pages_fit_a_phone_screen(browser, base_url, db, users, make_profile):
-    make_profile(users["alice"], "Alice")
-    ctx = browser.new_context(viewport={"width": 375, "height": 812}, is_mobile=True, bypass_csp=True)
-    from browser_support import FAKE_SUPABASE_JS
-    ctx.add_init_script(FAKE_SUPABASE_JS)
-    ctx.route("**/unpkg.com/**", lambda r: r.abort())
-    page = ctx.new_page()
-    page.goto(base_url + "/terms")
-    page.evaluate("t => localStorage.setItem('pm_access_token', t)", make_token(users["alice"], exp=int(time.time()) + 3600))
-    for path in ("/", "/app?game=cs2", "/settings", "/u/alice", "/terms"):
-        page.goto(base_url + path)
-        page.wait_for_timeout(600)
-        overflow = page.evaluate("document.documentElement.scrollWidth - window.innerWidth")
-        assert overflow <= 1, f"{path} scrolls sideways by {overflow}px"
-    ctx.close()
-
-
-def test_real_csp_allows_every_page_script(browser, base_url, db, users, make_profile):
-    """No bypass here: the deployed CSP must not block any of our own scripts/handlers on any page."""
-    make_profile(users["alice"], "Alice")
-    from browser_support import FAKE_SUPABASE_JS
-    ctx = browser.new_context()
-    ctx.add_init_script(FAKE_SUPABASE_JS)
-    ctx.route("**/unpkg.com/**", lambda r: r.abort())
-    page = ctx.new_page()
-    errors = []
-    page.on("console", lambda m: m.type == "error" and "Content Security Policy" in m.text and errors.append(m.text))
-    page.on("pageerror", lambda e: errors.append(str(e)))
-    page.goto(base_url + "/terms")
-    page.evaluate("t => localStorage.setItem('pm_access_token', t)", make_token(users["alice"], exp=int(time.time()) + 3600))
-    for path in ("/", "/app?game=cs2", "/settings", "/u/alice", "/terms", "/privacy"):
-        page.goto(base_url + path)
-        page.wait_for_load_state("networkidle")
-    page.goto(base_url + "/app?game=cs2")
-    page.wait_for_selector("#active-card, .empty-state", timeout=8000)
-    assert errors == []
-    ctx.close()
 
 
 def test_an_old_find_never_unlocks_a_half_loaded_game(open_page, users, make_profile):
@@ -230,3 +193,177 @@ def test_public_squad_hides_players_blocked_with_the_viewer(open_page, users, ma
     page.wait_for_timeout(300)
     names = page.locator(".pp-mate b").all_inner_texts()
     assert "Alice" in names and "Bob" not in names
+
+
+# A page is "ready" when its own JS has run. Checked with plain evaluate, which works under the real CSP
+# (wait_for_function needs eval, which the CSP forbids).
+PAGE_READY = {
+    "/": "location.pathname !== '/' || document.querySelectorAll('#lp-games > *').length > 0",
+    "/app?game=cs2": "typeof state !== 'undefined' && state.gameReady === true",
+    "/settings": "!document.getElementById('acc-summary').textContent.includes('Loading')",
+    "/u/alice": "!!document.querySelector('.pp-tabs')",
+    "/terms": "document.body.innerText.length > 500",
+    "/privacy": "document.body.innerText.length > 500",
+}
+
+
+def poll(page, js, timeout=8.0):
+    end = time.time() + timeout
+    while time.time() < end:
+        if page.evaluate(js):
+            return True
+        time.sleep(0.1)
+    raise AssertionError(f"never true: {js}")
+
+
+def mobile_context(browser):
+    ctx = browser.new_context(viewport={"width": 375, "height": 812}, is_mobile=True, bypass_csp=True)
+    ctx.add_init_script(FAKE_SUPABASE_JS)
+    ctx.route("**/unpkg.com/**", lambda r: r.abort())
+    return ctx
+
+
+def login(page, base_url, uid):
+    page.goto(base_url + "/terms")
+    page.evaluate("t => localStorage.setItem('pm_access_token', t)", make_token(uid, exp=int(time.time()) + 3600))
+
+
+def no_sideways_scroll(page, label):
+    # compare with the SCREEN width: on a phone, Chromium widens innerWidth to fit wide content (then zooms out)
+    overflow = page.evaluate("document.documentElement.scrollWidth") - page.viewport_size["width"]
+    assert overflow <= 1, f"{label} scrolls sideways by {overflow}px"
+
+
+def test_pages_fit_a_phone_screen(browser, base_url, db, users, make_profile):
+    make_profile(users["alice"], "Alice")
+    ctx = mobile_context(browser)
+    page = ctx.new_page()
+    login(page, base_url, users["alice"])
+    for path, ready in PAGE_READY.items():
+        page.goto(base_url + path)
+        poll(page, ready)   # the real page rendered (a blank page would "fit" too)
+        no_sideways_scroll(page, path)
+    ctx.close()
+
+
+def test_populated_squad_with_longest_names_fits_a_phone(browser, base_url, db, users, make_profile, api):
+    """R5-M02: 40-character unbroken IGN/Discord and a 24-character name in the mobile Squad tab must wrap."""
+    long_ign, long_dc, long_name = "X" * 40, "d" * 40, "B" * 24
+    make_profile(users["alice"], "Alice")
+    make_profile(users["bob"], long_name, in_game_username=long_ign, discord_username=long_dc)
+    api.post("/api/like", user=users["alice"], json={"to_user": long_name.lower(), "game": "cs2"})
+    api.post("/api/like", user=users["bob"], json={"to_user": "alice", "game": "cs2"})
+    ctx = mobile_context(browser)
+    page = ctx.new_page()
+    login(page, base_url, users["alice"])
+    page.goto(base_url + "/app?game=cs2")
+    poll(page, PAGE_READY["/app?game=cs2"])
+    page.locator('button[data-tab="squad"]').first.click()
+    poll(page, "document.body.innerText.includes('%s')" % long_ign)
+    no_sideways_scroll(page, "squad tab")
+    ctx.close()
+
+
+def test_real_csp_runs_every_page_script(browser, base_url, db, users, make_profile):
+    """No CSP bypass: every page's own JS must run (readiness) and nothing may be blocked."""
+    make_profile(users["alice"], "Alice")
+    ctx = browser.new_context()
+    ctx.add_init_script(FAKE_SUPABASE_JS)
+    ctx.route("**/unpkg.com/**", lambda r: r.abort())
+    page = ctx.new_page()
+    errors = []
+    page.on("console", lambda m: m.type == "error" and "Content Security Policy" in m.text and errors.append(m.text))
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    login(page, base_url, users["alice"])
+    for path, ready in PAGE_READY.items():
+        page.goto(base_url + path)
+        poll(page, ready)
+    assert errors == []
+    ctx.close()
+
+
+def test_real_supabase_sdk_loads_under_csp_and_sri(browser, base_url, db):
+    """The real supabase-js from unpkg must pass the CSP and its SRI hash (needs internet, as CI has)."""
+    ctx = browser.new_context()
+    page = ctx.new_page()
+    errors = []
+    page.on("console", lambda m: m.type == "error" and ("Content Security Policy" in m.text or "integrity" in m.text)
+            and errors.append(m.text))
+    page.goto(base_url + "/")
+    poll(page, "typeof window.supabase?.createClient === 'function'", timeout=20)
+    assert errors == []
+    ctx.close()
+
+
+RETRY_SHOWN = "() => !!document.querySelector('[data-action=retry-load]')"
+
+
+def test_failed_game_load_offers_a_retry_and_can_be_picked_again(open_page, users, make_profile):
+    """R5-M03: one failed /api/meta request must not strand the game: Try again works, and so does re-picking it."""
+    make_profile(users["alice"], "Alice")
+    make_profile(users["alice"], "Alice", "gta")
+    make_profile(users["bob"], "Bob")
+    page = open_page("/app?game=cs2", as_user=users["alice"])
+    wait_for(page, READY)
+    page.evaluate("() => { __hold('/api/meta/gta'); selectGame('gta'); }")
+    page.evaluate("__release('/api/meta/gta', 'fail')")
+    wait_for(page, RETRY_SHOWN)
+    assert page.inner_text("#game-bar-name") == "GTA Online"   # the bar no longer claims CS2
+    page.click("[data-action=retry-load]")
+    wait_for(page, "() => state.game === 'gta' && state.gameReady")
+    page.evaluate("async () => { await selectGame('cs2'); __hold('/api/meta/gta'); selectGame('gta'); }")
+    page.evaluate("__release('/api/meta/gta', 'fail')")
+    wait_for(page, RETRY_SHOWN)
+    page.evaluate("selectGame('gta')")   # = picking GTA again in the game picker
+    wait_for(page, "() => state.game === 'gta' && state.gameReady && !document.getElementById('btn-find-matches').disabled")
+
+
+def test_looking_now_turns_off_on_screen_when_it_expires(open_page, users, make_profile):
+    """R5-L01: the button follows the stored expiry without a reload."""
+    make_profile(users["alice"], "Alice")
+    make_profile(users["bob"], "Bob")
+    page = open_page("/app?game=cs2", as_user=users["alice"])
+    wait_for(page, READY)
+    page.evaluate("() => { state.profile.looking_until = new Date(Date.now() + 1500).toISOString(); renderLookingButton(); }")
+    assert "min left" in page.inner_text("#btn-looking")
+    page.wait_for_timeout(17_000)   # past the expiry + one 15-second refresh
+    assert "min left" not in page.inner_text("#btn-looking")
+    assert not page.evaluate("document.getElementById('btn-looking').classList.contains('on')")
+
+
+def test_an_old_poll_failing_shows_no_connection_warning_in_the_new_game(open_page, users, make_profile):
+    """R5-L02"""
+    make_profile(users["alice"], "Alice")
+    make_profile(users["alice"], "Alice", "gta")
+    make_profile(users["bob"], "Bob")
+    page = open_page("/app?game=gta", as_user=users["alice"])
+    wait_for(page, "() => typeof state !== 'undefined' && state.gameReady")
+    page.evaluate("() => { __hold('/api/poll'); refreshSquad({ fresh: true }).catch(() => {}); }")
+    page.evaluate("async () => { await selectGame('cs2'); }")
+    wait_for(page, READY)
+    page.evaluate("__release('/api/poll', 'fail')")
+    page.wait_for_timeout(300)
+    assert page.evaluate("getComputedStyle(document.getElementById('net-banner')).display") == "none"
+
+
+def test_settings_and_profile_refresh_returning_another_account_send_nothing_with_it(open_page, users, make_profile, db):
+    """R3-H02 refresh branch: a 401, then the refreshed session belongs to another account: never sent, page reloads."""
+    make_profile(users["alice"], "Alice")
+    make_profile(users["bob"], "Bob")
+    expired_a = make_token(users["alice"], exp=int(time.time()) - 60)
+    token_b = make_token(users["bob"], exp=int(time.time()) + 3600)
+    for path, call in (("/settings", "authFetch('/api/account', { method: 'DELETE', body: JSON.stringify({ confirm: 'DELETE' }) })"),
+                       ("/u/alice", "authFetch('/api/account', { method: 'PUT', body: JSON.stringify({ bio: 'A_PRIVATE' }) })")):
+        page = open_page(path, as_user=users["alice"])
+        page.wait_for_function("() => typeof pageUid !== 'undefined' && pageUid !== ''")
+        sent = record_requests(page)
+        page.evaluate("([a, b]) => { localStorage.setItem('pm_access_token', a);"
+                      " __auth.refresh = async () => ({ data: { session: { access_token: b } } }); }", [expired_a, token_b])
+        with page.expect_navigation():
+            try:
+                page.evaluate(f"{call}.catch(() => {{}})")
+            except Exception as e:
+                assert "destroyed" in str(e) or "navigat" in str(e).lower(), e
+        writes = [s for s in sent if s[0] in ("PUT", "DELETE")]
+        assert writes and all(u == users["alice"] for _, _, u in writes)   # only A's own (expired) token
+    assert users["bob"] in db.users and (db.users[users["bob"]].app_metadata.get("playmate") or {}).get("bio") != "A_PRIVATE"

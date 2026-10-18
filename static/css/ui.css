@@ -2633,3 +2633,8 @@ input.field-invalid {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* long unbroken names / contacts (up to the 40-character limit) must wrap, never widen the page (R5-M02) */
+.sm-ign, .sm-ign b, .info-ign, .info-name, .player-name, .ign-row, .pending-item, .squad-member { overflow-wrap: anywhere; }
+.squad-member, .sm-info, .squad-list, .panel { min-width: 0; max-width: 100%; }
+.sm-actions { flex-wrap: wrap; }

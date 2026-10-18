@@ -230,3 +230,19 @@ def test_account_deletion_leaves_nothing(api, users, make_profile):
     assert rows("likes") == 0 and rows("blocks") == 0
     assert sql("select count(*) from auth.users where id = %s", (a,), fetch=True)[0][0] == 0
     assert api.client.get("/u/alice").status_code == 404
+
+
+def test_set_profile_avatar_changes_only_the_avatar_key(api, users, make_profile, db):
+    a = users["alice"]
+    make_profile(a, "Alice", fields={"mode": "Premier", "rank": "Gold Nova"})
+    make_profile(a, "Alice", "gta")
+    assert db.rpc("set_profile_avatar", {"uid": a, "a": "avatar-4"}).execute().data == 2
+    assert db.rpc("set_profile_avatar", {"uid": a, "a": "avatar-4"}).execute().data == 0   # nothing to change
+    metas = dict(sql("select game, game_meta from public.profiles where user_id = %s", (a,), fetch=True))
+    assert metas["cs2"]["avatar"] == "avatar-4" and metas["cs2"]["fields"] == {"mode": "Premier", "rank": "Gold Nova"}
+    assert db.rpc("set_profile_avatar", {"uid": a, "a": ""}).execute().data == 2
+    metas = dict(sql("select game, game_meta from public.profiles where user_id = %s", (a,), fetch=True))
+    assert "avatar" not in metas["cs2"] and metas["cs2"]["country"] == "Iran"
+    from postgrest.exceptions import APIError
+    with pytest.raises(APIError):
+        rest_client(make_token(a, role="authenticated")).rpc("set_profile_avatar", {"uid": a, "a": "avatar-1"}).execute()

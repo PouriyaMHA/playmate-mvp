@@ -82,9 +82,11 @@ def context(browser, base_url, db):
     ctx.add_init_script(FAKE_SUPABASE_JS)
     ctx.route("**/unpkg.com/**", lambda r: r.abort())
     ctx.route("**/*.supabase.co/**", lambda r: r.abort())
-    ctx.errors = []
+    ctx.errors = []        # console errors (asserted where a test expects a clean console)
+    ctx.page_errors = []   # uncaught exceptions: no test may have any
     yield ctx
     ctx.close()
+    assert ctx.page_errors == [], f"uncaught page errors: {ctx.page_errors}"
 
 
 @pytest.fixture
@@ -92,7 +94,7 @@ def open_page(context, base_url):
     """open_page(path, as_user=uid) -> page logged in as that user (token in localStorage, like after sign-in)."""
     def _open(path, as_user=None, ctx=None):
         page = (ctx or context).new_page()
-        page.on("pageerror", lambda e: context.errors.append(str(e)))
+        page.on("pageerror", lambda e: (context.errors.append(str(e)), context.page_errors.append(str(e))))
         page.on("console", lambda m: m.type == "error" and "net::ERR_FAILED" not in m.text   # = the blocked unpkg/supabase
                 and context.errors.append(m.text))
         if as_user:
