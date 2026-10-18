@@ -409,3 +409,19 @@ def test_one_way_like_is_a_light_confirmation_not_the_match_modal(open_page, use
     page.click('[data-action="like"]')
     wait_for(page, "() => [...document.querySelectorAll('.toast')].some(t => t.textContent.includes('Like sent'))")
     assert not page.evaluate("document.getElementById('match-modal').classList.contains('active')")
+
+
+def test_like_and_like_back_from_a_public_profile(open_page, users, make_profile, api):
+    """Product #6: a shared profile link is actionable — Like, then (as the other player) Like back → mutual."""
+    make_profile(users["alice"], "Alice")
+    make_profile(users["bob"], "Bob", in_game_username="BobCS")
+    page = open_page("/u/bob", as_user=users["alice"])
+    page.wait_for_selector('[data-like-game="cs2"]')
+    assert "BobCS" not in page.content()
+    page.click('[data-like-game="cs2"]')
+    page.wait_for_selector("text=Like sent ✓")
+    other = open_page("/u/alice", as_user=users["bob"])   # same browser: bob logs in in another tab → reloads
+    other.wait_for_selector('[data-like-game="cs2"].hot')
+    other.click('[data-like-game="cs2"]')
+    other.wait_for_selector("text=In your squad")
+    assert api.get("/api/poll?game=cs2", user=users["alice"])[1]["squadmates"][0]["in_game_username"] == "BobCS"

@@ -22,7 +22,7 @@ const LINKS = {
 };
 
 const $ = (id) => document.getElementById(id);
-const page = { data: null, isOwner: false, account: null, tab: "games", squadGame: null };
+const page = { data: null, isOwner: false, account: null, tab: "games", squadGame: null, rel: null };
 
 /* ---------------- helpers ---------------- */
 function esc(v) {
@@ -152,6 +152,48 @@ function render() {
   renderTab();
 }
 
+// Like / Like back from someone's public profile (state from /api/relationship; the server enforces everything)
+function relAction(g) {
+  const state = page.rel?.[g.id];
+  if (!state) return "";
+  const app = `/app?game=${encodeURIComponent(g.id)}`;
+  switch (state) {
+    case "none": return `<button type="button" class="pp-like" data-like-game="${esc(g.id)}">💚 Like in ${esc(g.name)}</button>`;
+    case "likes_you": return `<button type="button" class="pp-like hot" data-like-game="${esc(g.id)}">💚 Like back — they like you</button>`;
+    case "liked": return `<span class="pp-rel">Like sent ✓ — waiting for them</span>`;
+    case "mutual": return `<a class="pp-like" href="${app}">✓ In your squad — open it</a>`;
+    case "incompatible": return `<span class="pp-rel">You can't play together (platform, edition or server)</span>`;
+    case "no_profile": return `<a class="pp-rel" href="${app}">Add ${esc(g.name)} to your games to like them →</a>`;
+    default: return "";
+  }
+}
+
+async function loadRelationship() {
+  if (!token() || page.isOwner || !page.account?.username || !page.data) return;
+  try {
+    const res = await authFetch(`${API}/relationship?username=${encodeURIComponent(page.data.username)}`);
+    if (res.ok) page.rel = (await res.json()).games || null;
+  } catch { }
+}
+
+async function likeFromProfile(game, btn) {
+  btn.disabled = true;
+  try {
+    const res = await authFetch(`${API}/like`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to_user: page.data.username, game }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(typeof d.detail === "string" ? d.detail : "Could not send like");
+    toast(d.mutual ? "It's a match! Their contact is in your squad." : "Like sent — you'll match if they like you back", "success");
+    await loadRelationship();
+    renderTab();
+  } catch (e) {
+    btn.disabled = false;
+    if (e.message !== "AUTH_SWITCHED") toast(e.message || "Could not send like", "error");
+  }
+}
+
 function renderTab() {
   const d = page.data;
   const body = $("pp-tab-body");
@@ -179,7 +221,7 @@ function renderTab() {
               </div>
               <div class="pp-game-foot">
                 <a class="pp-game-link" href="/app?game=${encodeURIComponent(g.id)}">${page.isOwner ? "Open in Find squad" : "Find a squad in this game"} ${icon("arrow")}</a>
-                ${page.isOwner ? `<button type="button" class="pp-game-remove" data-remove-game="${esc(g.id)}" data-game-name="${esc(g.name)}">Remove</button>` : ""}
+                ${page.isOwner ? `<button type="button" class="pp-game-remove" data-remove-game="${esc(g.id)}" data-game-name="${esc(g.name)}">Remove</button>` : relAction(g)}
               </div>
             </div>
           </article>`;
@@ -324,6 +366,8 @@ document.addEventListener("click", async (e) => {
   if (bn) { $("banner-pick").querySelectorAll("button").forEach(b => { b.classList.toggle("active", b === bn); b.setAttribute("aria-pressed", String(b === bn)); }); return; }
   if (t.closest("#edit-close") || t.closest("#edit-cancel") || t === $("edit-modal")) return closeEdit();
   if (t.closest("#edit-save")) return saveEdit();
+  const lk = t.closest("[data-like-game]");
+  if (lk && !page.isOwner) return likeFromProfile(lk.dataset.likeGame, lk);
   const rm = t.closest("[data-remove-game]");
   if (rm && page.isOwner) return removeGame(rm.dataset.removeGame, rm.dataset.gameName);
 });
@@ -363,6 +407,7 @@ $("edit-bio").addEventListener("input", () => { $("bio-count").textContent = `${
       return;
     }
     page.data = await res.json();
+    await loadRelationship();
     render();
   } catch {
     $("pp-main").innerHTML = `<div class="pp-loading"><h2>Could not load this profile</h2><p>Check your connection and try again.</p></div>`;

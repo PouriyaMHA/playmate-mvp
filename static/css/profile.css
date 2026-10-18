@@ -848,3 +848,25 @@ body.profile-page {
   color: var(--cyan);
   font-weight: 700;
 }
+
+/* Like / Like back on someone else's profile */
+.pp-like {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--green);
+  background: rgba(45, 255, 179, 0.08);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+.pp-like:hover { background: rgba(45, 255, 179, 0.16); }
+.pp-like.hot { background: rgba(45, 255, 179, 0.2); box-shadow: 0 0 14px rgba(45, 255, 179, 0.35); }
+.pp-like:disabled { opacity: 0.6; cursor: default; }
+.pp-rel { color: var(--muted); font-size: 0.82rem; }
+a.pp-rel { color: var(--cyan); }
+.pp-game-foot { flex-wrap: wrap; }

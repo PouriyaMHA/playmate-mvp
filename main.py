@@ -1333,6 +1333,43 @@ def public_profile(username: str, viewer_id: str | None = Depends(optional_user_
 
 
 # old profile page endpoints (kept for compatibility)
+@app.get(f"{API_PREFIX}/relationship", dependencies=[limit("relationship", (60, MINUTE))])
+def relationship(username: str, user_id: str = Depends(get_current_user_id)):
+    """For the Like / Like back buttons on someone's public profile: per game they play, what I can do.
+    state: "self" | "no_profile" (I don't play it) | "incompatible" | "none" | "liked" (waiting) | "likes_you" | "mutual".
+    No contact info here — contacts stay in the squad view (mutual only)."""
+    other = user_id_for_username(username)
+    if not other:
+        raise HTTPException(status_code=404, detail="Player not found")
+    if other == user_id:
+        return {"username": username.lower(), "self": True, "games": {}}
+    if other in get_blocked_ids(user_id):
+        raise HTTPException(status_code=404, detail="Player not found")   # blocked either way: nothing to show
+    rows = supabase.table("profiles").select("*").in_("user_id", [user_id, other]).execute().data or []
+    mine = {r["game"]: r for r in rows if str(r["user_id"]) == user_id}
+    theirs = {r["game"]: r for r in rows if str(r["user_id"]) == other}
+    likes = (supabase.table("likes").select("from_user_id,to_user_id,game")
+             .in_("from_user_id", [user_id, other]).in_("to_user_id", [user_id, other]).execute().data or [])
+    i_liked = {r["game"] for r in likes if str(r["from_user_id"]) == user_id and str(r["to_user_id"]) == other}
+    liked_me = {r["game"] for r in likes if str(r["from_user_id"]) == other and str(r["to_user_id"]) == user_id}
+    games = {}
+    for game, theirs_row in theirs.items():
+        if game not in mine:
+            state = "no_profile"
+        elif game in i_liked and game in liked_me:
+            state = "mutual"
+        elif not compatible(game, mine[game], theirs_row):
+            state = "incompatible"
+        elif game in i_liked:
+            state = "liked"
+        elif game in liked_me:
+            state = "likes_you"
+        else:
+            state = "none"
+        games[game] = state
+    return {"username": username.lower(), "self": False, "games": games}
+
+
 @app.get("/profile-full", dependencies=[limit_ip("public", (300, MINUTE))])
 def profile_full(username: str):
     u = (username or "").strip().lower()
