@@ -507,3 +507,29 @@ def test_steam_profile_field_and_squad_link(open_page, browser, users, make_prof
     assert href == "https://steamcommunity.com/profiles/76561197960287930"
     assert bob.get_attribute('a.sm-btn:has-text("Open Steam profile")', "rel") == "noopener noreferrer"
     close_clean(bob_device)
+
+
+
+def test_steam_prefill_finds_it_in_any_saved_game_and_counts_as_contact(open_page, users, make_profile):
+    """R9-L02: LoL first (no Steam), CS2 second (Steam) → a new Steam game is prefilled.
+    R9-L03: a Steam-only profile gets no "add a contact" reminder."""
+    a = users["alice"]
+    make_profile(a, "Alice", "lol")
+    make_profile(a, "Alice", "cs2", steam_profile="steamcommunity.com/id/alicesteam")
+    page = open_page("/app?game=cs2", as_user=a)
+    wait_for(page, "() => typeof state !== 'undefined' && state.gameReady")
+    page.evaluate("() => { localStorage.removeItem('playmate_shared'); state.myGames = ['lol', 'cs2']; }")   # fresh device
+    page.evaluate("selectGame('helldivers2')")
+    wait_for(page, "() => state.game === 'helldivers2' && state.gameReady")
+    page.select_option("#platform", "PC")
+    wait_for(page, "() => !document.getElementById('steam-row').hidden")
+    assert page.input_value("#steam_profile") == "https://steamcommunity.com/id/alicesteam"
+    # Steam-only contact: no reminder
+    page.evaluate("selectGame('cs2')")
+    wait_for(page, "() => state.game === 'cs2' && state.gameReady")
+    page.fill("#in_game_username", "")
+    page.fill("#discord_username", "")
+    page.click("#btn-find-matches")
+    page.wait_for_timeout(800)
+    toasts = page.evaluate("[...document.querySelectorAll('.toast')].map(t => t.textContent).join(' | ')")
+    assert "so squadmates can reach you" not in toasts

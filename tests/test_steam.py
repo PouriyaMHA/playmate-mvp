@@ -14,6 +14,14 @@ from games import offers_steam
     ("76561197960287930", "profiles/76561197960287930"),
     ("22202", "profiles/76561197960287930"),            # friend code → SteamID64
     ("gaben", "id/gaben"),                              # custom URL name
+    # R9-M01: the account id's whole 32-bit range, not a decimal prefix
+    ("1", "profiles/76561197960265729"),
+    ("2039734271", "profiles/76561199999999999"),
+    ("2039734272", "profiles/76561200000000000"),       # crosses the 7656119… → 7656120… prefix
+    ("4294967295", "profiles/76561202255233023"),       # largest friend code
+    ("76561202255233023", "profiles/76561202255233023"),
+    ("https://steamcommunity.com/profiles/76561200000000000#x", "profiles/76561200000000000"),
+    ("steamcommunity.com/id/123", "id/123"),            # numeric custom URL only inside a link
     ("  ", None), ("", None), (None, None),
 ])
 def test_steam_input_is_normalized(raw, stored):
@@ -24,6 +32,12 @@ def test_steam_input_is_normalized(raw, stored):
     "https://evil.example/id/gaben", "https://steamcommunity.com.evil.io/id/x", "javascript:alert(1)",
     "steamcommunity.com/id/<script>", "a", "x" * 40, "https://steamcommunity.com/profiles/123",
     "https://steamcommunity.com/groups/abc", "id/gaben?x=1", "12345678901234",
+    # R9-M01: outside the individual-account range
+    "0", "76561197960265728", "76561190000000000", "76561202255233024", "https://steamcommunity.com/profiles/22202",
+    # R9-L01: only ASCII digits (no superscripts / other scripts), never a 500
+    "²", "7656119١١١١١١١١١١", "٢٢٢٠٢",
+    "https://steamcommunity.com/profiles/7656119١١١١١١١١١١",
+    "gabén",
 ])
 def test_bad_steam_input_is_refused(raw):
     with pytest.raises(HTTPException) as e:
@@ -66,4 +80,13 @@ def test_steam_profile_is_dropped_where_it_is_not_offered(api, users, make_profi
         "username": "Alice", "game": "cs2", "platform": "PC", "region": "middle-east", "country": "Iran",
         "mic": "voice", "languages": "fa", "fields": {"mode": "Premier", "rank": "Silver"},
         "steam_profile": "https://evil.example/id/x"})
+    assert status == 422 and "Steam profile" in d["detail"]
+
+
+
+def test_unicode_digits_are_a_422_not_a_500(api, users):
+    from conftest import BASE_PROFILE
+    status, d = api.post("/api/profile", user=users["alice"], json={
+        **BASE_PROFILE, "username": "Alice", "game": "cs2", "platform": "PC",
+        "fields": {"mode": "Premier", "rank": "Silver"}, "steam_profile": "²"})
     assert status == 422 and "Steam profile" in d["detail"]

@@ -237,6 +237,7 @@ def game_summary(game_id: str) -> dict:
         "cover": f"/static/img/games/photos/{game_id}.jpg?v={COVER_VERSION}" if has_photo else art,
         "art": art,
         "icon": f"/static/img/games/{game_id}-icon.svg",
+        "steam": bool(g.get("steam")),
     }
 
 
@@ -249,7 +250,6 @@ def game_meta(game_id: str) -> dict:
         "ign_label": g["ign_label"],
         "fields": g["fields"],
         "crossplay_note": g.get("crossplay_note", ""),
-        "steam": bool(g.get("steam")),
         "regions": REGIONS,
         "languages": LANGUAGES,
         # kept for older clients (Battlefield page)

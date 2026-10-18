@@ -655,13 +655,20 @@ async function loadProfileForGame(gen = state.gen) {
       const cached = JSON.parse(localStorage.getItem("playmate_shared") || "{}");
       if (cached.uid && cached.uid === tokenUserId()) shared = cached;
     } catch { }
-    const other = state.myGames.find(g => g !== game);
-    if (other) {
+    const others = state.myGames.filter(g => g !== game);
+    if (others.length) {
       try {
-        const o = await apiJson(`${API_BASE}/my-profile?game=${encodeURIComponent(other)}`);
+        const o = await apiJson(`${API_BASE}/my-profile?game=${encodeURIComponent(others[0])}`);
         shared = { region: o.region, country: o.country, city: o.city, mic: o.mic, languages: o.languages, discord_username: o.discord_username,
-                   steam_profile: o.steam_profile };
+                   steam_profile: o.steam_profile || shared.steam_profile };
         setIdentity(o.display_username || o.username);
+        // Steam is one account across games: if the first game has none (e.g. LoL), look at the other games
+        for (const g of others.slice(1)) {
+          if (shared.steam_profile || !isCurrent(gen)) break;
+          if (!gameInfo(g)?.steam) continue;
+          const og = await apiJson(`${API_BASE}/my-profile?game=${encodeURIComponent(g)}`).catch(() => null);
+          if (og?.steam_profile) shared.steam_profile = og.steam_profile;
+        }
       } catch { }
       if (!isCurrent(gen)) return;
     }
@@ -679,6 +686,13 @@ async function loadProfileForGame(gen = state.gen) {
 }
 
 // the Steam profile link is offered for Steam games played on PC (same rule as the server: games.offers_steam)
+function previousShared() {
+  try {
+    const c = JSON.parse(localStorage.getItem("playmate_shared") || "{}");
+    return c.uid && c.uid === tokenUserId() ? c : {};
+  } catch { return {}; }
+}
+
 function updateSteamRow() {
   els.steamRow.hidden = !(state.meta?.steam && String(els.platform.value || "").startsWith("PC"));
 }
@@ -768,12 +782,14 @@ async function saveProfile() {
       uid: tokenUserId(),
       region: payload.region, country: payload.country, city: payload.city, mic: payload.mic, languages: payload.languages,
       discord_username: payload.discord_username,
-      steam_profile: saved.steam_profile || null,
+      // a game without Steam (LoL, console…) doesn't erase it; clearing it on a Steam game does
+      steam_profile: els.steamRow.hidden ? (previousShared().steam_profile || null) : (saved.steam_profile || null),
     }));
     if (saved.steam_profile !== undefined) els.steam.value = saved.steam_profile ? steamUrl(saved.steam_profile) : "";
     els.status.textContent = "";
-    if (!payload.in_game_username && !payload.discord_username) {
-      showToast(`Tip: add your ${state.meta?.ign_label || "in-game name"} or Discord so squadmates can reach you`, "info");
+    if (!payload.in_game_username && !payload.discord_username && !saved.steam_profile) {
+      const steamToo = els.steamRow.hidden ? "" : ", Discord or Steam profile";
+      showToast(`Tip: add your ${state.meta?.ign_label || "in-game name"}${steamToo || " or Discord"} so squadmates can reach you`, "info");
     }
     renderGameChrome();
     renderLookingButton();

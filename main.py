@@ -146,35 +146,41 @@ def parse_languages(lang_str: str | None) -> list[str]:
     return [x.strip().lower() for x in (lang_str or "").split(",") if x.strip()]
 
 
-STEAM_ID64_BASE = 76561197960265728   # SteamID64 = friend code (32-bit account id) + this
-STEAM_ID64_RE = re.compile(r"^7656119\d{10}$")
+STEAM_ID64_BASE = 76561197960265728   # SteamID64 of an individual account = this + its 32-bit account id (friend code)
+STEAM_DIGITS_RE = re.compile(r"^[0-9]+$")                  # ASCII only (Python's \d / isdigit also accept other scripts)
 STEAM_CUSTOM_RE = re.compile(r"^[A-Za-z0-9_-]{2,32}$")
 STEAM_URL_RE = re.compile(r"^(?:https?://)?(?:www\.)?steamcommunity\.com/(id|profiles)/([^/?#\s]+)/?(?:[?#]\S*)?$", re.I)
 STEAM_HELP = ("Steam profile: paste your profile link (steamcommunity.com/id/… or /profiles/…), "
               "your friend code, or your custom URL name.")
 
 
+def _steam_id64(account_id: int) -> str:
+    """Individual-account SteamID64 for a 32-bit account id (1 … 2^32-1); anything else is a 422."""
+    if not 1 <= account_id <= 0xFFFFFFFF:
+        raise HTTPException(status_code=422, detail=STEAM_HELP)
+    return str(STEAM_ID64_BASE + account_id)
+
+
 def clean_steam_profile(raw: str | None) -> str | None:
     """A Steam profile as the path after https://steamcommunity.com/ — "id/<custom>" or "profiles/<SteamID64>".
     Accepts a profile link, a SteamID64, a friend code (converted) or a custom URL name; anything else is a 422.
+    Numbers are checked by their account-id range (Valve: 32-bit account id), in ASCII digits only.
     Stored only in this canonical form, so the link the squad sees always points at steamcommunity.com."""
     v = (raw or "").strip()
     if not v:
         return None
     m = STEAM_URL_RE.match(v)
-    if m:
-        kind, val = m.group(1).lower(), m.group(2)
-    elif STEAM_ID64_RE.match(v):
-        kind, val = "profiles", v
-    elif v.isdigit() and len(v) <= 10:
-        kind, val = "profiles", str(int(v) + STEAM_ID64_BASE)   # friend code
-    elif v.isdigit():
-        raise HTTPException(status_code=422, detail=STEAM_HELP)   # digits that are neither: ambiguous, ask for the link
-    else:
-        kind, val = "id", v
-    if (kind == "profiles" and not STEAM_ID64_RE.match(val)) or (kind == "id" and not STEAM_CUSTOM_RE.match(val)):
+    kind, val = (m.group(1).lower(), m.group(2)) if m else (None, v)
+    if kind == "profiles" or (kind is None and STEAM_DIGITS_RE.match(v)):
+        if not STEAM_DIGITS_RE.match(val) or len(val) > 20:
+            raise HTTPException(status_code=422, detail=STEAM_HELP)
+        n = int(val)
+        # up to 10 digits (and not a /profiles/ link) = friend code; longer = SteamID64
+        account_id = n if (kind is None and len(val) <= 10) else n - STEAM_ID64_BASE
+        return f"profiles/{_steam_id64(account_id)}"
+    if not STEAM_CUSTOM_RE.match(val) or STEAM_DIGITS_RE.match(val) and kind is None:
         raise HTTPException(status_code=422, detail=STEAM_HELP)
-    return f"{kind}/{val}"
+    return f"id/{val}"
 
 
 def clean_optional_text(value, field: str) -> str | None:
