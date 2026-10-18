@@ -27,7 +27,7 @@ Full background, decisions and open issues: `docs/PROJECT_HISTORY.md`. Raw ChatG
 
 ## Working with Codex
 - Codex (OpenAI) is the reviewer/tester; Claude builds. Call it with
-  `& "$env:LOCALAPPDATA\OpenAI\Codexin\<hash>\codex.exe" exec -C <repo> -s workspace-write -o <file> "<prompt>"`
+  `& "$env:LOCALAPPDATA\OpenAI\Codex\bin\<hash>\codex.exe" exec -C <repo> -s workspace-write -o <file> "<prompt>"`
   (or `codex review --base main` / `--commit <sha>`). Its rules are in `AGENTS.md`; reviews go to `docs/reviews/`.
 - Ask Codex to review important changes (security, data, matching, payments) before or right after pushing.
 - Challenge each other: verify every Codex finding against the code before acting; fix what's right, push back with
