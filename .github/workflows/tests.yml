@@ -19,7 +19,10 @@ jobs:
           cache-dependency-path: requirements-dev.txt
       - run: pip install -r requirements-dev.txt
       - run: python -m playwright install --with-deps chromium
-      - run: python -m pytest
+      - name: Tests (fake DB + real-browser)
+        run: |
+          python -m pytest -rs | tee out.txt
+          echo "::notice title=tests::$(tail -1 out.txt)"
       - name: JavaScript syntax check
         run: for f in static/js/*.js; do node --check "$f"; done
 
@@ -59,4 +62,8 @@ jobs:
             postgrest/postgrest:v12.2.3
           for i in $(seq 1 30); do curl -sf http://localhost:3000/ > /dev/null && break; sleep 1; done
           docker logs postgrest
-      - run: python -m pytest tests/test_integration_pg.py -v
+      - name: Integration tests (must not be skipped)
+        run: |
+          python -m pytest tests/test_integration_pg.py -v -rs | tee out.txt
+          echo "::notice title=integration::$(tail -1 out.txt)"
+          ! grep -q "SKIPPED" out.txt
