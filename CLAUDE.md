@@ -13,6 +13,8 @@ Full background, decisions and open issues: `docs/PROJECT_HISTORY.md`. Raw ChatG
 - Run locally: `uvicorn main:app --reload` (needs `.env` with SUPABASE_URL, SUPABASE_KEY, SUPABASE_JWT_SECRET).
 - Tests: `python -m pytest` (installs from `requirements-dev.txt`). They run against an in-memory fake DB (`tests/fakedb.py`) —
   never the real Supabase — and run in GitHub Actions on every push (`.github/workflows/tests.yml`). Add a test with every change.
+  Frontend behavior is tested in real headless Chromium (`tests/test_browser.py`, helpers in `tests/browser_support.py`:
+  fake supabase-js `window.__auth`, `__hold(pattern)`/`__release` to hold a fetch). Locally once: `python -m playwright install chromium`.
 - Database changes: SQL files in `db/migrations/` (numbered), run in Supabase → SQL Editor. Ship code that needs a new
   table only after the migration ran (001 and 002 ran 2026-10-18; `accounts` and `social_snapshot` are required — no silent fallbacks).
   The fake DB mirrors the unique constraints and PostgREST's 1000-row cap.
