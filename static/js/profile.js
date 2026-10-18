@@ -55,7 +55,8 @@ function accountSwitched() {
   return new Error("AUTH_SWITCHED");
 }
 window.addEventListener("storage", (e) => {
-  if (pageUid && (e.key === "pm_access_token" || e.key === null) && tokenUid() !== pageUid) location.reload();
+  if (e.key !== "pm_access_token" && e.key !== null) return;
+  if (pageUid ? tokenUid() !== pageUid : !!token()) location.reload();   // switched account, logged out, or logged in
 });
 
 async function authFetch(url, opts = {}) {
@@ -161,7 +162,7 @@ function relAction(g) {
     case "none": return `<button type="button" class="pp-like" data-like-game="${esc(g.id)}">💚 Like in ${esc(g.name)}</button>`;
     case "likes_you": return `<button type="button" class="pp-like hot" data-like-game="${esc(g.id)}">💚 Like back — they like you</button>`;
     case "liked": return `<span class="pp-rel">Like sent ✓ — waiting for them</span>`;
-    case "mutual": return `<a class="pp-like" href="${app}">✓ In your squad — open it</a>`;
+    case "mutual": return `<a class="pp-like" href="${app}&tab=squad">✓ In your squad — open it</a>`;
     case "incompatible": return `<span class="pp-rel">You can't play together (platform, edition or server)</span>`;
     case "no_profile": return `<a class="pp-rel" href="${app}">Add ${esc(g.name)} to your games to like them →</a>`;
     default: return "";
@@ -169,11 +170,30 @@ function relAction(g) {
 }
 
 async function loadRelationship() {
-  if (!token() || page.isOwner || !page.account?.username || !page.data) return;
+  if (!token() || page.isOwner || !page.account || !page.data) return;
   try {
     const res = await authFetch(`${API}/relationship?username=${encodeURIComponent(page.data.username)}`);
-    if (res.ok) page.rel = (await res.json()).games || null;
+    if (res.ok) {
+      page.rel = (await res.json()).games || null;
+    } else if (res.status === 404) {
+      location.reload();   // blocked or gone meanwhile: the page itself is out of date
+    }   // 429 / errors: keep what is on screen (a successful like already updated it), try again later
   } catch { }
+}
+
+// keep the buttons true while the page stays open: the other player may like back, unmatch or block
+let relTimer = null;
+function watchRelationship() {
+  if (relTimer || !page.rel) return;
+  const refresh = async () => {
+    if (document.hidden || page.tab !== "games") return;
+    const before = JSON.stringify(page.rel);
+    await loadRelationship();
+    if (JSON.stringify(page.rel) !== before) renderTab();
+  };
+  relTimer = setInterval(refresh, 30000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+  window.addEventListener("focus", refresh);
 }
 
 async function likeFromProfile(game, btn) {
@@ -186,7 +206,9 @@ async function likeFromProfile(game, btn) {
     const d = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(typeof d.detail === "string" ? d.detail : "Could not send like");
     toast(d.mutual ? "It's a match! Their contact is in your squad." : "Like sent — you'll match if they like you back", "success");
-    await loadRelationship();
+    page.rel = { ...(page.rel || {}), [game]: d.mutual ? "mutual" : "liked" };
+    renderTab();
+    await loadRelationship();   // reconcile (a failure here keeps the state above)
     renderTab();
   } catch (e) {
     btn.disabled = false;
@@ -348,7 +370,12 @@ document.addEventListener("click", async (e) => {
   if (!(e.target instanceof Element)) return;
   const t = e.target;
   const tab = t.closest(".pp-tabs [data-tab]");
-  if (tab) { page.tab = tab.dataset.tab; return renderTab(); }
+  if (tab) {
+    page.tab = tab.dataset.tab;
+    renderTab();
+    if (page.tab === "games" && page.rel) loadRelationship().then(renderTab);
+    return;
+  }
   const sg = t.closest("[data-squad-game]");
   if (sg) { page.squadGame = sg.dataset.squadGame; return renderTab(); }
   if (t.closest("#btn-edit") || t.closest(".pp-bio.empty")) return page.isOwner && openEdit();
@@ -409,6 +436,7 @@ $("edit-bio").addEventListener("input", () => { $("bio-count").textContent = `${
     page.data = await res.json();
     await loadRelationship();
     render();
+    watchRelationship();
   } catch {
     $("pp-main").innerHTML = `<div class="pp-loading"><h2>Could not load this profile</h2><p>Check your connection and try again.</p></div>`;
   }

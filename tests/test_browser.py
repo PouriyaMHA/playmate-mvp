@@ -425,3 +425,56 @@ def test_like_and_like_back_from_a_public_profile(open_page, users, make_profile
     other.click('[data-like-game="cs2"]')
     other.wait_for_selector("text=In your squad")
     assert api.get("/api/poll?game=cs2", user=users["alice"])[1]["squadmates"][0]["in_game_username"] == "BobCS"
+
+
+def test_profile_like_keeps_its_result_when_the_follow_up_read_fails(open_page, users, make_profile):
+    """R8-M01: POST like succeeds, then GET /api/relationship 429s: the card still says sent, no second Like button."""
+    make_profile(users["alice"], "Alice")
+    make_profile(users["bob"], "Bob")
+    page = open_page("/u/bob", as_user=users["alice"])
+    page.wait_for_selector('[data-like-game="cs2"]')
+    page.route("**/api/relationship**", lambda r: r.fulfill(status=429, headers={"Retry-After": "30"},
+                                                            content_type="application/json", body='{"detail": "slow"}'))
+    page.click('[data-like-game="cs2"]')
+    page.wait_for_selector("text=Like sent ✓")
+    page.wait_for_timeout(300)
+    assert page.locator('[data-like-game="cs2"]').count() == 0
+
+
+def test_in_your_squad_opens_the_squad_on_a_phone(browser, base_url, db, users, make_profile, api):
+    """R8-L01"""
+    make_profile(users["alice"], "Alice")
+    make_profile(users["bob"], "Bob", in_game_username="BobCS")
+    api.post("/api/like", user=users["alice"], json={"to_user": "bob", "game": "cs2"})
+    api.post("/api/like", user=users["bob"], json={"to_user": "alice", "game": "cs2"})
+    ctx = mobile_context(browser)
+    page = ctx.new_page()
+    login(page, base_url, users["alice"])
+    page.goto(base_url + "/u/bob")
+    page.click("text=In your squad")
+    poll(page, "typeof state !== 'undefined' && state.gameReady === true")
+    poll(page, "document.body.dataset.view === 'squad' && document.body.innerText.includes('BobCS')")
+    assert page.locator("#squad-panel").is_visible()
+    close_clean(ctx)
+
+
+def test_open_profile_follows_what_the_other_player_does(open_page, users, make_profile, api):
+    """R8-L02: Bob likes Alice while Alice has Bob's profile open; coming back to the tab shows Like back."""
+    make_profile(users["alice"], "Alice")
+    make_profile(users["bob"], "Bob")
+    page = open_page("/u/bob", as_user=users["alice"])
+    page.wait_for_selector('[data-like-game="cs2"]:not(.hot)')
+    api.post("/api/like", user=users["bob"], json={"to_user": "alice", "game": "cs2"})
+    page.evaluate("window.dispatchEvent(new Event('focus'))")   # = returning to this tab
+    page.wait_for_selector('[data-like-game="cs2"].hot')
+    api.delete("/api/like?to_user=alice&game=cs2", user=users["bob"])   # bob takes it back
+    page.click('[data-tab="achievements"]')
+    page.click('[data-tab="games"]')
+    page.wait_for_selector('[data-like-game="cs2"]:not(.hot)')
+
+
+def test_signed_in_player_without_a_profile_is_told_to_add_the_game(open_page, users, make_profile):
+    """R8-L03: a brand-new account (no game profile yet) viewing someone gets the 'add this game' guidance."""
+    make_profile(users["alice"], "Alice")
+    page = open_page("/u/alice", as_user=users["carol"])
+    page.wait_for_selector("text=Add Counter-Strike 2 to your games to like them")

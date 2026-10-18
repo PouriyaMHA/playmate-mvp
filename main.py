@@ -1345,7 +1345,8 @@ def relationship(username: str, user_id: str = Depends(get_current_user_id)):
         return {"username": username.lower(), "self": True, "games": {}}
     if other in get_blocked_ids(user_id):
         raise HTTPException(status_code=404, detail="Player not found")   # blocked either way: nothing to show
-    rows = supabase.table("profiles").select("*").in_("user_id", [user_id, other]).execute().data or []
+    rows = (supabase.table("profiles").select("user_id,game,platform,game_meta,favorite_mode,class_type")
+            .in_("user_id", [user_id, other]).execute().data or [])   # what compatible() needs — no contact columns
     mine = {r["game"]: r for r in rows if str(r["user_id"]) == user_id}
     theirs = {r["game"]: r for r in rows if str(r["user_id"]) == other}
     likes = (supabase.table("likes").select("from_user_id,to_user_id,game")

@@ -1668,6 +1668,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (pick) {
     await selectGame(pick);
     if (new URLSearchParams(location.search).has("pick")) openGamePicker();
+    if (new URLSearchParams(location.search).get("tab") === "squad") {   // e.g. "In your squad — open it" on a profile
+      setTab("squad");
+      $("squad-panel")?.scrollIntoView({ block: "start" });
+    }
   } else {
     // brand-new user: choose a first game
     state.game = null;
