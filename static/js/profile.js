@@ -11,8 +11,8 @@ const sb = window.supabase?.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) || nul
 const MIC_LABELS = { voice: "Voice", both: "Voice + Text", none: "No mic" };
 const REGION_LABELS = {
   "na-west": "North America West", "na-east": "North America East", "eu-west": "Europe West",
-  "eu-central": "Europe Central", "middle-east": "Middle East", "asia": "Asia", "oceania": "Oceania",
-  "south-america": "South America",
+  "eu-central": "Europe Central & East", "middle-east": "Middle East", "asia": "Asia", "oceania": "Oceania",
+  "south-america": "Latin America", "africa": "Africa",
 };
 const LANG_LABELS = { en: "English", fa: "Persian", tr: "Turkish", ar: "Arabic", de: "German", fr: "French", es: "Spanish", ru: "Russian" };
 const LINKS = {
@@ -143,7 +143,7 @@ function renderTab() {
             <div class="pp-game-body">
               <h3>${esc(g.name)} ${g.looking_now ? '<span class="looking-badge">● Looking now</span>' : ""}</h3>
               <div class="pp-game-pills">
-                ${g.region ? `<span class="info-pill">${icon("globe")}<b>${esc(REGION_LABELS[g.region] || g.region)}</b></span>` : ""}
+                ${g.region ? `<span class="info-pill">${icon("globe")}<b>${esc(REGION_LABELS[g.region] || g.region)}</b>${g.country ? ` · ${esc(g.country)}` : ""}</span>` : ""}
                 ${fields.map(([, v]) => `<span class="info-pill"><b>${esc(v)}</b></span>`).join("")}
                 ${g.platform ? `<span class="info-pill">${icon("monitor")}<b>${esc(g.platform)}</b></span>` : ""}
                 ${g.mic ? `<span class="info-pill">${icon("mic")}<b>${esc(MIC_LABELS[g.mic] || g.mic)}</b></span>` : ""}

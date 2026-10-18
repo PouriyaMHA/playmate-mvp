@@ -463,7 +463,7 @@ GAMES = [
     ("minecraft", "Minecraft", "Sandbox", "#5bd65b", scene_minecraft, "MC"),
     ("lol", "League of Legends", "MOBA", "#4fc3f7", scene_lol, "LOL"),
     ("helldivers2", "Helldivers 2", "Co-op shooter", "#ffd23f", scene_helldivers, "HD2"),
-    ("fc", "EA SPORTS FC 26", "Football", "#3fe0c5", scene_fc, "FC"),
+    ("fc", "EA SPORTS FC 27", "Football", "#3fe0c5", scene_fc, "FC"),
     ("gta", "GTA Online", "Open-world crime", "#ff5fa2", scene_gta, "GTA"),
     ("rocket-league", "Rocket League", "Car soccer", "#3b8bff", scene_rocket, "RL"),
     ("default", "Game", "Any genre", GREEN, scene_default, "GG"),

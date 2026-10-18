@@ -8,7 +8,7 @@
   <title>PlayMate | Find your squad</title>
   <link rel="icon" href="/static/img/logo.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
-  <link rel="stylesheet" href="/static/css/ui.css?v=11">
+  <link rel="stylesheet" href="/static/css/ui.css?v=12">
 </head>
 
 <body data-view="match">
@@ -130,11 +130,20 @@
           </div>
 
           <div class="field-row">
+            <label class="field-label" for="country"><svg class="icon">
+                <use href="#i-flag" />
+              </svg>Country</label>
+            <select id="country" required>
+              <option value="">Select country…</option>
+            </select>
+          </div>
+
+          <div class="field-row">
             <label class="field-label" for="city"><svg class="icon">
                 <use href="#i-pin" />
               </svg>City</label>
             <select id="city">
-              <option value="">Select city…</option>
+              <option value="">Optional — skip or select…</option>
             </select>
           </div>
 
@@ -336,7 +345,7 @@
 
   <!-- Supabase JS: keeps the login session fresh (access tokens expire after 1 hour) -->
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="/static/js/ui.js?v=13"></script>
+  <script src="/static/js/ui.js?v=14"></script>
 </body>
 
 </html>

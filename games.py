@@ -11,16 +11,7 @@ Each game defines:
 """
 from pathlib import Path
 
-REGIONS = [
-    {"id": "na-west", "label": "North America West", "cities": ["Vancouver", "Seattle", "San Francisco", "Los Angeles"]},
-    {"id": "na-east", "label": "North America East", "cities": ["Toronto", "New York", "Montreal", "Chicago"]},
-    {"id": "eu-west", "label": "Europe West", "cities": ["London", "Paris", "Amsterdam", "Madrid"]},
-    {"id": "eu-central", "label": "Europe Central", "cities": ["Frankfurt", "Berlin", "Vienna", "Stockholm"]},
-    {"id": "middle-east", "label": "Middle East", "cities": ["Tehran", "Istanbul", "Dubai", "Mashhad", "Shiraz", "Isfahan"]},
-    {"id": "asia", "label": "Asia", "cities": ["Tokyo", "Seoul", "Singapore", "Mumbai"]},
-    {"id": "oceania", "label": "Oceania", "cities": ["Sydney", "Melbourne", "Auckland"]},
-    {"id": "south-america", "label": "South America", "cities": ["São Paulo", "Buenos Aires", "Santiago"]},
-]
+from locations import REGIONS, region_label  # noqa: F401  (re-exported for main.py)
 
 LANGUAGES = [
     {"code": "en", "label": "English"},
@@ -158,14 +149,14 @@ GAMES = {
         ],
     },
     "fc": {
-        "name": "EA SPORTS FC 26",
-        "short": "FC26",
+        "name": "EA SPORTS FC 27",
+        "short": "FC27",
         "genre": "Football",
         "accent": "#3fe0c5",
         "platforms": ["PC", "PlayStation", "Xbox", "Switch"],
         "ign_label": "EA ID",
         "fields": [
-            _field("mode", "Mode", ["Pro Clubs", "Rush", "Ultimate Team Co-op", "Seasons / Friendlies"], 14),
+            _field("mode", "Mode", ["Clubs", "The Grounds", "Ultimate Team Co-op", "Seasons / Friendlies"], 14),
             _field("division", "Division", ["Div 10–8", "Div 7–5", "Div 4–2", "Div 1", "Elite"], 10),
             _field("position", "Position", ["Goalkeeper", "Defender", "Midfielder", "Forward", "Any"], 8,
                    required=False, match="diff"),
@@ -207,7 +198,7 @@ def get_game(game_id: str | None) -> dict | None:
 
 
 PHOTO_DIR = Path(__file__).parent / "static" / "img" / "games" / "photos"
-COVER_VERSION = 1  # bump when a photo in static/img/games/photos changes
+COVER_VERSION = 2  # bump when a photo in static/img/games/photos changes
 
 
 def game_summary(game_id: str) -> dict:
@@ -240,13 +231,6 @@ def game_meta(game_id: str) -> dict:
         # kept for older clients (Battlefield page)
         "favorite_modes": next((f["options"] for f in g["fields"] if f["id"] == "favorite_mode"), []),
     }
-
-
-def region_label(region_id: str | None) -> str:
-    for r in REGIONS:
-        if r["id"] == region_id:
-            return r["label"]
-    return region_id or ""
 
 
 def clean_fields(game_id: str, raw: dict | None) -> tuple[dict, list[str]]:

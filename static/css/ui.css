@@ -2308,9 +2308,15 @@ a.sm-name:hover {
     bottom: calc(72px + env(safe-area-inset-bottom));
     z-index: 5;
     gap: 40px;
-    margin-top: 12px;
-    padding: 10px 0 6px;
-    background: linear-gradient(180deg, transparent, var(--bg) 35%);
+    width: fit-content;
+    margin: 12px auto 0;
+    padding: 10px 26px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: rgba(7, 11, 16, 0.72);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
   }
 
   .action-btn {

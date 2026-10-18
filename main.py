@@ -23,6 +23,7 @@ from supabase import create_client
 from supabase.lib.client_options import SyncClientOptions
 
 from games import GAME_ORDER, GAMES, LANGUAGES, REGIONS, clean_fields, game_meta, game_summary, region_label
+from locations import country_of_city, get_country
 
 LANGUAGE_LABELS = {lang["code"]: lang["label"] for lang in LANGUAGES}
 
@@ -124,6 +125,11 @@ def profile_fields(p: dict) -> dict:
     return fields
 
 
+def profile_country(p: dict) -> str | None:
+    """Country saved with the profile, or (older profiles) the country of its city."""
+    return ((p.get("game_meta") or {}).get("country")) or country_of_city(p.get("region"), p.get("city"))
+
+
 def public_view(p: dict) -> dict:
     """A profile row as other players may see it."""
     return {
@@ -132,6 +138,7 @@ def public_view(p: dict) -> dict:
         "game": p.get("game"),
         "platform": p.get("platform"),
         "region": p.get("region"),
+        "country": profile_country(p),
         "city": p.get("city"),
         "languages": p.get("languages"),
         "mic": p.get("mic"),
@@ -357,6 +364,7 @@ class ProfileIn(BaseModel):
     discord_username: str | None = None
     platform: str | None = None
     region: str | None = None
+    country: str | None = None
     city: str | None = None
     mic: str | None = None
     languages: str | None = None
@@ -402,8 +410,11 @@ def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)
     languages = ",".join(dict.fromkeys(c for c in parse_languages(profile.languages) if c in allowed_langs))
     if not languages:
         missing.append("Languages")
+    country_def = get_country(region, (profile.country or "").strip())
+    if region_def and not country_def:
+        missing.append("Country")
     city = (profile.city or "").strip() or None
-    if city and (not region_def or city not in region_def["cities"]):
+    if city and (not country_def or city not in country_def["cities"]):
         city = None
     platform = (profile.platform or "").strip() or None
     if platform and platform not in g["platforms"]:
@@ -431,7 +442,7 @@ def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)
         "city": city,
         "mic": mic,
         "languages": languages,
-        "game_meta": {"fields": fields},
+        "game_meta": {"fields": fields, "country": country_def["name"] if country_def else None},
     }
     for f in g["fields"]:
         if f.get("column"):
@@ -535,6 +546,10 @@ def score_pair(me: dict, other: dict, game: str) -> tuple[int, list[str]]:
     if me.get("region") and other.get("region") == me.get("region"):
         score += 35
         reasons.append(f"Same region: {region_label(me['region'])}")
+        my_country = profile_country(me)
+        if my_country and profile_country(other) == my_country:
+            score += 5
+            reasons.append(f"Same country: {my_country}")
         if me.get("city") and other.get("city") == me.get("city"):
             score += 5
             reasons.append(f"Same city: {me['city']}")

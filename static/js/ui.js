@@ -134,6 +134,7 @@ const els = {
   modal: $("match-modal"),
   gameModal: $("game-modal"),
   region: $("region"),
+  country: $("country"),
   city: $("city"),
   platform: $("platform"),
   mic: $("mic"),
@@ -396,7 +397,9 @@ function buildForm() {
   const m = state.meta;
 
   fillSelect(els.region, m.regions.map(r => ({ value: r.id, label: r.label })), "Select region…");
-  fillSelect(els.city, [], "Select city…");
+  fillSelect(els.country, [], "Select country…");
+  els.country.disabled = true;
+  fillSelect(els.city, [], "Optional — skip or select…");
   els.city.disabled = true;
   fillSelect(els.platform, m.platforms, m.platforms.length > 1 ? "Select platform…" : null);
   $("ign-label").textContent = m.ign_label || "In-game name";
@@ -423,10 +426,21 @@ function buildForm() {
   });
 }
 
-function fillCities(regionId, selected) {
+// Region → Country → City (city optional). A region with one country picks it automatically.
+function fillCountries(regionId, selected) {
   const r = (state.meta?.regions || []).find(x => x.id === regionId);
-  fillSelect(els.city, r ? r.cities : [], "Select city…");
-  els.city.disabled = !r;
+  const countries = r?.countries || [];
+  fillSelect(els.country, countries.map(c => c.name), "Select country…");
+  els.country.disabled = !r;
+  if (selected && countries.some(c => c.name === selected)) els.country.value = selected;
+  else if (countries.length === 1) els.country.value = countries[0].name;
+}
+
+function fillCities(regionId, countryName, selected) {
+  const r = (state.meta?.regions || []).find(x => x.id === regionId);
+  const c = r?.countries?.find(x => x.name === countryName);
+  fillSelect(els.city, c ? c.cities : [], "Optional — skip or select…");
+  els.city.disabled = !c;
   if (selected) els.city.value = selected;
 }
 
@@ -436,7 +450,8 @@ function selectedLanguages() {
 
 function applyProfileToForm(p) {
   els.region.value = p.region || "";
-  fillCities(p.region, p.city);
+  fillCountries(p.region, p.country);
+  fillCities(p.region, els.country.value, p.city);
   if (p.platform && [...els.platform.options].some(o => o.value === p.platform)) els.platform.value = p.platform;
   els.mic.value = p.mic || "voice";
   const langs = new Set(String(p.languages || "").split(",").map(s => s.trim()).filter(Boolean));
@@ -472,7 +487,7 @@ async function loadProfileForGame() {
     if (other) {
       try {
         const o = await apiJson(`${API_BASE}/my-profile?game=${encodeURIComponent(other)}`);
-        shared = { region: o.region, city: o.city, mic: o.mic, languages: o.languages, discord_username: o.discord_username };
+        shared = { region: o.region, country: o.country, city: o.city, mic: o.mic, languages: o.languages, discord_username: o.discord_username };
         setIdentity(o.display_username || o.username);
       } catch { }
     }
@@ -496,6 +511,7 @@ function collectProfile() {
     username: state.displayName || els.usernameInput.value.trim(),
     game: state.game,
     region: els.region.value,
+    country: els.country.value || null,
     city: els.city.value || null,
     platform: els.platform.value || null,
     mic: els.mic.value,
@@ -511,6 +527,7 @@ function validateProfile(p) {
   const missing = [];
   if (!p.username) missing.push({ label: "Username", el: els.usernameInput });
   if (!p.region) missing.push({ label: "Region", el: els.region });
+  if (!p.country) missing.push({ label: "Country", el: els.country });
   if (state.meta?.platforms?.length > 1 && !p.platform) missing.push({ label: "Platform", el: els.platform });
   (state.meta?.fields || []).forEach(f => {
     if (f.required && !p.fields[f.id]) missing.push({ label: f.label, el: $(`gf-${f.id}`) });
@@ -560,7 +577,7 @@ async function saveProfile() {
     if (!state.myGames.includes(state.game)) state.myGames.push(state.game);
     setIdentity(saved.display_username || saved.username);
     localStorage.setItem("playmate_shared", JSON.stringify({
-      region: payload.region, city: payload.city, mic: payload.mic, languages: payload.languages,
+      region: payload.region, country: payload.country, city: payload.city, mic: payload.mic, languages: payload.languages,
       discord_username: payload.discord_username,
     }));
     els.status.textContent = "";
@@ -701,7 +718,7 @@ function renderCard() {
     ${match.looking_now ? '<div style="margin-top:8px;"><span class="looking-badge">● Looking for a squad now</span></div>' : ""}
 
     <div class="pill-container">
-      <span class="info-pill">${svgIcon("globe")}<b>${esc(regionLabel(p.region))}</b>${p.city ? ` · ${esc(p.city)}` : ""}</span>
+      <span class="info-pill">${svgIcon("globe")}<b>${esc(regionLabel(p.region))}</b>${p.city || p.country ? ` · ${esc([p.city, p.country].filter(Boolean).join(", "))}` : ""}</span>
       ${fieldPills}
       <span class="info-pill">${svgIcon("mic")}Mic: <b>${esc(MIC_LABELS[p.mic] || p.mic || "—")}</b></span>
       ${p.platform ? `<span class="info-pill">${svgIcon("monitor")}<b>${esc(p.platform)}</b></span>` : ""}
@@ -1153,7 +1170,8 @@ function setupEventListeners() {
     if (card) selectGame(card.dataset.game);
   });
 
-  els.region.addEventListener("change", () => { fillCities(els.region.value); refreshStats(); });
+  els.region.addEventListener("change", () => { fillCountries(els.region.value); fillCities(els.region.value, els.country.value); refreshStats(); });
+  els.country.addEventListener("change", () => fillCities(els.region.value, els.country.value));
   els.btnLooking.addEventListener("click", toggleLooking);
 
   const runFind = async (e) => {
