@@ -25,6 +25,14 @@ Full background, decisions and open issues: `docs/PROJECT_HISTORY.md`. Raw ChatG
 - User-facing UI text in English.
 - Destructive SQL: preview with SELECT first and scope tightly. Supabase `app_metadata` updates MERGE keys — remove a key by setting it to `None`.
 
+## Working with Codex
+- Codex (OpenAI) is the reviewer/tester; Claude builds. Call it with
+  `& "$env:LOCALAPPDATA\OpenAI\Codexin\<hash>\codex.exe" exec -C <repo> -s workspace-write -o <file> "<prompt>"`
+  (or `codex review --base main` / `--commit <sha>`). Its rules are in `AGENTS.md`; reviews go to `docs/reviews/`.
+- Ask Codex to review important changes (security, data, matching, payments) before or right after pushing.
+- Challenge each other: verify every Codex finding against the code before acting; fix what's right, push back with
+  evidence on what isn't, and write the answer under `## Claude's response` in the review file. Disagreements → owner.
+
 ## Working with the user
 - Replies in Persian; code and identifiers in English.
 - Base every change on the actual current files — never assume code exists.
