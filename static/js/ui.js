@@ -186,6 +186,7 @@ const state = {
   wizard: false,      // this game has no saved profile yet: 2-step setup (step 1 how you play, step 2 contact)
   step: 1,
   baseline: null,     // the saved profile as formSnapshot() — null = not saved yet
+  initial: null,      // a new profile: the form as the setup started (prefills) — edits are compared to this
   saving: false,
   saveError: "",
 };
@@ -236,8 +237,17 @@ function captureIntentFromUrl() {
     history.replaceState(null, "", url);
   }
 }
+function placeIntent() {
+  const el = $("intent-strip");
+  if (!el) return;
+  const onPhone = window.innerWidth <= 760;
+  const host = onPhone && document.body.dataset.view === "profile" ? $("profile-panel").querySelector(".profile-body")
+    : onPhone && document.body.dataset.view === "squad" ? $("squad-panel") : $("match-panel");
+  if (el.parentElement !== host) host.prepend(el);
+}
 function renderIntent() {
   const el = $("intent-strip");
+  placeIntent();
   const i = readIntent();
   if (!i) return;
   const name = esc(i.target);
@@ -603,6 +613,7 @@ async function selectGame(gameId) {
   if (state.loadFailed) return;   // keep the "Couldn't load — Try again" message on screen
   state.gameReady = true;
   els.btnFind.disabled = false;
+  state.initial = state.wizard ? formSnapshot() : null;
   renderWizard();
   renderIntent();
   if (state.wizard && window.innerWidth <= 760) setTab("profile");   // new game on a phone: start the setup
@@ -783,11 +794,28 @@ function formSnapshot() {
   const fields = Object.keys(p.fields).sort().reduce((o, k) => (o[k] = p.fields[k], o), {});
   return JSON.stringify([p.region || "", p.country || "", p.city || "", p.platform || "", p.mic || "",
     String(p.languages || "").split(",").filter(Boolean).sort().join(","), p.in_game_username || "",
-    p.discord_username || "", p.steam_profile || "", fields]);
+    p.discord_username || "", steamCanonical(p.steam_profile), fields,
+    els.usernameRow.style.display === "none" ? "" : els.usernameInput.value.trim()]);
 }
 function isDirty() {
   if (!state.gameReady || state.loadFailed) return false;
-  return state.baseline === null ? state.wizard && state.step === 2 : formSnapshot() !== state.baseline;
+  if (state.baseline === null) return state.initial !== null && formSnapshot() !== state.initial;
+  return formSnapshot() !== state.baseline;
+}
+// the same canonical Steam form the server stores ("id/<name>" / "profiles/<SteamID64>"), for comparing only;
+// anything not recognised is compared as typed (the server decides if it's valid)
+const STEAM_BASE = 76561197960265728n;
+function steamCanonical(raw) {
+  const v = String(raw || "").trim();
+  if (!v) return "";
+  const m = /^(?:https?:\/\/)?(?:www\.)?steamcommunity\.com\/(id|profiles)\/([^/?#\s]+)\/?(?:[?#]\S*)?$/i.exec(v);
+  const kind = m ? m[1].toLowerCase() : "", val = m ? m[2] : v;
+  if ((kind === "profiles" || !kind) && /^[0-9]{1,20}$/.test(val)) {
+    const n = BigInt(val);
+    const acct = !kind && val.length <= 10 ? n : n - STEAM_BASE;
+    return acct >= 1n && acct <= 0xFFFFFFFFn ? `profiles/${STEAM_BASE + acct}` : v;
+  }
+  return /^[A-Za-z0-9_-]{2,32}$/.test(val) && (kind === "id" || !/^[0-9]+$/.test(val)) ? `id/${val}` : v;
 }
 function setSaved() {
   state.baseline = formSnapshot();
@@ -799,7 +827,7 @@ function renderSaveState() {
   const dirty = isDirty();
   let text = "", cls = "";
   if (state.saving) text = "Saving…";
-  else if (state.saveError) { text = state.saveError; cls = "error"; }
+  else if (state.saveError && (dirty || state.wizard)) { text = state.saveError; cls = "error"; }
   else if (state.wizard) text = state.step === 2 ? "Not saved yet" : "";
   else if (dirty) { text = "Unsaved changes"; cls = "dirty"; }
   else if (state.hasProfile) { text = "Saved ✓"; cls = "saved"; }
@@ -895,8 +923,18 @@ function validateProfile(p) {
 }
 
 function markMissing(missing) {
-  document.querySelectorAll(".field-invalid").forEach(el => el.classList.remove("field-invalid"));
-  missing.forEach(m => m.el?.classList.add("field-invalid"));
+  document.querySelectorAll(".field-invalid").forEach(el => {
+    el.classList.remove("field-invalid");
+    el.removeAttribute("aria-invalid");
+  });
+  missing.forEach(m => {
+    m.el?.classList.add("field-invalid");
+    m.el?.setAttribute("aria-invalid", "true");
+    m.el?.setAttribute("aria-errormessage", "form-errors");
+  });
+  const box = $("form-errors");
+  box.textContent = missing.length ? `Please fill in: ${missing.map(m => m.label).join(", ")}` : "";
+  box.hidden = !missing.length;
   const first = missing[0]?.el;
   if (!first) return;
   if (window.innerWidth <= 760) setTab("profile");
@@ -910,10 +948,16 @@ document.addEventListener("click", (e) => {
   if (e.target.closest("[data-intent-dismiss]")) clearIntent();
   else if (e.target.closest("[data-intent-go]")) { try { sessionStorage.removeItem("pm_intent"); } catch { } }
 });
-document.addEventListener("change", (e) => e.target.classList?.remove("field-invalid"));
-document.addEventListener("input", (e) => e.target.classList?.remove("field-invalid"));
+function clearInvalid(el) {
+  if (!el?.classList?.contains("field-invalid")) return;
+  el.classList.remove("field-invalid");
+  el.removeAttribute("aria-invalid");
+  if (!document.querySelector(".field-invalid")) $("form-errors").hidden = true;
+}
+document.addEventListener("change", (e) => clearInvalid(e.target));
+document.addEventListener("input", (e) => clearInvalid(e.target));
 document.addEventListener("click", (e) => {
-  if (e.target.closest?.(".lang-pill")) els.langContainer.classList.remove("field-invalid");
+  if (e.target.closest?.(".lang-pill")) clearInvalid(els.langContainer);
 });
 
 async function saveProfile() {
@@ -957,6 +1001,7 @@ async function saveProfile() {
     if (saved.steam_profile !== undefined) els.steam.value = saved.steam_profile ? steamUrl(saved.steam_profile) : "";
     state.saving = false;
     state.wizard = false;
+    state.initial = null;
     renderWizard();
     setSaved();   // the baseline is what the server stored (e.g. the canonical Steam link)
     renderIntent();   // "save your profile first" → "View @name"
@@ -1052,11 +1097,13 @@ function renderNoMatches(total, pool = {}) {
     text = `When one of the ${plural(n("liked"), "player")} you liked likes you back, they appear in your Squad with their contact.`;
     primary = `<button class="btn-primary" type="button" data-action="find">Scan again</button>`;
   } else if (n("incompatible")) {
-    title = "No one you can team up with yet";
-    text = `The ${gameName} players here so far play on a platform, edition or server that can't play with yours. New players join every day.`;
+    title = "No one you can team up with in this scan";
+    text = pool.complete
+      ? `The ${gameName} players here so far play on a platform, edition or server that can't play with yours.`
+      : `The most recently active ${gameName} players play on a platform, edition or server that can't play with yours.`;
     primary = `<button class="btn-primary" type="button" data-action="find">Scan again</button>`;
   } else {
-    title = `You're one of the first ${gameName} players here`;
+    title = pool.complete === false ? "No players found in this scan" : `You're one of the first ${gameName} players here`;
     text = "PlayMate is in early access — every new player makes matches better.";
     primary = `<button class="btn-primary" type="button" data-action="find">Scan again</button>`;
   }
@@ -1748,6 +1795,7 @@ function stopRealtime() {
 ========================================================= */
 function setTab(tab) {
   document.body.dataset.view = tab;
+  placeIntent();
   document.querySelectorAll(".tabbar button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
   if (tab === "squad") $("tab-squad-dot").hidden = true;
   window.scrollTo({ top: 0 });
@@ -1791,8 +1839,7 @@ function setupEventListeners() {
       if (isCurrent(gen)) els.btnFind.disabled = !state.gameReady;
     }
   };
-  els.btnFind.addEventListener("click", runFind);
-  els.form.addEventListener("submit", runFind);
+  els.form.addEventListener("submit", runFind);   // the Find button is type=submit, so Enter works too
   els.btnNext.addEventListener("click", wizardNext);
   els.btnBack.addEventListener("click", () => goToStep(1));
   // any edit of a saved preference updates "Saved ✓ / Unsaved changes" (filters are not preferences)

@@ -316,7 +316,7 @@ function openEdit() {
   $("banner-pick").innerHTML = banners.map(id =>
     `<button type="button" data-banner="${id}" class="${a.banner === id ? "active" : ""}" aria-label="Banner ${id.split("-")[1]}" aria-pressed="${a.banner === id}"><img src="/static/img/banners/${id}.svg" alt=""></button>`).join("");
   $("edit-bio").value = a.bio || "";
-  $("bio-count").textContent = `${(a.bio || "").length}/280`;
+  $("bio-count").textContent = `${bioLength(a.bio || "")}/280`;
   ["twitch", "youtube", "instagram"].forEach(k => { $(`link-${k}`).value = (a.links || {})[k] || ""; });
   $("edit-modal").classList.add("active");
 }
@@ -405,7 +405,13 @@ document.addEventListener("click", async (e) => {
   if (rm && page.isOwner) return removeGame(rm.dataset.removeGame, rm.dataset.gameName);
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeEdit(); });
-$("edit-bio").addEventListener("input", () => { $("bio-count").textContent = `${$("edit-bio").value.length}/280`; });
+// 280 characters as the server counts them (an emoji is one), never cutting one in half
+function bioLength(v) { return Array.from(v).length; }
+$("edit-bio").addEventListener("input", () => {
+  const box = $("edit-bio");
+  if (bioLength(box.value) > 280) box.value = Array.from(box.value).slice(0, 280).join("");
+  $("bio-count").textContent = `${bioLength(box.value)}/280`;
+});
 
 /* ---------------- init ---------------- */
 (async function init() {

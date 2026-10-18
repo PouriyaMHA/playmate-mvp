@@ -40,7 +40,10 @@ function validTarget(next) {
 function intentQuery() {   // carried by the confirmation email link (another tab has no sessionStorage)
   try {
     const i = JSON.parse(sessionStorage.getItem("pm_intent") || "null");
-    if (i && validTarget(`/u/${i.target}`)) {
+    // only this signup's own intent: fresh (24 h, like the app) and not already bound to another account
+    const fresh = i && Date.now() - Number(i.at || 0) < 24 * 3600 * 1000 && !i.uid;
+    if (i && !fresh) sessionStorage.removeItem("pm_intent");
+    if (fresh && validTarget(`/u/${i.target}`)) {
       return `?${i.game ? `game=${encodeURIComponent(i.game)}&` : ""}next=${encodeURIComponent(`/u/${i.target}`)}`;
     }
   } catch { }

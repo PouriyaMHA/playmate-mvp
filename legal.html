@@ -8,7 +8,7 @@
   <title>PlayMate | Terms &amp; Privacy</title>
   <link rel="icon" href="/static/img/logo.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
-  <link rel="stylesheet" href="/static/css/ui.css?v=24">
+  <link rel="stylesheet" href="/static/css/ui.css?v=25">
   <link rel="stylesheet" href="/static/css/landing.css?v=1">
   <style>
     .legal {
@@ -130,10 +130,13 @@
         <li><b>Account:</b> your email address and password (stored by our login provider; we never see your
           password). Your email is never shown to other players.</li>
         <li><b>Public profile:</b> username, avatar, banner, bio, links, and for each game: region, country, optional
-          city, platform, languages, mic preference and game details.</li>
+          city, platform, languages, mic preference and game details. Also public: when you were last active, whether
+          "Looking now" is on, your badges and number of squadmates, and the list of your squadmates in each game
+          (names and public profile details only — never their contact details).</li>
         <li><b>Private contact details:</b> in-game name, Discord and Steam profile — shown only to your squadmates.</li>
-        <li><b>Activity:</b> who you liked, blocked or reported, your squadmates, when you were last active, whether
-          "Looking now" is on, and who invited you (if you came through an invite link).</li>
+        <li><b>Private activity:</b> who you liked, blocked or reported, who liked you, and who invited you (if you came
+          through an invite link). Other players never see who you blocked or reported; a player you liked sees it only
+          in their own "Liked you" list.</li>
         <li><b>Technical:</b> our hosting and database providers keep standard server logs (such as IP address and the
           time of a request) to run and protect the service.</li>
       </ul>
@@ -155,9 +158,15 @@
 
       <h2>Your browser</h2>
       <p>PlayMate doesn't use cookies for tracking or ads. To keep you logged in and remember your choices, the app saves
-        a few items in your browser's local and session storage: your login session, the game you chose, a copy of your
-        shared profile fields to pre-fill new games, an invite code, players you skipped in this session and the
-        profile you came from. Logging out removes them.</p>
+        a few items in your browser:</p>
+      <ul>
+        <li><b>Local storage</b> (kept until you log out): your login session, the game you chose, your username, a copy
+          of your shared profile fields to pre-fill new games, and an invite code you arrived with.</li>
+        <li><b>Session storage</b> (cleared when you close the tab): players you skipped, and the profile that brought
+          you here (also forgotten after 24 hours).</li>
+        <li><b>Browser notifications</b> are optional: if you allow them, PlayMate shows one while the app is open in a
+          background tab when you get a new match. You can turn them off in your browser settings at any time.</li>
+      </ul>
 
       <h2>How long we keep it</h2>
       <p>We keep your information while you have an account. When you delete your account (Settings → Delete my

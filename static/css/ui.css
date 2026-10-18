@@ -2699,3 +2699,11 @@ a.sm-btn { display: inline-flex; align-items: center; text-decoration: none; }
 .intent-text { flex: 1 1 100%; }
 .intent-strip .intent-go { width: auto; flex: 1 1 auto; justify-content: center; }
 .intent-strip .intent-close { flex: 0 0 auto; }
+
+/* phones: the two tilted cards behind the match card stuck out of the screen (review 11, R1) */
+@media (max-width: 760px) {
+  .card-stack::before, .card-stack::after { display: none; }
+}
+.form-errors { margin: 4px 0 6px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(255, 107, 129, 0.5);
+  background: rgba(255, 107, 129, 0.08); color: #ff9aa8; font-size: 0.85rem; font-weight: 600; }
+.form-errors[hidden] { display: none; }

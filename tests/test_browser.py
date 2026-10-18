@@ -550,7 +550,8 @@ def test_steam_prefill_finds_it_in_any_saved_game_and_counts_as_contact(open_pag
     page.select_option("#platform", "PC")
     wait_for(page, "() => !document.getElementById('steam-row').hidden")
     assert page.input_value("#steam_profile") == "https://steamcommunity.com/id/alicesteam"
-    # Steam-only contact: no reminder
+    # Steam-only contact: no reminder (leaving the half-filled Helldivers setup asks first: accept)
+    page.once("dialog", lambda d: d.accept())
     page.evaluate("selectGame('cs2')")
     wait_for(page, "() => state.game === 'cs2' && state.gameReady")
     page.fill("#in_game_username", "")
@@ -737,3 +738,104 @@ def test_empty_state_says_why(open_page, users, make_profile, api):
     wait_for(page, READY)
     page.click('[data-action="like"]')
     page.wait_for_selector("text=You've liked everyone available")
+
+
+def test_r11_wizard_edits_are_protected_and_enter_works(open_page, users, make_profile):
+    """F1: step-1 edits count as unsaved (switching asks); F6: Enter in a text field saves on step 2;
+    F7: errors are announced and tied to the fields."""
+    page = open_page("/app?game=cs2", as_user=users["alice"])
+    wait_for(page, "() => typeof state !== 'undefined' && state.gameReady && state.wizard")
+    assert page.evaluate("isDirty()") is False                      # untouched setup isn't "unsaved"
+    page.click("#btn-wizard-next")                                  # nothing filled
+    assert page.get_attribute("#region", "aria-invalid") == "true"
+    assert "Please fill in" in page.inner_text("#form-errors")
+    fill_step1_cs2(page)
+    assert page.evaluate("isDirty()") is True and page.is_hidden("#form-errors")
+    asked = []
+    page.once("dialog", lambda d: (asked.append(d.message), d.dismiss()))
+    page.evaluate("selectGame('gta')")
+    assert asked and page.evaluate("state.game") == "cs2" and page.input_value("#gf-rank") == "Silver"
+    page.click("#btn-wizard-next")   # (step 1 has only selects/pills: browsers never submit a form on Enter there)
+    wait_for(page, "() => state.step === 2")
+    page.click("#btn-wizard-back")
+    assert page.evaluate("isDirty()") is True                       # still protected after Back
+    page.click("#btn-wizard-next")
+    page.fill("#username-input", "Alice")
+    page.focus("#discord_username")
+    page.keyboard.press("Enter")                                    # Enter on step 2 = Save
+    wait_for(page, "() => !state.wizard && state.hasProfile")
+
+
+def test_r11_equivalent_steam_is_not_a_change_and_old_errors_go(open_page, users, make_profile):
+    """F8"""
+    make_profile(users["alice"], "Alice", steam_profile="https://steamcommunity.com/profiles/76561197960287930")
+    make_profile(users["bob"], "Bob")
+    page = open_page("/app?game=cs2", as_user=users["alice"])
+    wait_for(page, READY)
+    for same in ("76561197960287930", "22202", "steamcommunity.com/profiles/76561197960287930/"):
+        page.fill("#steam_profile", same)
+        assert page.inner_text("#save-state") == "Saved ✓", same
+    page.select_option("#mic", "none")
+    page.route("**/api/profile", lambda r: r.fulfill(status=503, content_type="application/json", body='{"detail": "x"}'))
+    page.click("#btn-find-matches")
+    wait_for(page, "() => !state.saving && !!state.saveError")
+    assert "save" in page.inner_text("#save-state").lower()
+    page.select_option("#mic", "voice")                             # back to what is saved
+    assert page.inner_text("#save-state") == "Saved ✓"
+
+
+def test_r11_intent_strip_is_visible_during_phone_setup(browser, base_url, db, users, make_profile):
+    """F2"""
+    make_profile(users["bob"], "Bob")
+    ctx = mobile_context(browser)
+    page = ctx.new_page()
+    page.goto(base_url + "/?game=cs2&next=%2Fu%2Fbob")
+    page.evaluate("t => localStorage.setItem('pm_access_token', t)", make_token(users["alice"], exp=int(time.time()) + 3600))
+    page.goto(base_url + "/app?game=cs2")
+    poll(page, "typeof state !== 'undefined' && state.gameReady === true && state.wizard === true")
+    assert page.locator("#intent-strip").is_visible() and "@bob" in page.inner_text("#intent-strip")
+    page.click("#btn-wizard-next")   # empty: stays on step 1, the strip stays
+    assert page.locator("#intent-strip").is_visible()
+    no_sideways_scroll(page, "setup with strip")
+    close_clean(ctx)
+
+
+def test_r11_confirmation_link_only_carries_a_fresh_unowned_intent(open_page):
+    """F3"""
+    page = open_page("/?game=cs2&next=%2Fu%2Fbob")
+    assert "next=%2Fu%2Fbob" in page.evaluate("intentQuery()")
+    page.evaluate("() => { const i = JSON.parse(sessionStorage.getItem('pm_intent')); i.uid = 'someone-else';"
+                  " sessionStorage.setItem('pm_intent', JSON.stringify(i)); }")
+    assert "next=" not in page.evaluate("intentQuery()")
+    assert page.evaluate("sessionStorage.getItem('pm_intent')") is None
+    page.goto(page.url)
+    page.evaluate("() => { const i = JSON.parse(sessionStorage.getItem('pm_intent')); i.at = Date.now() - 48 * 3600e3;"
+                  " sessionStorage.setItem('pm_intent', JSON.stringify(i)); }")
+    assert "next=" not in page.evaluate("intentQuery()")
+
+
+def test_r11_bio_counts_emoji_as_one_character(open_page, users, make_profile):
+    """F5"""
+    make_profile(users["alice"], "Alice")
+    page = open_page("/u/alice", as_user=users["alice"])
+    page.click("#btn-edit")
+    page.fill("#edit-bio", "🎮" * 300)
+    assert page.evaluate("Array.from(document.getElementById('edit-bio').value).length") == 280
+    assert page.inner_text("#bio-count") == "280/280"
+
+
+def test_r11_match_card_fits_a_phone(browser, base_url, db, users, make_profile):
+    """R1"""
+    make_profile(users["alice"], "Alice")
+    make_profile(users["bob"], "Bob")
+    for width in (375, 320):
+        ctx = browser.new_context(viewport={"width": width, "height": 812}, is_mobile=True, bypass_csp=True)
+        ctx.add_init_script(FAKE_SUPABASE_JS)
+        ctx.route("**/unpkg.com/**", lambda r: r.abort())
+        watch_errors(ctx)
+        page = ctx.new_page()
+        login(page, base_url, users["alice"])
+        page.goto(base_url + "/app?game=cs2")
+        poll(page, "typeof state !== 'undefined' && !!document.getElementById('active-card')")
+        no_sideways_scroll(page, f"match card at {width}px")
+        close_clean(ctx)

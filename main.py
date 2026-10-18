@@ -600,12 +600,14 @@ def settings_page():
 
 @app.get("/terms", response_class=HTMLResponse)
 @app.get("/privacy", response_class=HTMLResponse)
-def legal_page():
+def legal_page(request: Request):
     if SUPPORT_EMAIL:
         contact = f'<a href="mailto:{html.escape(SUPPORT_EMAIL)}">{html.escape(SUPPORT_EMAIL)}</a>'
     else:
         contact = "<b>our support address will be published here before launch.</b>"
     body = (BASE_DIR / "legal.html").read_text(encoding="utf-8").replace("{{SUPPORT_CONTACT}}", contact)
+    title = "Privacy policy" if request.url.path == "/privacy" else "Terms of use"
+    body = re.sub(r"<title>.*?</title>", f"<title>{title} — PlayMate</title>", body, count=1, flags=re.S)
     return HTMLResponse(body, headers={"Cache-Control": "no-cache"})
 
 
@@ -987,7 +989,8 @@ def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)
     my_fields = profile_fields(me)
     matches = []
     # why someone isn't in the list — counts only, about MY own view (for an honest empty state; pre-launch #6)
-    pool = {"incompatible": 0, "liked": 0, "skipped": 0, "filtered": 0}
+    pool = {"incompatible": 0, "liked": 0, "skipped": 0, "filtered": 0,
+            "complete": len(near) < 500 and len(far) < 300}   # False: only the most recently active were looked at
     for p in players:
         uid = str(p.get("user_id") or "")
         if not uid or uid == user_id or uid in blocked:
@@ -999,15 +1002,12 @@ def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)
         if uid in liked_ids:
             pool["liked"] += 1
             continue
-        if (p.get("username") or "").lower() in skipped:
-            pool["skipped"] += 1
-            continue
-        if req.same_language_only and not (my_langs & set(parse_languages(p.get("languages")))):
-            pool["filtered"] += 1
-            continue
         view = public_view(p)
-        if req.looking_only and not view["looking_now"]:
+        if (req.same_language_only and not (my_langs & set(parse_languages(p.get("languages"))))) or                 (req.looking_only and not view["looking_now"]):
             pool["filtered"] += 1
+            continue
+        if (p.get("username") or "").lower() in skipped:   # counted after the filters: "see them again" really shows them
+            pool["skipped"] += 1
             continue
         score, reasons = score_pair(me, p, game)
         likes_you = str(p["user_id"]) in likes_me
@@ -1033,8 +1033,9 @@ def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)
     if page:
         rows = supabase.table("accounts").select("user_id,bio").in_("user_id", [m["_uid"] for m in page]).execute().data or []
         bios = {str(r["user_id"]): r.get("bio") or "" for r in rows}
+    page = [m for m in page if m["_uid"] in bios]   # an account deleted meanwhile: not a card any more
     for m in page:
-        m["profile"]["bio"] = bios.get(m.pop("_uid"), "")
+        m["profile"]["bio"] = bios[m.pop("_uid")]
     return {"target_user": me.get("username"), "game": game, "total": len(matches), "has_more": len(matches) > 20,
             "matches": page, "pool": pool}
 
@@ -1329,7 +1330,9 @@ def update_account(req: AccountUpdate, user_id: str = Depends(get_current_user_i
                 links[k] = v
         changes["links"] = links
     if new_bio is not None:
-        supabase.table("accounts").update({"bio": new_bio}).eq("user_id", user_id).execute()
+        done = supabase.table("accounts").update({"bio": new_bio}).eq("user_id", user_id).execute().data
+        if not done:   # the account was deleted between the check and the write
+            raise ACCOUNT_GONE
     if changes:
         save_account_meta(user, changes)
         if "avatar" in changes:   # accounts.avatar + every game profile, in one DB transaction (migration 005)

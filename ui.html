@@ -8,7 +8,7 @@
   <title>PlayMate | Find your squad</title>
   <link rel="icon" href="/static/img/logo.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
-  <link rel="stylesheet" href="/static/css/ui.css?v=24">
+  <link rel="stylesheet" href="/static/css/ui.css?v=25">
 </head>
 
 <body data-view="match">
@@ -120,7 +120,7 @@
           <!-- a game's first profile is a 2-step setup; a saved profile shows both steps as one form -->
           <div class="wizard-head" id="wizard-head" hidden>
             <h2 class="wizard-title" id="wizard-title" tabindex="-1">How you play</h2>
-            <span class="wizard-step" id="wizard-step">Step 1 of 2</span>
+            <span class="wizard-step" id="wizard-step" aria-live="polite">Step 1 of 2</span>
             <div class="wizard-bar" aria-hidden="true"><i id="wizard-bar-fill"></i></div>
           </div>
 
@@ -166,10 +166,10 @@
             </div>
 
             <div class="field-row stacked">
-              <span class="field-label"><svg class="icon">
+              <span class="field-label" id="lang-label"><svg class="icon">
                   <use href="#i-chat" />
-                </svg>Languages</span>
-              <div class="lang-grid" id="lang-container"></div>
+                </svg>Languages <span class="field-hint">(pick at least one)</span></span>
+              <div class="lang-grid" id="lang-container" role="group" aria-labelledby="lang-label"></div>
             </div>
           </fieldset>
 
@@ -229,11 +229,12 @@
               players looking now</label>
           </div>
 
+          <p class="form-errors" id="form-errors" role="alert" hidden></p>
           <div class="save-state" id="save-state" role="status" aria-live="polite"></div>
           <div class="form-actions">
             <button type="button" id="btn-wizard-back" class="btn-secondary" hidden>← Back</button>
             <button type="button" id="btn-wizard-next" class="btn-primary" hidden>Next →</button>
-            <button type="button" id="btn-find-matches" class="btn-primary"><span id="btn-find-label">Save &amp; Find
+            <button type="submit" id="btn-find-matches" class="btn-primary"><span id="btn-find-label">Save &amp; Find
                 Teammates</span> <svg class="icon">
                 <use href="#i-search" />
               </svg></button>
@@ -416,7 +417,7 @@
 
   <!-- Supabase JS: keeps the login session fresh (access tokens expire after 1 hour) -->
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
-  <script src="/static/js/ui.js?v=37"></script>
+  <script src="/static/js/ui.js?v=38"></script>
 </body>
 
 </html>
