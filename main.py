@@ -23,7 +23,8 @@ from pydantic import BaseModel
 from supabase import create_client
 from supabase.lib.client_options import SyncClientOptions
 
-from games import GAME_ORDER, GAMES, LANGUAGES, REGIONS, clean_fields, game_meta, game_summary, region_label
+from games import (GAME_ORDER, GAMES, LANGUAGES, REGIONS, can_play_together, clean_fields, game_meta, game_summary,
+                   region_label)
 from locations import country_of_city, get_country
 
 logger = logging.getLogger("playmate")
@@ -627,9 +628,13 @@ def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)
         .order("last_active", desc=True, nullsfirst=False).limit(300).execute().data or []
     )
     players = near + far
+    my_fields = profile_fields(me)
     matches = []
     for p in players:
         if not p.get("user_id") or str(p["user_id"]) in hidden:
+            continue
+        # no crossplay between our platforms / different Minecraft edition / different LoL server
+        if not can_play_together(game, me.get("platform"), p.get("platform"), my_fields, profile_fields(p)):
             continue
         if req.same_language_only and not (my_langs & set(parse_languages(p.get("languages")))):
             continue

@@ -2479,3 +2479,25 @@ input.field-invalid {
   border-radius: inherit;
   display: block;
 }
+
+/* game-specific note under the form, e.g. "No crossplay in GTA Online" */
+.crossplay-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 2px 0 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--cyan);
+  background: rgba(46, 230, 255, 0.06);
+  border: 1px solid rgba(46, 230, 255, 0.25);
+}
+
+.crossplay-note .icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-top: 1px;
+}

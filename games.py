@@ -8,6 +8,11 @@ Each game defines:
     Matching gives `weight` points when both players picked the same value — or, for fields with
     match="diff" (roles/positions), when they picked DIFFERENT values, because a squad needs mixed roles.
     `column` mirrors the value into an old profiles column (Battlefield only, for compatibility).
+    `must_match` fields are hard filters: players with different values can't play together at all
+    (Minecraft Java vs Bedrock, League of Legends servers).
+  - crossplay (optional): groups of platforms that can play together. Default: every platform together.
+    Players on platforms from different groups are never matched.
+  - crossplay_note (optional): one line shown under the form explaining the filter.
 """
 from pathlib import Path
 
@@ -27,8 +32,10 @@ LANGUAGES = [
 PC_CONSOLE = ["PC", "PlayStation", "Xbox"]
 
 
-def _field(fid, label, options, weight, required=True, column=None, match="same"):
+def _field(fid, label, options, weight, required=True, column=None, match="same", must_match=False):
     f = {"id": fid, "label": label, "options": options, "weight": weight, "required": required, "match": match}
+    if must_match:
+        f["must_match"] = True
     if column:
         f["column"] = column
     return f
@@ -117,8 +124,9 @@ GAMES = {
         "accent": "#5bd65b",
         "platforms": ["PC", "PlayStation", "Xbox", "Switch", "Mobile"],
         "ign_label": "Minecraft name",
+        "crossplay_note": "Java and Bedrock can't play together — you'll only see players on your edition.",
         "fields": [
-            _field("edition", "Edition", ["Java", "Bedrock"], 14),
+            _field("edition", "Edition", ["Java", "Bedrock"], 14, must_match=True),
             _field("mode", "Mode", ["Survival", "Creative", "Hardcore", "Minigames / Servers", "Modded"], 10),
             _field("style", "Playstyle", ["Builder", "Explorer", "Redstone", "PvP", "Farmer"], 6),
         ],
@@ -130,8 +138,9 @@ GAMES = {
         "accent": "#4fc3f7",
         "platforms": ["PC"],
         "ign_label": "Riot ID",
+        "crossplay_note": "Accounts are tied to a server — you'll only see players on your server.",
         "fields": [
-            _field("server", "Server", ["EUW", "EUNE", "NA", "TR", "ME", "KR", "OCE", "BR", "LAN"], 12),
+            _field("server", "Server", ["EUW", "EUNE", "NA", "TR", "ME", "KR", "OCE", "BR", "LAN"], 12, must_match=True),
             _field("role", "Main role", ["Top", "Jungle", "Mid", "ADC", "Support", "Fill"], 10, match="diff"),
             _field("rank", "Rank", ["Unranked", "Iron", "Bronze", "Silver", "Gold", "Platinum", "Emerald", "Diamond", "Master+"], 8),
         ],
@@ -154,6 +163,8 @@ GAMES = {
         "genre": "Football",
         "accent": "#3fe0c5",
         "platforms": ["PC", "PlayStation", "Xbox", "Switch"],
+        "crossplay": [["PC", "PlayStation", "Xbox"], ["Switch"]],
+        "crossplay_note": "PC, PlayStation and Xbox play together; Switch players only match with Switch.",
         "ign_label": "EA ID",
         "fields": [
             _field("mode", "Mode", ["Clubs", "The Grounds", "Ultimate Team Co-op", "Seasons / Friendlies"], 14),
@@ -168,6 +179,8 @@ GAMES = {
         "genre": "Open-world crime",
         "accent": "#ff5fa2",
         "platforms": ["PC", "PlayStation", "Xbox"],
+        "crossplay": [["PC"], ["PlayStation"], ["Xbox"]],
+        "crossplay_note": "No crossplay in GTA Online — you'll only see players on your platform.",
         "ign_label": "Rockstar ID",
         "fields": [
             _field("activity", "Activity", ["Heists", "Business / Grinding", "Races", "Missions", "Free roam", "PvP"], 14),
@@ -226,11 +239,31 @@ def game_meta(game_id: str) -> dict:
         "platforms": g["platforms"],
         "ign_label": g["ign_label"],
         "fields": g["fields"],
+        "crossplay_note": g.get("crossplay_note", ""),
         "regions": REGIONS,
         "languages": LANGUAGES,
         # kept for older clients (Battlefield page)
         "favorite_modes": next((f["options"] for f in g["fields"] if f["id"] == "favorite_mode"), []),
     }
+
+
+def can_play_together(game_id: str, platform_a: str | None, platform_b: str | None,
+                      fields_a: dict, fields_b: dict) -> bool:
+    """False when two players can't be in the same match at all (no crossplay between their platforms,
+    or a must_match field such as Minecraft edition / LoL server differs). Unknown values never block."""
+    g = GAMES[game_id]
+    groups = g.get("crossplay")
+    if groups and platform_a and platform_b:
+        group_a = next((i for i, grp in enumerate(groups) if platform_a in grp), None)
+        group_b = next((i for i, grp in enumerate(groups) if platform_b in grp), None)
+        if group_a is not None and group_b is not None and group_a != group_b:
+            return False
+    for f in g["fields"]:
+        if f.get("must_match"):
+            a, b = fields_a.get(f["id"]), fields_b.get(f["id"])
+            if a and b and a != b:
+                return False
+    return True
 
 
 def clean_fields(game_id: str, raw: dict | None) -> tuple[dict, list[str]]:

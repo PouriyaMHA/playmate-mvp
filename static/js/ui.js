@@ -433,6 +433,10 @@ function buildForm() {
       </select>
     </div>`).join("");
 
+  if (m.crossplay_note) {
+    els.gameFields.insertAdjacentHTML("beforeend", `<p class="crossplay-note">${svgIcon("globe")}${esc(m.crossplay_note)}</p>`);
+  }
+
   els.langContainer.innerHTML = "";
   m.languages.forEach(l => {
     const pill = document.createElement("button");
