@@ -47,8 +47,9 @@ class PgAdmin(FakeAdmin):
         return uid
 
     def delete_user(self, uid):
-        super().delete_user(uid)
-        sql("delete from auth.users where id = %s", (str(uid),))
+        self._user(uid)
+        del self.db.users[str(uid)]
+        sql("delete from auth.users where id = %s", (str(uid),))   # the real ON DELETE CASCADE does the rest
 
 
 class RealDB:
