@@ -13,7 +13,7 @@ def test_avatar_change_keeps_a_concurrent_profile_edit(api, users, make_profile,
     real_rpc = db.rpc
 
     def edit_lands_first(name, params):
-        if name == "set_profile_avatar":   # a profile save commits right before the avatar copy runs
+        if name == "set_account_avatar":   # a profile save commits right before the avatar change runs
             monkeypatch.setattr(db, "rpc", real_rpc)
             make_profile(a, "Alice", fields={"mode": "Competitive", "rank": "Silver"})
         return real_rpc(name, params)

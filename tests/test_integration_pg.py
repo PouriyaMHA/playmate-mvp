@@ -193,7 +193,7 @@ def test_snapshot_ignores_legacy_null_rows(api, users, make_profile, db):
     mutual(api, a, "alice", b, "bob")
     # rows from the very first app version: likes by name only, a profile without a user id
     sql("insert into public.likes (from_user, to_user, game) values ('ghost', 'alice', 'cs2'), ('alice', 'ghost2', 'cs2')")
-    sql("insert into public.likes (from_user, to_user, game, to_user_id) values ('ghost3', 'alice', 'cs2', %s)", (a,))
+    sql("insert into public.likes (from_user, to_user, game, to_user_id) values ('ghost3', 'alice', 'cs2', %s)", (a,))  # legacy: no from id
     sql("insert into public.profiles (username, game) values ('ghost', 'cs2')")
     _, d = api.get("/api/poll?game=cs2", user=a)
     assert [m["username"] for m in d["squadmates"]] == ["bob"] and d["incoming"] == []
@@ -204,6 +204,7 @@ def test_600_mutual_pairs_are_all_squadmates(api, users, make_profile, db):
     make_profile(a, "Alice")
     sql("""
         with u as (select gen_random_uuid() id, n from generate_series(1, 600) n),
+        au as (insert into auth.users (id) select id from u),
         p as (insert into public.profiles (username, display_username, game, region, user_id, game_meta)
               select 'p' || n, 'p' || n, 'cs2', 'middle-east', id, '{}' from u returning user_id, username)
         insert into public.likes (from_user, to_user, from_user_id, to_user_id, game)
@@ -215,7 +216,7 @@ def test_600_mutual_pairs_are_all_squadmates(api, users, make_profile, db):
     assert len(d["squadmates"]) == 600 and d["pending"] == [] and d["incoming"] == []
     main._cache.clear()
     _, g = api.get("/api/games")
-    assert {x["id"]: x["players"] for x in g["games"]}["cs2"] == 601                 # exact count past 1000-row pages
+    assert {x["id"]: x["players"] for x in g["games"]}["cs2"] == 601   # exact HEAD count (the 1000-row page case: fake suite)
 
 
 def test_account_deletion_leaves_nothing(api, users, make_profile):
@@ -246,3 +247,74 @@ def test_set_profile_avatar_changes_only_the_avatar_key(api, users, make_profile
     from postgrest.exceptions import APIError
     with pytest.raises(APIError):
         rest_client(make_token(a, role="authenticated")).rpc("set_profile_avatar", {"uid": a, "a": "avatar-1"}).execute()
+
+
+
+# ---------------------------------------------------------------------------------------------- migration 005
+def test_late_rows_for_a_deleted_user_are_refused_and_auth_deletion_cascades(api, users, make_profile, db):
+    a, b = users["alice"], users["bob"]
+    make_profile(a, "Alice")
+    make_profile(b, "Bob")
+    mutual(api, a, "alice", b, "bob")
+    api.post("/api/block", user=b, json={"to_user": "alice", "game": "gta"})
+    sql("delete from auth.users where id = %s", (a,))            # cascade: everything of alice goes with the login
+    assert rows("profiles", f"user_id = '{a}'") == 0 and rows("likes") == 0 and rows("blocks") == 0
+    import psycopg
+    for stmt in ("insert into public.profiles (username, game, user_id) values ('ghost', 'cs2', %s)",
+                 "insert into public.likes (from_user, to_user, game, from_user_id, to_user_id) values ('x', 'bob', 'cs2', %s, '%s')" % ("%s", b),
+                 "insert into public.blocks (blocker_id, blocked_id) values (%s, '%s')" % ("%s", b)):
+        with pytest.raises(psycopg.errors.ForeignKeyViolation):
+            sql(stmt, (a,))
+    status, d = api.post("/api/profile", user=a, json={
+        "username": "Alice", "game": "cs2", "platform": "PC", "region": "middle-east", "country": "Iran",
+        "mic": "voice", "languages": "fa", "fields": {"mode": "Premier", "rank": "Silver"}})
+    assert status == 401 and rows("profiles", f"user_id = '{a}'") == 0   # a stale token's save is refused
+
+
+def test_avatar_changes_and_copies_are_serialized(users, make_profile, db):
+    """Two transactions: an avatar change holding the account row, and a copy (from a profile save) started meanwhile.
+    The copy waits and then uses the NEW avatar; profiles always end equal to accounts.avatar."""
+    import psycopg
+    a = users["alice"]
+    make_profile(a, "Alice")
+    make_profile(a, "Alice", "gta")
+    sql("select public.set_account_avatar(%s, 'avatar-1')", (a,))
+    t1 = psycopg.connect(PG_URL)
+    t1.execute("select public.set_account_avatar(%s, 'avatar-3')", (a,))   # not committed yet: holds the row lock
+    done = {}
+
+    def copy_from_a_profile_save():
+        with psycopg.connect(PG_URL, autocommit=True) as t2:
+            done["n"] = t2.execute("select public.sync_profile_avatar(%s)", (a,)).fetchone()[0]
+    th = threading.Thread(target=copy_from_a_profile_save)
+    th.start()
+    th.join(1.0)
+    assert th.is_alive()                     # it waits for the avatar change instead of copying the old value
+    t1.commit()
+    t1.close()
+    th.join(5)
+    avatars = {r[0] for r in sql("select game_meta ->> 'avatar' from public.profiles where user_id = %s", (a,), fetch=True)}
+    assert avatars == {"avatar-3"} == {sql("select avatar from public.accounts where user_id = %s", (a,), fetch=True)[0][0]}
+    # two changes at the same time: whichever commits last wins — everywhere
+    c1, c2 = psycopg.connect(PG_URL), psycopg.connect(PG_URL)
+    c1.execute("select public.set_account_avatar(%s, 'avatar-5')", (a,))
+    th = threading.Thread(target=lambda: (c2.execute("select public.set_account_avatar(%s, 'avatar-8')", (a,)), c2.commit()))
+    th.start()
+    th.join(1.0)
+    c1.commit()
+    th.join(5)
+    c1.close(); c2.close()
+    acc = sql("select avatar from public.accounts where user_id = %s", (a,), fetch=True)[0][0]
+    avatars = {r[0] for r in sql("select game_meta ->> 'avatar' from public.profiles where user_id = %s", (a,), fetch=True)}
+    assert acc == "avatar-8" and avatars == {"avatar-8"}
+
+
+def test_avatar_functions_are_server_only(users, make_profile):
+    from postgrest.exceptions import APIError
+    make_profile(users["alice"], "Alice")
+    for token in (role_key("anon"), make_token(users["alice"], role="authenticated")):
+        for fn, params in (("set_account_avatar", {"uid": users["alice"], "a": "avatar-1"}),
+                           ("sync_profile_avatar", {"uid": users["alice"]})):
+            with pytest.raises(APIError) as e:
+                rest_client(token).rpc(fn, params).execute()
+            assert "permission denied" in str(e.value)

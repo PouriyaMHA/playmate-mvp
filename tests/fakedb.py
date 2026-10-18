@@ -18,6 +18,13 @@ UNIQUE = {
     "blocks": [("blocker_id", "blocked_id", "game")],
     "accounts": [("user_id",), ("username",)],
 }
+# foreign keys to auth.users with ON DELETE CASCADE (migration 005; accounts since 001)
+FKS = {
+    "profiles": ("user_id",),
+    "likes": ("from_user_id", "to_user_id"),
+    "blocks": ("blocker_id", "blocked_id"),
+    "accounts": ("user_id",),
+}
 DEFAULTS = {
     "profiles": {"game_meta": {}},
     "blocks": {"reported": False},
@@ -113,6 +120,14 @@ class Query:
         keep = [c.strip() for c in self.cols.split(",")]
         return {c: copy.deepcopy(row.get(c)) for c in keep}
 
+    def _check_fk(self, row):
+        if not self.db.enforce_fks:
+            return
+        for c in FKS.get(self.table, ()):
+            if row.get(c) is not None and str(row[c]) not in self.db.users:
+                raise Exception(f'insert or update on table "{self.table}" violates foreign key constraint '
+                                f'"{self.table}_{c}_fkey" (23503)')
+
     def _check_unique(self, row, ignore=None):
         for cols in UNIQUE.get(self.table, []):
             if any(row.get(c) is None for c in cols):
@@ -149,6 +164,7 @@ class Query:
             out = []
             for p in items:
                 row = self._new_row(p)
+                self._check_fk(row)
                 self._check_unique(row)
                 rows.append(row)
                 out.append(copy.deepcopy(row))
@@ -161,10 +177,12 @@ class Query:
                 return Result([])   # ON CONFLICT DO NOTHING
             if existing:
                 merged = {**existing, **copy.deepcopy(p)}
+                self._check_fk(merged)
                 self._check_unique(merged, ignore=existing)
                 existing.update(copy.deepcopy(p))
                 return Result([copy.deepcopy(existing)])
             row = self._new_row(p)
+            self._check_fk(row)
             self._check_unique(row)
             rows.append(row)
             return Result([copy.deepcopy(row)])
@@ -212,6 +230,9 @@ class FakeAdmin:
     def delete_user(self, uid):
         self._user(uid)
         del self.db.users[str(uid)]
+        for table, cols in FKS.items():   # ON DELETE CASCADE
+            self.db.tables[table] = [r for r in self.db.tables.get(table, [])
+                                     if all(str(r.get(c)) != str(uid) for c in cols)]
 
     def create_user(self, uid=None, email="", created_at=None):
         uid = uid or str(uuid.uuid4())
@@ -223,6 +244,7 @@ class FakeSupabase:
     def __init__(self):
         self.tables = {}
         self.users = {}
+        self.enforce_fks = True   # tests that seed rows for users that don't exist may turn this off
         self.auth = SimpleNamespace(admin=FakeAdmin(self))
 
     def table(self, name):
@@ -231,7 +253,9 @@ class FakeSupabase:
     # --- SQL functions (db/migrations) -------------------------------------------------------------------------
     def rpc(self, name, params):
         fn = {"social_snapshot": self._social_snapshot, "delete_account_data": self._delete_account_data,
-              "set_profile_avatar": self._set_profile_avatar}[name]
+              "set_profile_avatar": self._set_profile_avatar,
+              "sync_profile_avatar": self._sync_profile_avatar,
+              "set_account_avatar": self._set_account_avatar}[name]
         return SimpleNamespace(execute=lambda: Result(fn(**params)))
 
     def _social_snapshot(self, viewer, g, with_profiles=True):
@@ -271,3 +295,15 @@ class FakeSupabase:
                 p["game_meta"] = meta
                 n += 1
         return n
+
+    def _sync_profile_avatar(self, uid):
+        """Same as public.sync_profile_avatar (005): copy accounts.avatar onto every game profile."""
+        acc = next((a for a in self.tables.get("accounts", []) if str(a.get("user_id")) == str(uid)), None)
+        return 0 if acc is None else self._set_profile_avatar(uid, acc.get("avatar") or "")
+
+    def _set_account_avatar(self, uid, a):
+        """Same as public.set_account_avatar (005)."""
+        for acc in self.tables.get("accounts", []):
+            if str(acc.get("user_id")) == str(uid):
+                acc["avatar"] = a or None
+        return self._sync_profile_avatar(uid)

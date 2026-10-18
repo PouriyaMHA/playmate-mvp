@@ -4,7 +4,7 @@ name: Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, "ci/**"]   # ci/* branches: run the tests (e.g. a new migration) before anything reaches main/Render
   pull_request:
 
 # bash with pipefail (GitHub's explicit `shell: bash` = `bash --noprofile --norc -eo pipefail {0}`): a failing pytest

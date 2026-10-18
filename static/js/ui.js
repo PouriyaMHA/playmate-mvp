@@ -1089,7 +1089,8 @@ function startSocial(ping) {
   const p = run
     .catch(err => {
       console.error("Refresh failed", err);
-      if (isCurrent(gen) && !String(err.message).startsWith("AUTH")) showNetError();   // an old game's poll: ignore
+      // an old game's poll, or a rate limit (429: the next tick simply tries again): no "connection issue" banner
+      if (isCurrent(gen) && err.status !== 429 && !String(err.message).startsWith("AUTH")) showNetError();
       throw err;
     })
     .finally(() => {

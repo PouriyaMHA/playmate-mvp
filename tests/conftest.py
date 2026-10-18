@@ -67,6 +67,7 @@ def db(monkeypatch):
     monkeypatch.setattr(main, "supabase", fake)
     main._cache.clear()   # cached counters from another test must not leak in
     main._hits.clear()    # nor rate-limit counters
+    main._last_sweep[0] = 0.0
     return fake
 
 

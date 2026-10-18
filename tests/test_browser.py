@@ -200,10 +200,10 @@ def test_public_squad_hides_players_blocked_with_the_viewer(open_page, users, ma
 PAGE_READY = {
     "/": "location.pathname !== '/' || document.querySelectorAll('#lp-games > *').length > 0",
     "/app?game=cs2": "typeof state !== 'undefined' && state.gameReady === true",
-    "/settings": "!document.getElementById('acc-summary').textContent.includes('Loading')",
+    "/settings": "document.getElementById('acc-summary').textContent.toLowerCase().includes('alice')",
     "/u/alice": "!!document.querySelector('.pp-tabs')",
     "/terms": "document.body.innerText.length > 500",
-    "/privacy": "document.body.innerText.length > 500",
+    "/privacy": "document.body.innerText.length > 500 && window.scrollY > 100",   # legal.js scrolled to Privacy
 }
 
 
@@ -216,11 +216,24 @@ def poll(page, js, timeout=8.0):
     raise AssertionError(f"never true: {js}")
 
 
+def watch_errors(ctx):
+    """Every page of this context records uncaught errors in ctx.page_errors (asserted by close_clean)."""
+    ctx.page_errors = []
+    ctx.on("page", lambda page: page.on("pageerror", lambda e: ctx.page_errors.append(str(e))))
+    return ctx
+
+
+def close_clean(ctx):
+    errors = ctx.page_errors
+    ctx.close()
+    assert errors == [], f"uncaught page errors: {errors}"
+
+
 def mobile_context(browser):
     ctx = browser.new_context(viewport={"width": 375, "height": 812}, is_mobile=True, bypass_csp=True)
     ctx.add_init_script(FAKE_SUPABASE_JS)
     ctx.route("**/unpkg.com/**", lambda r: r.abort())
-    return ctx
+    return watch_errors(ctx)
 
 
 def login(page, base_url, uid):
@@ -243,7 +256,7 @@ def test_pages_fit_a_phone_screen(browser, base_url, db, users, make_profile):
         page.goto(base_url + path)
         poll(page, ready)   # the real page rendered (a blank page would "fit" too)
         no_sideways_scroll(page, path)
-    ctx.close()
+    close_clean(ctx)
 
 
 def test_populated_squad_with_longest_names_fits_a_phone(browser, base_url, db, users, make_profile, api):
@@ -261,13 +274,13 @@ def test_populated_squad_with_longest_names_fits_a_phone(browser, base_url, db, 
     page.locator('button[data-tab="squad"]').first.click()
     poll(page, "document.body.innerText.includes('%s')" % long_ign)
     no_sideways_scroll(page, "squad tab")
-    ctx.close()
+    close_clean(ctx)
 
 
 def test_real_csp_runs_every_page_script(browser, base_url, db, users, make_profile):
     """No CSP bypass: every page's own JS must run (readiness) and nothing may be blocked."""
     make_profile(users["alice"], "Alice")
-    ctx = browser.new_context()
+    ctx = watch_errors(browser.new_context())
     ctx.add_init_script(FAKE_SUPABASE_JS)
     ctx.route("**/unpkg.com/**", lambda r: r.abort())
     page = ctx.new_page()

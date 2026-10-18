@@ -6,6 +6,7 @@ Per-game profiles live in `profiles` (unique user_id + game); account-level data
 which only the server (secret key) can write.
 """
 import html
+import ipaddress
 import logging
 import os
 import math
@@ -180,18 +181,28 @@ def profile_avatar(p: dict) -> str:
     return a if a in AVATARS else ""
 
 
+def avatar_of(account: dict | None) -> str:
+    a = (account or {}).get("avatar")
+    return a if a in AVATARS else ""
+
+
 def current_avatar(user_id: str, existing_row: dict | None) -> str:
-    """Account avatar for copying onto a game profile; if Auth is down, keep what the profile already had."""
+    """Account avatar for copying onto a game profile: accounts.avatar (the source of truth, migration 005).
+    Players without an accounts row yet: the Auth copy; if Auth is down, keep what the profile already had."""
+    account = account_row(user_id)
+    if account:
+        return avatar_of(account)
     try:
         return account_data(auth_user(user_id)).get("avatar") or ""
     except HTTPException:
         return profile_avatar(existing_row or {})
 
 
-def sync_profile_avatar(user_id: str, avatar: str) -> None:
-    """Copy the account avatar onto every game profile of this user — only the game_meta.avatar key, atomically
-    (db/migrations/004), so a profile edit saved at the same moment is never overwritten."""
-    supabase.rpc("set_profile_avatar", {"uid": user_id, "a": avatar or ""}).execute()
+def sync_profile_avatar(user_id: str) -> None:
+    """Copy accounts.avatar onto every game profile of this user — only the game_meta.avatar key. The SQL function
+    (db/migrations/005) locks the accounts row first, so copies and avatar changes run one after another and the
+    newest avatar always wins; a profile edit saved at the same moment is never overwritten either."""
+    supabase.rpc("sync_profile_avatar", {"uid": user_id}).execute()
 
 
 def public_view(p: dict) -> dict:
@@ -275,10 +286,18 @@ def is_unique_violation(e: Exception) -> bool:
     return "23505" in str(e) or "duplicate key" in str(e)
 
 
+def is_fk_violation(e: Exception) -> bool:
+    """The auth user is gone (deleted account) — rows can't reference it any more (migration 005)."""
+    return "23503" in str(e) or "foreign key constraint" in str(e)
+
+
+ACCOUNT_GONE = HTTPException(status_code=401, detail="This account no longer exists.")
+
+
 # The accounts table (db/migrations/001, applied 2026-10-18) is the one source of truth for usernames.
 # Any error reading it is an error (503 from the handler below) — never a silent fallback to profile names.
 def account_row(user_id: str) -> dict | None:
-    res = supabase.table("accounts").select("username,display_username").eq("user_id", user_id).limit(1).execute()
+    res = supabase.table("accounts").select("username,display_username,avatar").eq("user_id", user_id).limit(1).execute()
     return res.data[0] if res.data else None
 
 
@@ -295,10 +314,12 @@ def claim_username(user_id: str, username: str, display_username: str) -> tuple[
     If two first saves of the same user race, the first one wins and the second uses the winner's name
     (so profiles and accounts never disagree); a name owned by someone else is a 409."""
     try:
-        supabase.table("accounts").insert(
-            {"user_id": user_id, "username": username, "display_username": display_username}).execute()
+        supabase.table("accounts").insert({"user_id": user_id, "username": username, "display_username": display_username,
+                                           "avatar": current_avatar(user_id, None) or None}).execute()
         return username, display_username
     except Exception as e:
+        if is_fk_violation(e):
+            raise ACCOUNT_GONE
         if not is_unique_violation(e):
             raise
     mine = account_row(user_id)
@@ -393,36 +414,64 @@ def get_current_user_id(authorization: str | None = Header(default=None)) -> str
 # rate limits
 # =========================================================
 # One server process (Render), so a sliding window in memory is enough. Accounts are limited by user id (from the
-# verified token); public pages by IP. Generous: a real player never gets near them, a script does.
-_hits: dict[str, deque] = {}
+# verified token); public pages by IP (generously: in Iran many players share one carrier IP behind CGNAT).
+# A real player never gets near them, a script does.
+# State is per process and resets on deploy/restart (documented limitation).
+_hits: dict[str, tuple[deque, int]] = {}   # key -> (accepted request times, longest window of its rules)
 _hits_lock = threading.Lock()
+_last_sweep = [0.0]
 _clock = time.monotonic   # tests replace it
-RATE_LIMIT_DETAIL = "Too many requests. Please slow down and try again in a minute."
+SWEEP_EVERY = 60
+
+
+def _wait_text(seconds: int) -> str:
+    return f"{seconds} seconds" if seconds < 90 else f"{math.ceil(seconds / 60)} minutes"
 
 
 def check_rate(who: str, name: str, rules: tuple[tuple[int, int], ...]) -> None:
-    """rules = ((max requests, per seconds), ...). Raises 429 (with Retry-After) once any rule is exceeded."""
-    now = _clock()
+    """rules = ((max requests, per seconds), ...). Raises 429 once any rule is full; Retry-After is the wait until
+    EVERY rule has room again (the longest of the saturated ones)."""
     longest = max(sec for _, sec in rules)
     with _hits_lock:
-        q = _hits.setdefault(f"{name}:{who}", deque())
+        now = _clock()   # inside the lock: times are appended in order
+        if now - _last_sweep[0] >= SWEEP_EVERY:   # forget idle keys (bounded work, once a minute)
+            _last_sweep[0] = now
+            for k in [k for k, (q, w) in _hits.items() if not q or q[-1] <= now - w]:
+                del _hits[k]
+        key = f"{name}:{who}"
+        q, _ = _hits.get(key) or (deque(), longest)
+        _hits[key] = (q, longest)
         while q and q[0] <= now - longest:
             q.popleft()
+        wait = 0.0
         for limit, sec in rules:
-            recent = [t for t in q if t > now - sec] if sec != longest else q
+            recent = [t for t in q if t > now - sec]
             if len(recent) >= limit:
-                retry = max(1, math.ceil(recent[0] + sec - now))
-                raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers={"Retry-After": str(retry)})
+                # this rule has room again once the (len - limit + 1) oldest of its window have expired
+                wait = max(wait, recent[len(recent) - limit] + sec - now)
+        if wait > 0:
+            retry = max(1, math.ceil(wait))
+            raise HTTPException(status_code=429, headers={"Retry-After": str(retry)},
+                                detail=f"Too many requests. Please slow down and try again in {_wait_text(retry)}.")
         q.append(now)
-        if len(_hits) > 50_000:   # forget idle keys
-            for k in [k for k, v in _hits.items() if not v or v[-1] <= now - 3600]:
-                del _hits[k]
+
+
+def _valid_ip(v: str) -> str:
+    try:
+        return str(ipaddress.ip_address(v.strip()))
+    except ValueError:
+        return ""
 
 
 def client_ip(request: Request) -> str:
-    # Render runs behind Cloudflare: the visitor's address is in CF-Connecting-IP / the first X-Forwarded-For entry
-    fwd = request.headers.get("cf-connecting-ip") or (request.headers.get("x-forwarded-for") or "").split(",")[0]
-    return fwd.strip() or (request.client.host if request.client else "?")
+    """Render's traffic always comes through Cloudflare, which sets CF-Connecting-IP to the visitor's address
+    (overwriting any value the visitor sent). Fallback: the LAST X-Forwarded-For entry — the one the nearest proxy
+    appended; earlier entries are whatever the client claimed. Only the public-page limits use this."""
+    ip = _valid_ip(request.headers.get("cf-connecting-ip") or "")
+    if not ip:
+        fwd = [x for x in (request.headers.get("x-forwarded-for") or "").split(",") if x.strip()]
+        ip = _valid_ip(fwd[-1]) if fwd else ""
+    return ip or (request.client.host if request.client else "?")
 
 
 def limit(name: str, *rules: tuple[int, int]):
@@ -465,8 +514,8 @@ def ui_redirect():
     return RedirectResponse(url="/app", status_code=302)
 
 
-@app.get("/profile", response_class=HTMLResponse)
-@app.get("/u/{username}", response_class=HTMLResponse)
+@app.get("/profile", response_class=HTMLResponse, dependencies=[limit_ip("public", (300, MINUTE))])
+@app.get("/u/{username}", response_class=HTMLResponse, dependencies=[limit_ip("public", (300, MINUTE))])
 def profile_page(username: str | None = None):
     """Profile page with the player's name in <title> and share previews (Discord/Telegram don't run JS)."""
     if username is None:
@@ -518,9 +567,10 @@ async def not_found_page(request, exc):
 
 
 @app.get("/health")
-def health(deep: bool = False):
+def health(request: Request, deep: bool = False):
     # deep=1 also touches the database (used by keep-alive pings so Supabase doesn't pause)
-    if deep:
+    if deep:   # only the DB-touching variant is limited: platform health checks may call /health very often
+        check_rate(f"ip:{client_ip(request)}", "health-deep", ((30, MINUTE),))
         supabase.table("profiles").select("id").limit(1).execute()
     return {"status": "ok"}
 
@@ -566,18 +616,18 @@ def player_counts() -> dict[str, int]:
     return cached("player_counts", 60, lambda: {g: count_profiles(game=("eq", g)) for g in GAME_ORDER})
 
 
-@app.get(f"{API_PREFIX}/games")
+@app.get(f"{API_PREFIX}/games", dependencies=[limit_ip("cached", (600, MINUTE))])
 def list_games():
     counts = player_counts()
     return {"games": [{**game_summary(g), "players": counts.get(g, 0)} for g in GAME_ORDER]}
 
 
-@app.get(f"{API_PREFIX}/meta/{{game}}")
+@app.get(f"{API_PREFIX}/meta/{{game}}", dependencies=[limit_ip("cached", (600, MINUTE))])
 def get_game_meta(game: str):
     return game_meta(norm_game(game))
 
 
-@app.get(f"{API_PREFIX}/stats", dependencies=[limit_ip("stats", (120, MINUTE))])
+@app.get(f"{API_PREFIX}/stats", dependencies=[limit_ip("stats", (300, MINUTE))])
 def stats(game: str = DEFAULT_GAME, region: str | None = None):
     """Small 'the site is alive' numbers for empty states."""
     game = norm_game(game)
@@ -711,16 +761,16 @@ def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)
         result = supabase.table("profiles").upsert(payload, on_conflict="user_id,game").execute()
     except Exception as e:
         msg = str(e)
+        if is_fk_violation(e):
+            raise ACCOUNT_GONE   # the account was deleted while this save was on its way
         if "profiles_game_ign_unique" in msg:
             raise HTTPException(status_code=409, detail=f"This {g['ign_label']} is already used by another PlayMate player.")
         if "duplicate key" in msg:
             raise HTTPException(status_code=409, detail="This username is already taken.")
         raise
     saved = result.data[0] if result.data else payload
-    # the avatar may have been changed while we saved (we copied the one read above): copy the current one again
-    now = current_avatar(user_id, payload)
-    if now != payload["game_meta"]["avatar"]:
-        sync_profile_avatar(user_id, now)
+    # the avatar may have been changed while we saved (we copied the one read above): copy the newest one again
+    sync_profile_avatar(user_id)
     forget_counts()
     return {"status": "saved", "locked_username": locked, "data": saved}
 
@@ -736,7 +786,7 @@ def delete_game_profile(game: str, user_id: str = Depends(get_current_user_id)):
     return {"status": "deleted", "game": game}
 
 
-@app.get(f"{API_PREFIX}/my-profile")
+@app.get(f"{API_PREFIX}/my-profile", dependencies=[limit("my-profile", (60, MINUTE))])
 def my_profile(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user_id)):
     """My own profile for one game (incl. private in_game_username / discord), to restore the form anywhere."""
     row = require_profile(user_id, norm_game(game))
@@ -749,7 +799,7 @@ def my_profile(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user
     return out
 
 
-@app.get(f"{API_PREFIX}/my-games")
+@app.get(f"{API_PREFIX}/my-games", dependencies=[limit("my-games", (60, MINUTE))])
 def my_games(user_id: str = Depends(get_current_user_id)):
     rows = supabase.table("profiles").select("game,username,display_username").eq("user_id", user_id).execute().data or []
     account = account_row(user_id)
@@ -950,6 +1000,8 @@ def add_like(like: LikeRequest, user_id: str = Depends(get_current_user_id)):
         try:
             supabase.table("likes").insert(payload).execute()
         except Exception as e:
+            if is_fk_violation(e):
+                raise ACCOUNT_GONE
             if "duplicate key" not in str(e):   # a double click that raced us is fine
                 raise
             already = True
@@ -1012,7 +1064,7 @@ def social_state(user_id: str, game: str, me: dict | None = None) -> dict:
     return {"squadmates": squad, "pending": waiting, "incoming": liked_you}
 
 
-@app.get(f"{API_PREFIX}/poll", dependencies=[limit("poll", (60, MINUTE))])
+@app.get(f"{API_PREFIX}/poll", dependencies=[limit("social", (60, MINUTE))])
 def poll(game: str = DEFAULT_GAME, ping: bool = False, user_id: str = Depends(get_current_user_id)):
     """Everything the app refreshes every few seconds, in one request: marks me active (ping=1),
     and returns my squad (with contacts), my pending likes and who liked me."""
@@ -1023,7 +1075,7 @@ def poll(game: str = DEFAULT_GAME, ping: bool = False, user_id: str = Depends(ge
     return {"username": me.get("username"), "game": game, **social_state(user_id, game, me)}
 
 
-@app.get(f"{API_PREFIX}/incoming-likes")
+@app.get(f"{API_PREFIX}/incoming-likes", dependencies=[limit("social", (60, MINUTE))])
 def incoming_likes(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user_id)):
     """People who liked me in this game and I haven't answered yet (no contact info: not mutual)."""
     game = norm_game(game)
@@ -1031,14 +1083,14 @@ def incoming_likes(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_
     return {"game": game, "incoming": social_state(user_id, game, me)["incoming"]}
 
 
-@app.get(f"{API_PREFIX}/my-squad-details")
+@app.get(f"{API_PREFIX}/my-squad-details", dependencies=[limit("social", (60, MINUTE))])
 def my_squad_details(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user_id)):
     game = norm_game(game)
     me = require_profile(user_id, game, "username")
     return {"username": me.get("username"), "game": game, "squadmates": social_state(user_id, game)["squadmates"]}
 
 
-@app.get(f"{API_PREFIX}/pending-likes")
+@app.get(f"{API_PREFIX}/pending-likes", dependencies=[limit("social", (60, MINUTE))])
 def pending_likes(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user_id)):
     """People I liked who haven't liked me back yet (no in-game name: not mutual)."""
     game = norm_game(game)
@@ -1068,16 +1120,22 @@ def block_player(req: BlockRequest, user_id: str = Depends(get_current_user_id))
         reason = (req.reason or "").strip()[:300]
         if reason:
             row["reason"] = reason
-        supabase.table("blocks").upsert(row, on_conflict="blocker_id,blocked_id,game").execute()
+        write = lambda: supabase.table("blocks").upsert(row, on_conflict="blocker_id,blocked_id,game").execute()
     else:
         # a plain block only creates the row; an existing row (and any report on it) is left untouched
-        supabase.table("blocks").upsert({**key, "reported": False}, on_conflict="blocker_id,blocked_id,game",
-                                        ignore_duplicates=True).execute()
+        write = lambda: supabase.table("blocks").upsert({**key, "reported": False}, on_conflict="blocker_id,blocked_id,game",
+                                                        ignore_duplicates=True).execute()
+    try:
+        write()
+    except Exception as e:
+        if is_fk_violation(e):
+            raise ACCOUNT_GONE
+        raise
     now = supabase.table("blocks").select("reported").eq("blocker_id", user_id).eq("blocked_id", blocked_id).eq("game", game).execute().data or []
     return {"status": "blocked", "reported": any(r.get("reported") for r in now)}
 
 
-@app.get(f"{API_PREFIX}/blocks")
+@app.get(f"{API_PREFIX}/blocks", dependencies=[limit("blocks-read", (60, MINUTE))])
 def my_blocks(user_id: str = Depends(get_current_user_id)):
     """Players I blocked (one entry per player, whatever game the block was made in)."""
     rows = supabase.table("blocks").select("blocked_id,reported,created_at").eq("blocker_id", user_id).execute().data or []
@@ -1140,6 +1198,7 @@ def my_account_payload(user_id: str) -> dict:
     referrals = int(((getattr(user, "app_metadata", None) or {}).get("playmate") or {}).get("referral_count") or 0)
     return {
         **account_data(user),
+        **({"avatar": avatar_of(account)} if account else {}),
         "username": username,
         "display_username": (account or {}).get("display_username") or (games[0].get("display_username") if games else None),
         "member_since": getattr(user, "created_at", None),
@@ -1151,7 +1210,7 @@ def my_account_payload(user_id: str) -> dict:
     }
 
 
-@app.get(f"{API_PREFIX}/account")
+@app.get(f"{API_PREFIX}/account", dependencies=[limit("account-read", (60, MINUTE))])
 def get_account(user_id: str = Depends(get_current_user_id)):
     return my_account_payload(user_id)
 
@@ -1184,8 +1243,8 @@ def update_account(req: AccountUpdate, user_id: str = Depends(get_current_user_i
         changes["links"] = links
     if changes:
         save_account_meta(user, changes)
-        if "avatar" in changes:
-            sync_profile_avatar(user_id, changes["avatar"])
+        if "avatar" in changes:   # accounts.avatar + every game profile, in one DB transaction (migration 005)
+            supabase.rpc("set_account_avatar", {"uid": user_id, "a": changes["avatar"] or ""}).execute()
     return my_account_payload(user_id)
 
 
@@ -1241,7 +1300,7 @@ def set_referral(req: ReferralRequest, user_id: str = Depends(get_current_user_i
 # =========================================================
 # public profile page data (no in-game names / discord)
 # =========================================================
-@app.get(f"{API_PREFIX}/public-profile", dependencies=[limit_ip("public", (120, MINUTE))])
+@app.get(f"{API_PREFIX}/public-profile", dependencies=[limit_ip("public", (300, MINUTE))])
 def public_profile(username: str, viewer_id: str | None = Depends(optional_user_id)):
     uid = user_id_for_username(username)
     if not uid:
@@ -1260,7 +1319,7 @@ def public_profile(username: str, viewer_id: str | None = Depends(optional_user_
         "display_username": names.get("display_username") or names.get("username") or username,
         "bio": acc["bio"],
         "banner": acc["banner"],
-        "avatar": acc["avatar"],
+        "avatar": avatar_of(names) if names else acc["avatar"],
         "links": {k: v for k, v in acc["links"].items() if k != "steam"},
         "member_since": getattr(user, "created_at", None) if user else None,
         "last_active": last_active,
@@ -1272,7 +1331,7 @@ def public_profile(username: str, viewer_id: str | None = Depends(optional_user_
 
 
 # old profile page endpoints (kept for compatibility)
-@app.get("/profile-full", dependencies=[limit_ip("public", (120, MINUTE))])
+@app.get("/profile-full", dependencies=[limit_ip("public", (300, MINUTE))])
 def profile_full(username: str):
     u = (username or "").strip().lower()
     res = supabase.table("profiles").select(PUBLIC_PROFILE_FIELDS).eq("username", u).limit(1).execute()
@@ -1281,7 +1340,7 @@ def profile_full(username: str):
     return public_view(res.data[0])
 
 
-@app.get("/profile-squad", dependencies=[limit_ip("public", (120, MINUTE))])
+@app.get("/profile-squad", dependencies=[limit_ip("public", (300, MINUTE))])
 def profile_squad(username: str = Query(...), game: str = DEFAULT_GAME,
                   viewer_id: str | None = Depends(optional_user_id)):
     game = norm_game(game)
