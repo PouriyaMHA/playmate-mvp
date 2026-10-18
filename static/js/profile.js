@@ -44,13 +44,31 @@ function toast(msg, type = "info") {
 }
 function token() { return localStorage.getItem("pm_access_token") || ""; }
 
+// The account this page was opened as. Its form/buttons must never be sent with another account's token
+// (logged in as someone else in another tab, or a refresh that returned another session): reload instead.
+let pageUid = "";
+function tokenUid(t = token()) {
+  try { return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).sub || ""; } catch { return ""; }
+}
+function accountSwitched() {
+  location.reload();
+  return new Error("AUTH_SWITCHED");
+}
+window.addEventListener("storage", (e) => {
+  if (pageUid && (e.key === "pm_access_token" || e.key === null) && tokenUid() !== pageUid) location.reload();
+});
+
 async function authFetch(url, opts = {}) {
   const send = t => fetch(url, { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${t}` } });
-  let res = await send(token());
+  const first = token();
+  if (!pageUid) pageUid = tokenUid(first);   // the first authenticated call fixes the page's account
+  else if (tokenUid(first) !== pageUid) throw accountSwitched();
+  let res = await send(first);
   if (res.status === 401 && sb) {
     const { data } = await sb.auth.refreshSession().catch(() => ({ data: null }));
     const t = data?.session?.access_token;
     if (t) {
+      if (tokenUid(t) !== pageUid) throw accountSwitched();
       localStorage.setItem("pm_access_token", t);
       res = await send(t);
     }

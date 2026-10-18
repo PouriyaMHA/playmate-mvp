@@ -115,7 +115,7 @@ async function clearAuthAndRedirect() {
   try {
     await Promise.race([supabaseClient?.auth.signOut(), new Promise(r => setTimeout(r, 1500))]);
   } catch { }
-  const game = state.game;
+  const game = state.game || new URLSearchParams(location.search).get("game");
   clearAccountCache();
   try { sessionStorage.clear(); } catch { }
   window.location.href = game && /^[a-z0-9-]{2,20}$/.test(game) ? `/?game=${encodeURIComponent(game)}` : "/";
@@ -136,6 +136,10 @@ async function authFetch(url, options = {}) {
   if (res.status === 401) {
     // token probably expired: refresh once and retry before logging out
     const fresh = await refreshAccessToken();
+    if (fresh && pageUid && tokenUserId(fresh) !== pageUid) {   // the session became another account meanwhile
+      accountChanged();
+      throw new Error("AUTH_SWITCHED");
+    }
     if (fresh) res = await send(fresh);
   }
   if (res.status === 401) {
@@ -472,6 +476,7 @@ async function selectGame(gameId) {
 
   stopRealtime();
   const gen = ++state.gen;
+  state.deck++;   // old swipe/like timers must not move the new game's list
   state.game = gameId;
   state.hasProfile = false;
   state.profile = {};
@@ -750,7 +755,7 @@ async function saveProfile() {
     await captureReferral();
     refreshInvite();
   } catch (e) {
-    if (e.message !== "STALE" && !String(e.message).startsWith("AUTH")) showToast(e.message || "Failed to save profile", "error");
+    if (isCurrent(gen) && e.message !== "STALE" && !String(e.message).startsWith("AUTH")) showToast(e.message || "Failed to save profile", "error");
     throw e;
   }
 }
@@ -832,16 +837,18 @@ async function findMatches({ keepTab = false } = {}) {
       looking_only: els.optLookingOnly.checked,
       exclude: [...getSkipped(game)],
     });
-    if (!isCurrent(gen)) { setLoading(false); return; }   // switched game while loading
+    if (!isCurrent(gen)) { state.loading = false; return; }   // switched game while loading: `finally` scans the new one
     state.hasMore = !!data.has_more;
     state.deck++;
     state.matches = data.matches || [];
     state.currentMatchIndex = 0;
     setLoading(false);
     await refreshStats();
+    if (!isCurrent(gen)) return;
     if (!state.matches.length) return renderNoMatches(data.total);
     renderCard();
   } catch (e) {
+    if (!isCurrent(gen)) { state.loading = false; return; }   // an old game's failure: leave the new game's screen alone
     setLoading(false);
     if (e.status === 404) {
       renderIdleCenter();
@@ -853,8 +860,8 @@ async function findMatches({ keepTab = false } = {}) {
     }
   } finally {
     inFlight.match = false;
-    // the player switched game mid-scan: load the new game's matches instead
-    if (state.game !== game && state.hasProfile) findMatches({ keepTab: true });
+    // the player switched game mid-scan (even A→B→A): load the current game's matches instead
+    if (!isCurrent(gen) && state.hasProfile) findMatches({ keepTab: true });
   }
 }
 
@@ -946,8 +953,9 @@ function handleSkip() {
   const skippedUser = state.matches[index]?.username;
   setTimeout(() => {
     inFlight.swipe = false;
-    if (state.deck !== deck || state.currentMatchIndex !== index) return;
-    if (skippedUser) addSkipped(skippedUser, game);
+    // the list changed meanwhile (new game/scan, or this card was removed by Pass/Block): leave it alone
+    if (!skippedUser || state.deck !== deck || state.matches[state.currentMatchIndex]?.username !== skippedUser) return;
+    addSkipped(skippedUser, game);
     state.currentMatchIndex++;
     renderCard();
   }, 280);
@@ -962,7 +970,6 @@ async function handleLike() {
   if (!matchUser) return;
   inFlight.like = true;
   const game = state.game, gen = state.gen, deck = state.deck;
-  const index = state.currentMatchIndex;
 
   const card = $("active-card");
   const buttons = document.querySelectorAll(".action-btn");
@@ -999,7 +1006,7 @@ async function handleLike() {
     if (!String(e.message).startsWith("AUTH")) showToast(e.message || "Could not send like", "error");
   } finally {
     setTimeout(() => {
-      if (state.deck !== deck || state.currentMatchIndex !== index) {
+      if (state.deck !== deck || state.matches[state.currentMatchIndex]?.username !== matchUser.username) {
         // the deck changed meanwhile (other game / new scan): leave it alone
       } else if (liked) {
         state.currentMatchIndex++;

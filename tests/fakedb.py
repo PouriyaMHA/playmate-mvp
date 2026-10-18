@@ -1,7 +1,7 @@
 """In-memory stand-in for the parts of supabase-py that main.py uses, so API tests never touch the real database.
 
 Covers: table().select/insert/upsert/update/delete with eq/neq/in_/or_/order/limit/execute (+ count="exact"),
-and auth.admin.get_user_by_id/update_user_by_id/delete_user/create_user. Unique constraints mirror production
+and auth.admin.get_user_by_id/update_user_by_id/delete_user/create_user, and rpc("social_snapshot"). Unique constraints mirror production
 (see db/migrations): profiles (user_id, game) and (game, in_game_username); likes (from, to, game);
 blocks (blocker, blocked, game); accounts (user_id), (username).
 """
@@ -227,3 +227,21 @@ class FakeSupabase:
 
     def table(self, name):
         return Query(self, name)
+
+    # --- SQL functions (db/migrations) -------------------------------------------------------------------------
+    def rpc(self, name, params):
+        fn = {"social_snapshot": self._social_snapshot}[name]
+        return SimpleNamespace(execute=lambda: Result(fn(**params)))
+
+    def _social_snapshot(self, viewer, g, with_profiles=True):
+        """Same answer as public.social_snapshot (002): one atomic read, one JSON value (no 1000-row cap)."""
+        v = str(viewer)
+        likes = [{k: r.get(k) for k in ("from_user_id", "to_user_id", "created_at")}
+                 for r in self.tables.get("likes", [])
+                 if str(r.get("game")) == g and v in (str(r.get("from_user_id")), str(r.get("to_user_id")))]
+        blocked = {str(r["blocked_id"]) if str(r.get("blocker_id")) == v else str(r["blocker_id"])
+                   for r in self.tables.get("blocks", []) if v in (str(r.get("blocker_id")), str(r.get("blocked_id")))}
+        others = {str(r["to_user_id"]) if str(r["from_user_id"]) == v else str(r["from_user_id"]) for r in likes}
+        profiles = [copy.deepcopy(p) for p in self.tables.get("profiles", [])
+                    if with_profiles and p.get("game") == g and str(p.get("user_id")) in others - blocked]
+        return copy.deepcopy({"likes": likes, "blocked": sorted(blocked), "profiles": profiles})

@@ -244,32 +244,32 @@ def require_profile(user_id: str, game: str, columns: str = "*") -> dict:
     return row
 
 
-def like_maps(user_id: str, game: str) -> tuple[dict[str, str], dict[str, str]]:
-    """({who I liked: when}, {who liked me: when}) for one game, read with ONE query — a single SQL statement sees
-    one consistent snapshot, so "mutual" (which unlocks contact info) can never be pieced together from two
-    different moments (e.g. my like read before I took it back + their like read after they made it)."""
-    rows = (
-        supabase.table("likes").select("from_user_id,to_user_id,created_at").eq("game", game)
-        .or_(f"from_user_id.eq.{user_id},to_user_id.eq.{user_id}").execute().data or []
-    )
+def social_snapshot(user_id: str, game: str, with_profiles: bool = True):
+    """(i_liked {who: when}, liked_me {who: when}, blocked ids, the other players' profiles) for one game, from the
+    social_snapshot SQL function (db/migrations/002): ONE statement = one consistent snapshot, so contact info is
+    only ever handed out together with the likes and blocks that allow it, and one JSON value = no 1000-row cap."""
+    d = supabase.rpc("social_snapshot", {"viewer": user_id, "g": game, "with_profiles": with_profiles}).execute().data or {}
     i_liked, liked_me = {}, {}
-    for r in rows:
+    for r in d.get("likes") or []:
         if str(r.get("from_user_id")) == user_id and r.get("to_user_id"):
             i_liked[str(r["to_user_id"])] = r.get("created_at")
         elif str(r.get("to_user_id")) == user_id and r.get("from_user_id"):
             liked_me[str(r["from_user_id"])] = r.get("created_at")
+    blocked = {str(x) for x in d.get("blocked") or [] if x}
+    return i_liked, liked_me, blocked, d.get("profiles") or []
+
+
+def like_maps(user_id: str, game: str) -> tuple[dict[str, str], dict[str, str]]:
+    """({who I liked: when}, {who liked me: when}) for one game, from one consistent read."""
+    i_liked, liked_me, _, _ = social_snapshot(user_id, game, with_profiles=False)
     return i_liked, liked_me
 
 
 def mutual_ids(user_id: str, game: str, blocked: set[str] | None = None) -> list[str]:
     """Players who liked me back in this game (blocked players excluded)."""
-    i_liked, liked_me = like_maps(user_id, game)
-    mutual = [u for u in i_liked if u in liked_me]
-    if not mutual:
-        return []
-    if blocked is None:
-        blocked = get_blocked_ids(user_id)
-    return [u for u in mutual if u not in blocked]
+    i_liked, liked_me, snap_blocked, _ = social_snapshot(user_id, game, with_profiles=False)
+    blocked = snap_blocked if blocked is None else blocked | snap_blocked
+    return [u for u in i_liked if u in liked_me and u not in blocked]
 
 
 def is_unique_violation(e: Exception) -> bool:
@@ -926,15 +926,12 @@ def compatible(game: str, a: dict, b: dict) -> bool:
 
 
 def social_state(user_id: str, game: str, me: dict | None = None) -> dict:
-    """Squad, pending likes and "liked you" for one game, from 3 queries: all likes involving me (ONE consistent
-    read, see like_maps), blocks, and one profiles lookup for everyone involved."""
-    i_liked, liked_me = like_maps(user_id, game)
-    blocked = get_blocked_ids(user_id) if (i_liked or liked_me) else set()
+    """Squad, pending likes and "liked you" for one game. Likes, blocks and the profiles (incl. contact info) all come
+    from ONE statement (social_snapshot), so a block or an unlike can never be mixed with contact read later."""
+    i_liked, liked_me, blocked, rows = social_snapshot(user_id, game)
     mutual = {u for u in i_liked if u in liked_me and u not in blocked}
     pending = {u for u in i_liked if u not in liked_me and u not in blocked}
     incoming = {u for u in liked_me if u not in i_liked and u not in blocked}
-    everyone = mutual | pending | incoming
-    rows = supabase.table("profiles").select("*").eq("game", game).in_("user_id", list(everyone)).execute().data or [] if everyone else []
     if me is None:
         me = my_profile_row(user_id, game)
 

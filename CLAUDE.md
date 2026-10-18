@@ -9,15 +9,17 @@ Full background, decisions and open issues: `docs/PROJECT_HISTORY.md`. Raw ChatG
 - `games.py` — supported games: platforms, in-game-name label and per-game field templates. Adding a game = add an entry + art in `static/img/games/<id>.svg` and `<id>-icon.svg`; optional official cover `static/img/games/photos/<id>.jpg` (960×540, used when present, SVG is the fallback — bump `COVER_VERSION` when one changes).
 - `static/css` `static/js` — one CSS/JS pair per page (`ui.*`, `profile.*`, `landing.*`; `ui.css` holds the shared tokens). Bump `?v=` in the HTML when you change them.
 - `static/img` — original SVG art (games, banners, avatars, badges, logo); `tools/gen_art.py` regenerates it.
-- Data: `accounts` (one row per user: the reserved username — after migration 001), `profiles` (one row per user + game; game-specific values in `game_meta.fields`), `likes`, `blocks` (RLS on, server uses the secret key). The app refreshes squad/pending/"liked you" with one `GET /api/poll` every 15 s. Account data (bio, banner, avatar, links, referral) lives in the auth user's `app_metadata.playmate` (only the server can write it).
+- Data: `accounts` (one row per user: the reserved username — after migration 001), `profiles` (one row per user + game; game-specific values in `game_meta.fields`), `likes`, `blocks` (RLS on, server uses the secret key). The app refreshes squad/pending/"liked you" with one `GET /api/poll` every 15 s; the server reads likes + blocks + profiles for it through ONE SQL function, `social_snapshot` (migration 002, service role only) — never piece contact info together from separate reads. Account data (bio, banner, avatar, links, referral) lives in the auth user's `app_metadata.playmate` (only the server can write it).
 - Run locally: `uvicorn main:app --reload` (needs `.env` with SUPABASE_URL, SUPABASE_KEY, SUPABASE_JWT_SECRET).
 - Tests: `python -m pytest` (installs from `requirements-dev.txt`). They run against an in-memory fake DB (`tests/fakedb.py`) —
   never the real Supabase — and run in GitHub Actions on every push (`.github/workflows/tests.yml`). Add a test with every change.
 - Database changes: SQL files in `db/migrations/` (numbered), run in Supabase → SQL Editor. Ship code that needs a new
-  table only after the migration ran (001 ran 2026-10-18; `accounts` is now required — no silent fallbacks).
+  table only after the migration ran (001 and 002 ran 2026-10-18; `accounts` and `social_snapshot` are required — no silent fallbacks).
   The fake DB mirrors the unique constraints and PostgREST's 1000-row cap.
 - Security headers: CSP has no `'unsafe-inline'` for scripts — never add inline `<script>` or `on*=` handlers;
   use listeners (image fallbacks: `data-fallback` attribute).
+- Authenticated pages (`ui.js`, `profile.js`, `settings.js`) pin the page's account (`pageUid`): never send a request,
+  including a 401-refresh retry, with a token of another account — reload instead.
 - `requirements.txt` pins exact versions; upgrade on purpose and run the tests.
 
 ## Rules

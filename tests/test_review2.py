@@ -13,17 +13,12 @@ def test_poll_reads_all_likes_in_one_query(api, users, make_profile, db, monkeyp
     make_profile(users["bob"], "Bob", in_game_username="BobCS")
     api.post("/api/like", user=users["alice"], json={"to_user": "bob", "game": "cs2"})
     api.post("/api/like", user=users["bob"], json={"to_user": "alice", "game": "cs2"})
-    real_table, like_reads = db.table, []
-
-    def counting(name):
-        q = real_table(name)
-        if name == "likes":
-            like_reads.append(q)
-        return q
-    monkeypatch.setattr(db, "table", counting)
+    real_table, real_rpc, reads, rpcs = db.table, db.rpc, [], []
+    monkeypatch.setattr(db, "table", lambda name: (reads.append(name), real_table(name))[1])
+    monkeypatch.setattr(db, "rpc", lambda name, params: (rpcs.append(name), real_rpc(name, params))[1])
     _, d = api.get("/api/poll?game=cs2", user=users["alice"])
     assert [m["username"] for m in d["squadmates"]] == ["bob"]
-    assert len(like_reads) == 1
+    assert rpcs == ["social_snapshot"] and "likes" not in reads and "blocks" not in reads   # R3: one statement
 
 
 def test_one_way_likes_at_different_moments_are_not_mutual(api, users, make_profile, db):
