@@ -962,8 +962,8 @@ async function saveProfile() {
     renderIntent();   // "save your profile first" → "View @name"
     els.status.textContent = "";
     if (!payload.in_game_username && !payload.discord_username && !saved.steam_profile) {
-      const steamToo = els.steamRow.hidden ? "" : ", Discord or Steam profile";
-      showToast(`Tip: add your ${state.meta?.ign_label || "in-game name"}${steamToo || " or Discord"} so squadmates can reach you`, "info");
+      const ways = [state.meta?.ign_label || "in-game name", "Discord", ...(els.steamRow.hidden ? [] : ["Steam profile"])];
+      showToast(`Tip: add a contact (${ways.join(", ")}) so squadmates can reach you`, "info");
     }
     renderGameChrome();
     renderLookingButton();

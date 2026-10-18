@@ -8,7 +8,7 @@
   <title>PlayMate | Terms &amp; Privacy</title>
   <link rel="icon" href="/static/img/logo.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
-  <link rel="stylesheet" href="/static/css/ui.css?v=23">
+  <link rel="stylesheet" href="/static/css/ui.css?v=24">
   <link rel="stylesheet" href="/static/css/landing.css?v=1">
   <style>
     .legal {
@@ -35,6 +35,10 @@
       padding-left: 20px;
     }
 
+    .legal-updated { color: var(--muted); font-size: 0.85rem; margin: 8px 0 4px; }
+    .legal-toc { margin: 0 0 8px; font-size: 0.95rem; }
+    .legal a { color: var(--cyan); }
+    .legal section + section h1 { margin-top: 56px; }
     .legal .draft {
       display: inline-block;
       margin: 10px 0 6px;
@@ -58,51 +62,121 @@
   </header>
 
   <main class="legal">
+    <p class="legal-updated">Last updated: October 18, 2026</p>
+    <nav class="legal-toc" aria-label="On this page">
+      <a href="#terms">Terms of use</a> · <a href="#privacy">Privacy policy</a> · <a href="#contact">Contact</a>
+    </nav>
+
     <section id="terms">
       <h1>Terms of use</h1>
-      <div class="draft">Draft — these terms will be finalised before PlayMate's public launch.</div>
-      <h2>Using PlayMate</h2>
-      <p>PlayMate helps players find teammates. Use it to meet people to play with — not to harass, spam, scam,
-        impersonate others or share content that is hateful, sexual or illegal.</p>
-      <h2>Your account</h2>
+      <p>PlayMate ("we") is a free service that helps gamers find teammates. By creating an account you agree to these
+        terms. If you don't agree, please don't use PlayMate.</p>
+
+      <h2>Who can use PlayMate</h2>
       <ul>
-        <li>Keep your login details safe; you are responsible for activity on your account.</li>
-        <li>Your PlayMate username is public. Pick one that doesn't impersonate anyone.</li>
-        <li>We may suspend accounts that break these rules or are reported for abuse.</li>
+        <li>You must be <b>at least 16 years old</b>. If we learn that an account belongs to someone younger, we will
+          delete it.</li>
+        <li>One account per person. Keep your login safe — you are responsible for what happens on your account.</li>
       </ul>
-      <h2>Games and trademarks</h2>
-      <p>PlayMate is an independent service and is not affiliated with, endorsed by or sponsored by any game
-        publisher. Game names, logos and cover artwork belong to their respective owners and are shown only to identify
-        which games you play. Rights holders who want an image removed can contact us and we will take it down.</p>
+
+      <h2>Your profile and what others see</h2>
+      <ul>
+        <li>Your PlayMate username, avatar, banner, bio, links and your game profiles (region, country, optional city,
+          platform, languages, mic and game details such as mode or rank) are <b>public</b>: anyone on the internet can
+          see them, logged in or not. Don't put contact or personal details in your bio or links.</li>
+        <li>Your in-game name, Discord and Steam profile are shown <b>only</b> to players you have both liked
+          ("squadmates").</li>
+        <li>Pick a username that doesn't impersonate anyone and isn't offensive.</li>
+      </ul>
+
+      <h2>Rules</h2>
+      <p>Use PlayMate to find people to play with. Don't harass, threaten, scam, spam or impersonate anyone; don't share
+        hateful, sexual or illegal content; don't use PlayMate to contact minors; don't collect other players' data or
+        use bots or scripts against the service.</p>
+
+      <h2>Blocking, reporting and enforcement</h2>
+      <ul>
+        <li>You can block or report any player. A block hides you from each other in matches, likes and squads in every
+          game. It can't stop someone who isn't logged in from viewing your public profile, and it can't take back
+          contact details a squadmate already copied.</li>
+        <li>Reports are reviewed by the PlayMate team. We may remove content, or limit or delete accounts that break
+          these rules. We can't promise a reply to every report.</li>
+      </ul>
+
+      <h2>Other services</h2>
+      <p>When you contact a squadmate on Discord, Steam or in a game, that happens outside PlayMate and under those
+        services' rules. PlayMate is independent and is not affiliated with, endorsed by or sponsored by any game
+        publisher. Game names, logos and artwork belong to their owners and are shown only to identify the games; rights
+        holders can ask us to remove an image.</p>
+
       <h2>No guarantees</h2>
-      <p>We do our best to keep PlayMate running and safe, but the service is provided "as is". Be careful when
-        meeting people online and never share passwords or payment details.</p>
+      <p>PlayMate is provided "as is", free of charge. We work to keep it running and safe, but we can't guarantee that
+        it will always be available, that you will find teammates, or how other players behave. Be careful when meeting
+        people online and never share passwords or payment details. To the extent the law allows, we aren't liable for
+        indirect losses arising from your use of PlayMate.</p>
+
+      <h2>Changes and ending your account</h2>
+      <p>We may update these terms; if a change is important we will show a notice in the app before it applies. You can
+        stop using PlayMate and delete your account at any time (Settings → Delete my account).</p>
     </section>
 
     <section id="privacy">
-      <h1 style="margin-top:56px;">Privacy</h1>
-      <div class="draft">Draft — this policy will be finalised before PlayMate's public launch.</div>
-      <h2>What we store</h2>
+      <h1>Privacy policy</h1>
+      <p>This policy explains what PlayMate collects, why, who can see it and the choices you have. We follow Canada's
+        privacy law (PIPEDA) and, for players in Québec, Law 25.</p>
+
+      <h2>What we collect</h2>
       <ul>
-        <li><b>Account:</b> your email address and a password (handled by our login provider, Supabase). Your email is
-          never shown to other players.</li>
-        <li><b>Public profile:</b> username, avatar, banner, bio and links you add, and for each game: region, country,
-          city (optional), platform, languages, mic preference and game details like mode or rank.</li>
-        <li><b>Private until you match:</b> your in-game name and Discord — only shown to players you have both
-          liked.</li>
-        <li><b>Activity:</b> who you liked, who you blocked or reported, when you were last active, and whether you
-          turned on "Looking now".</li>
+        <li><b>Account:</b> your email address and password (stored by our login provider; we never see your
+          password). Your email is never shown to other players.</li>
+        <li><b>Public profile:</b> username, avatar, banner, bio, links, and for each game: region, country, optional
+          city, platform, languages, mic preference and game details.</li>
+        <li><b>Private contact details:</b> in-game name, Discord and Steam profile — shown only to your squadmates.</li>
+        <li><b>Activity:</b> who you liked, blocked or reported, your squadmates, when you were last active, whether
+          "Looking now" is on, and who invited you (if you came through an invite link).</li>
+        <li><b>Technical:</b> our hosting and database providers keep standard server logs (such as IP address and the
+          time of a request) to run and protect the service.</li>
       </ul>
-      <h2>What we don't do</h2>
+
+      <h2>Why we use it</h2>
+      <p>Only to run PlayMate: to match you with compatible players, show your profile, share contact details with
+        squadmates, keep the service safe (blocks, reports, abuse limits) and fix problems. We don't sell your personal
+        information, we don't show ads and we don't use it for advertising.</p>
+
+      <h2>Who receives it</h2>
       <ul>
-        <li>We don't sell your data or show you third-party ads.</li>
-        <li>We don't read your messages on other apps — PlayMate only shares the names you choose to add.</li>
+        <li><b>Other players</b> see your public profile; squadmates also see your contact details.</li>
+        <li><b>Service providers</b> that store or deliver data for us: Supabase (database and login) and Render
+          (hosting, which uses Cloudflare). The app also loads a script library from unpkg. These providers process data
+          on our behalf and may store it outside Canada, including in the United States, where it can be subject to
+          local law.</li>
+        <li>We may disclose information if the law requires it.</li>
       </ul>
-      <h2>Your choices</h2>
+
+      <h2>Your browser</h2>
+      <p>PlayMate doesn't use cookies for tracking or ads. To keep you logged in and remember your choices, the app saves
+        a few items in your browser's local and session storage: your login session, the game you chose, a copy of your
+        shared profile fields to pre-fill new games, an invite code, players you skipped in this session and the
+        profile you came from. Logging out removes them.</p>
+
+      <h2>How long we keep it</h2>
+      <p>We keep your information while you have an account. When you delete your account (Settings → Delete my
+        account), your game profiles, likes, squads, blocks, reports you made or received, your username and your login
+        are removed right away from the live service. Copies in our providers' backups and logs are deleted on their
+        own schedules. Contact details a squadmate already copied can't be recalled.</p>
+
+      <h2>Your rights</h2>
       <ul>
-        <li>Edit your profile any time, remove a game profile, or block players.</li>
-        <li>Delete your account and all its data any time: <b>Settings</b> → <b>Delete my account</b>. Game profiles, likes, squads, blocks and your login are removed right away.</li>
+        <li>See and correct your information any time in the app, and ask us for a copy of what we hold about you.</li>
+        <li>Delete your account and data yourself in Settings.</li>
+        <li>Ask questions or make a complaint — contact us below. If you're not satisfied, you can contact the Office of
+          the Privacy Commissioner of Canada (priv.gc.ca) or, in Québec, the Commission d'accès à l'information.</li>
       </ul>
+    </section>
+
+    <section id="contact">
+      <h1>Contact</h1>
+      <p>Questions, privacy requests, reports or problems with your account: {{SUPPORT_CONTACT}}</p>
     </section>
   </main>
   <script src="/static/js/legal.js?v=1"></script>

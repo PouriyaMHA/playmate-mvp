@@ -41,6 +41,8 @@ LANGUAGE_LABELS = {lang["code"]: lang["label"] for lang in LANGUAGES}
 BASE_DIR = Path(__file__).parent
 load_dotenv(BASE_DIR / ".env")
 
+# where players reach a human (legal page, error messages); set it here or with the SUPPORT_EMAIL env var
+SUPPORT_EMAIL = os.getenv("SUPPORT_EMAIL", "").strip()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
@@ -599,7 +601,12 @@ def settings_page():
 @app.get("/terms", response_class=HTMLResponse)
 @app.get("/privacy", response_class=HTMLResponse)
 def legal_page():
-    return page("legal.html")
+    if SUPPORT_EMAIL:
+        contact = f'<a href="mailto:{html.escape(SUPPORT_EMAIL)}">{html.escape(SUPPORT_EMAIL)}</a>'
+    else:
+        contact = "<b>our support address will be published here before launch.</b>"
+    body = (BASE_DIR / "legal.html").read_text(encoding="utf-8").replace("{{SUPPORT_CONTACT}}", contact)
+    return HTMLResponse(body, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/robots.txt", response_class=PlainTextResponse)
@@ -1347,7 +1354,8 @@ def delete_account(req: DeleteAccountRequest, user_id: str = Depends(get_current
         supabase.auth.admin.delete_user(user_id)
     except Exception:
         logger.exception("delete_account: auth user %s could not be deleted", user_id)
-        raise HTTPException(status_code=500, detail="Your PlayMate data was removed, but the login could not be deleted. Please contact support.")
+        raise HTTPException(status_code=500, detail="Your PlayMate data was removed, but the login could not be deleted. "
+                                                       f"Please contact {SUPPORT_EMAIL or 'support (see the Contact section of /terms)'}.")
     return {"status": "deleted"}
 
 
