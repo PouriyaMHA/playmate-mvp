@@ -256,7 +256,8 @@ def get_current_user_id(authorization: str | None = Header(default=None)) -> str
 # pages
 # =========================================================
 def page(name: str) -> HTMLResponse:
-    return HTMLResponse((BASE_DIR / name).read_text(encoding="utf-8"))
+    # no-cache: browsers must re-check the page, so a deploy's new ?v= asset links are picked up right away
+    return HTMLResponse((BASE_DIR / name).read_text(encoding="utf-8"), headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/", response_class=HTMLResponse)
