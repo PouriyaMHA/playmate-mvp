@@ -2681,3 +2681,12 @@ a.sm-btn { display: inline-flex; align-items: center; text-decoration: none; }
 .save-state.dirty { color: var(--amber); font-weight: 700; }
 .save-state.error { color: #ff6b81; font-weight: 700; }
 #btn-find-matches.is-dirty { box-shadow: 0 0 0 2px var(--amber), 0 0 18px rgba(255, 190, 70, 0.35); }
+
+/* "You came to team up with @name" (pre-launch #3) */
+.intent-strip { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; padding: 10px 12px;
+  border: 1px solid var(--cyan); border-radius: 12px; background: rgba(46, 230, 255, 0.07); }
+.intent-strip[hidden] { display: none; }
+.intent-text { flex: 1 1 200px; font-size: 0.88rem; overflow-wrap: anywhere; }
+.intent-go { min-height: 40px; padding: 8px 14px; font-size: 0.85rem; text-decoration: none; display: inline-flex; align-items: center; }
+.intent-close { min-width: 40px; min-height: 40px; border: 1px solid var(--line); border-radius: 10px; background: transparent;
+  color: var(--muted); font-size: 1.2rem; cursor: pointer; }

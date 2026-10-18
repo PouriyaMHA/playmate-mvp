@@ -137,7 +137,7 @@ function render() {
         <div class="pp-actions">
           ${page.isOwner
       ? `<button type="button" class="btn-secondary" id="btn-edit">${icon("edit")}Edit profile</button>`
-      : `<a class="btn-primary pp-cta" href="/app${d.games[0] ? `?game=${encodeURIComponent(d.games[0].id)}` : ""}">Find a squad ${icon("arrow")}</a>`}
+      : `<a class="btn-primary pp-cta" href="${esc(connectLink(d.games[0]?.id))}">${token() ? "Find a squad" : `Join to team up with ${esc(d.display_username || d.username)}`} ${icon("arrow")}</a>`}
           <button type="button" class="btn-secondary" id="btn-share">${icon("share")}Share</button>
         </div>
       </div>
@@ -153,6 +153,12 @@ function render() {
   renderTab();
 }
 
+// a link into the app for this game that remembers "I came for this player" through login / first-profile setup
+function connectLink(gameId) {
+  const q = `${gameId ? `game=${encodeURIComponent(gameId)}&` : ""}next=${encodeURIComponent(`/u/${page.data.username}`)}`;
+  return token() ? `/app?${q}` : `/?${q}`;
+}
+
 // Like / Like back from someone's public profile (state from /api/relationship; the server enforces everything)
 function relAction(g) {
   const state = page.rel?.[g.id];
@@ -164,7 +170,7 @@ function relAction(g) {
     case "liked": return `<span class="pp-rel">Like sent ✓ — waiting for them</span>`;
     case "mutual": return `<a class="pp-like" href="${app}&tab=squad">✓ In your squad — open it</a>`;
     case "incompatible": return `<span class="pp-rel">You can't play together (platform, edition or server)</span>`;
-    case "no_profile": return `<a class="pp-rel" href="${app}">Add ${esc(g.name)} to your games to like them →</a>`;
+    case "no_profile": return `<a class="pp-rel" href="${esc(connectLink(g.id))}">Add ${esc(g.name)} to your games to like them →</a>`;
     default: return "";
   }
 }
@@ -242,7 +248,7 @@ function renderTab() {
                 ${langs ? `<span class="info-pill">${icon("chat")}<b>${esc(langs)}</b></span>` : ""}
               </div>
               <div class="pp-game-foot">
-                <a class="pp-game-link" href="/app?game=${encodeURIComponent(g.id)}">${page.isOwner ? "Open in Find squad" : "Find a squad in this game"} ${icon("arrow")}</a>
+                <a class="pp-game-link" href="${page.isOwner ? `/app?game=${encodeURIComponent(g.id)}` : esc(connectLink(g.id))}">${page.isOwner ? "Open in Find squad" : "Find a squad in this game"} ${icon("arrow")}</a>
                 ${page.isOwner ? `<button type="button" class="pp-game-remove" data-remove-game="${esc(g.id)}" data-game-name="${esc(g.name)}">Remove</button>` : relAction(g)}
               </div>
             </div>

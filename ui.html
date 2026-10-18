@@ -8,7 +8,7 @@
   <title>PlayMate | Find your squad</title>
   <link rel="icon" href="/static/img/logo.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
-  <link rel="stylesheet" href="/static/css/ui.css?v=21">
+  <link rel="stylesheet" href="/static/css/ui.css?v=22">
 </head>
 
 <body data-view="match">
@@ -245,6 +245,7 @@
 
     <!-- CENTER: match card -->
     <section class="panel match-area" id="match-panel" aria-label="Matches">
+      <div class="intent-strip" id="intent-strip" role="region" aria-label="The player you came for" hidden></div>
       <div class="game-bar" id="game-bar" style="display:none;">
         <img class="game-bar-cover" id="game-bar-cover" src="" alt="">
         <div class="game-bar-text">
@@ -415,7 +416,7 @@
 
   <!-- Supabase JS: keeps the login session fresh (access tokens expire after 1 hour) -->
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
-  <script src="/static/js/ui.js?v=33"></script>
+  <script src="/static/js/ui.js?v=34"></script>
 </body>
 
 </html>

@@ -21,6 +21,33 @@ const GAME_RE = /^[a-z0-9-]{2,20}$/;
   if (g && GAME_RE.test(g)) sessionStorage.setItem("pm_next_game", g);
 })();
 
+// the player whose profile link brought this visitor here (?next=/u/<name>): kept for this tab only, so after
+// signing up and creating a profile they can get back to that player. Only "/u/<valid username>" is accepted.
+const NEXT_RE = /^\/u\/([A-Za-z0-9_.-]{3,24})$/;
+function validTarget(next) {
+  const m = NEXT_RE.exec(String(next || ""));
+  return m && !/^\.+$/.test(m[1]) ? m[1].toLowerCase() : "";
+}
+(function rememberIntent() {
+  const q = new URLSearchParams(location.search);
+  const target = validTarget(q.get("next"));
+  if (!target) return;
+  const g = q.get("game");
+  try {
+    sessionStorage.setItem("pm_intent", JSON.stringify({ target, game: g && GAME_RE.test(g) ? g : "", at: Date.now() }));
+  } catch { }
+})();
+function intentQuery() {   // carried by the confirmation email link (another tab has no sessionStorage)
+  try {
+    const i = JSON.parse(sessionStorage.getItem("pm_intent") || "null");
+    if (i && validTarget(`/u/${i.target}`)) {
+      return `?${i.game ? `game=${encodeURIComponent(i.game)}&` : ""}next=${encodeURIComponent(`/u/${i.target}`)}`;
+    }
+  } catch { }
+  const g = sessionStorage.getItem("pm_next_game");
+  return g && GAME_RE.test(g) ? `?game=${encodeURIComponent(g)}` : "";
+}
+
 function goToApp() {
   const g = sessionStorage.getItem("pm_next_game");
   sessionStorage.removeItem("pm_next_game");
@@ -133,7 +160,7 @@ async function handleAuth(e) {
       const res = await supabaseClient.auth.signUp({
         email,
         password,
-        options: { data: { pm_username: username }, emailRedirectTo: `${location.origin}/` },
+        options: { data: { pm_username: username }, emailRedirectTo: `${location.origin}/${intentQuery()}` },
       });
       if (res.error) return setError(res.error.message);
       data = res.data;

@@ -642,3 +642,65 @@ def test_new_game_on_a_phone_opens_the_setup(browser, base_url, db, users, make_
     assert box["height"] >= 44
     no_sideways_scroll(page, "setup step 1")
     close_clean(ctx)
+
+
+INTENT = "JSON.parse(sessionStorage.getItem('pm_intent') || 'null')"
+
+
+def test_shared_player_is_kept_through_signup_and_setup(open_page, users, make_profile, base_url):
+    """Pre-launch #3: a guest opens Bob's profile → joins → sets up CS2 → 'View @bob' brings them back to Like."""
+    make_profile(users["bob"], "Bob")
+    page = open_page("/u/bob")                                          # logged out
+    cta = page.get_attribute(".pp-cta", "href")
+    assert cta == "/?game=cs2&next=%2Fu%2Fbob" and "Bob" in page.text_content(".pp-cta")
+    page.goto(base_url + cta)                                           # landing captures the intent
+    assert page.evaluate(INTENT)["target"] == "bob" and page.evaluate(INTENT)["game"] == "cs2"
+    page.evaluate("t => localStorage.setItem('pm_access_token', t)", make_token(users["alice"], exp=int(time.time()) + 3600))
+    page.goto(base_url + "/app?game=cs2")                               # = after signing up / logging in
+    wait_for(page, "() => typeof state !== 'undefined' && state.gameReady && state.wizard")
+    assert "save your profile" in page.inner_text("#intent-strip") and page.locator("[data-intent-go]").count() == 0
+    fill_step1_cs2(page)
+    page.click("#btn-wizard-next")
+    page.fill("#username-input", "Alice")
+    page.click("#btn-find-matches")
+    wait_for(page, "() => !state.wizard && state.hasProfile")
+    page.wait_for_selector("[data-intent-go]")
+    assert page.get_attribute("[data-intent-go]", "href") == "/u/bob"
+    page.click("[data-intent-go]")
+    page.wait_for_selector('[data-like-game="cs2"]')                    # back on Bob's profile, ready to like
+    assert page.evaluate(INTENT) is None                                # used up
+
+
+def test_logged_in_player_adding_the_game_keeps_the_target_and_can_dismiss(open_page, users, make_profile):
+    make_profile(users["alice"], "Alice", "lol")
+    make_profile(users["bob"], "Bob")
+    page = open_page("/u/bob", as_user=users["alice"])
+    link = page.get_attribute("text=Add Counter-Strike 2 to your games to like them", "href")
+    assert link == "/app?game=cs2&next=%2Fu%2Fbob"
+    page.click("text=Add Counter-Strike 2 to your games to like them")
+    wait_for(page, "() => typeof state !== 'undefined' && state.gameReady && state.wizard")
+    assert "next=" not in page.url                                      # removed from the address bar
+    assert "@bob" in page.inner_text("#intent-strip")
+    page.click("[data-intent-dismiss]")
+    assert not page.is_visible("#intent-strip") and page.evaluate(INTENT) is None
+
+
+def test_intent_rejects_unsafe_targets_and_other_accounts(open_page, users, make_profile, base_url):
+    page = open_page("/terms")
+    for bad in ("//evil.example", "https://evil.example/u/bob", "/u/bob/extra", "/u/..", "/u/...", "/u/bob%2fx",
+                "/u/bob?x=1", "/u/b", "/u/" + "x" * 25, "/u/bob%0a", "/x/bob", "javascript:alert(1)"):
+        page.evaluate("sessionStorage.removeItem('pm_intent')")
+        page.goto(base_url + "/?next=" + __import__("urllib.parse").parse.quote(bad, safe=""))
+        assert page.evaluate(INTENT) is None, bad
+    # bound to the account that first saw it: another account in this tab doesn't inherit it
+    make_profile(users["alice"], "Alice")
+    make_profile(users["carol"], "Carol")
+    page.goto(base_url + "/?game=cs2&next=%2Fu%2Fbob")
+    page.evaluate("t => localStorage.setItem('pm_access_token', t)", make_token(users["alice"], exp=int(time.time()) + 3600))
+    page.goto(base_url + "/app?game=cs2")
+    wait_for(page, "() => typeof state !== 'undefined' && state.gameReady")
+    assert page.evaluate(INTENT)["uid"] == users["alice"]
+    page.evaluate("t => localStorage.setItem('pm_access_token', t)", make_token(users["carol"], exp=int(time.time()) + 3600))
+    page.goto(base_url + "/app?game=cs2")
+    wait_for(page, "() => typeof state !== 'undefined' && state.gameReady")
+    assert page.evaluate(INTENT) is None and not page.is_visible("#intent-strip")

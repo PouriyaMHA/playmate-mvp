@@ -193,6 +193,65 @@ const isCurrent = (gen) => gen === state.gen;
 
 const inFlight = { match: false, like: false, swipe: false, find: false };
 
+/* the player whose shared profile brought this person here (pre-launch #3): tab-scoped, bound to the account,
+   24 h, only a valid username — shown until they open that profile or dismiss it */
+const INTENT_TTL = 24 * 3600 * 1000;
+const TARGET_RE = /^[a-z0-9_.-]{3,24}$/;
+function validTargetName(v) {
+  const t = String(v || "").toLowerCase();
+  return TARGET_RE.test(t) && !/^\.+$/.test(t) ? t : "";
+}
+function readIntent() {
+  let i = null;
+  try { i = JSON.parse(sessionStorage.getItem("pm_intent") || "null"); } catch { }
+  const fresh = i && validTargetName(i.target) && Date.now() - Number(i.at || 0) < INTENT_TTL;
+  if (!fresh || (i.uid && i.uid !== pageUid) || (state.username && i.target === state.username)) {
+    clearIntent();
+    return null;
+  }
+  if (!i.uid && pageUid) {   // first seen by this account: it belongs to it now
+    i.uid = pageUid;
+    try { sessionStorage.setItem("pm_intent", JSON.stringify(i)); } catch { }
+  }
+  if (i.game && !state.games.some(g => g.id === i.game)) i.game = "";
+  return i;
+}
+function clearIntent() {
+  try { sessionStorage.removeItem("pm_intent"); } catch { }
+  const el = $("intent-strip");
+  if (el) { el.hidden = true; el.innerHTML = ""; }
+}
+// /app?next=/u/<name> (a logged-in player coming from a profile): same as the landing page's capture
+function captureIntentFromUrl() {
+  const url = new URL(location.href);
+  const m = /^\/u\/([A-Za-z0-9_.-]{3,24})$/.exec(url.searchParams.get("next") || "");
+  if (m && validTargetName(m[1])) {
+    const g = url.searchParams.get("game");
+    try {
+      sessionStorage.setItem("pm_intent", JSON.stringify({ target: m[1].toLowerCase(), game: g && /^[a-z0-9-]{2,20}$/.test(g) ? g : "", at: Date.now() }));
+    } catch { }
+  }
+  if (url.searchParams.has("next")) {
+    url.searchParams.delete("next");
+    history.replaceState(null, "", url);
+  }
+}
+function renderIntent() {
+  const el = $("intent-strip");
+  const i = readIntent();
+  if (!i) return;
+  const name = esc(i.target);
+  const gameName = esc(gameInfo(i.game)?.name || "");
+  const needsSetup = !state.hasProfile && (!i.game || i.game === state.game);
+  el.innerHTML = `
+    <span class="intent-text">${needsSetup
+      ? `You came to team up with <b>@${name}</b>${gameName ? ` in ${gameName}` : ""} — save your profile, then you can like them.`
+      : `You came to team up with <b>@${name}</b>${gameName ? ` in ${gameName}` : ""}.`}</span>
+    ${needsSetup ? "" : `<a class="btn-primary intent-go" href="/u/${encodeURIComponent(i.target)}" data-intent-go>View @${name} →</a>`}
+    <button type="button" class="intent-close" data-intent-dismiss aria-label="Dismiss">×</button>`;
+  el.hidden = false;
+}
+
 /* players skipped this session, per game — "Show more" asks the server for the ones after them */
 function skippedKey(game) { return `pm_skipped:${game}`; }
 function getSkipped(game = state.game) {
@@ -545,6 +604,7 @@ async function selectGame(gameId) {
   state.gameReady = true;
   els.btnFind.disabled = false;
   renderWizard();
+  renderIntent();
   if (state.wizard && window.innerWidth <= 760) setTab("profile");   // new game on a phone: start the setup
   renderGameChrome();
   refreshStats();
@@ -845,6 +905,11 @@ function markMissing(missing) {
 }
 
 // clear the red outline as soon as the user fixes a field
+document.addEventListener("click", (e) => {
+  if (!(e.target instanceof Element)) return;
+  if (e.target.closest("[data-intent-dismiss]")) clearIntent();
+  else if (e.target.closest("[data-intent-go]")) { try { sessionStorage.removeItem("pm_intent"); } catch { } }
+});
 document.addEventListener("change", (e) => e.target.classList?.remove("field-invalid"));
 document.addEventListener("input", (e) => e.target.classList?.remove("field-invalid"));
 document.addEventListener("click", (e) => {
@@ -894,6 +959,7 @@ async function saveProfile() {
     state.wizard = false;
     renderWizard();
     setSaved();   // the baseline is what the server stored (e.g. the canonical Steam link)
+    renderIntent();   // "save your profile first" → "View @name"
     els.status.textContent = "";
     if (!payload.in_game_username && !payload.discord_username && !saved.steam_profile) {
       const steamToo = els.steamRow.hidden ? "" : ", Discord or Steam profile";
@@ -1815,8 +1881,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   await syncTokenFromSession();
   if (!getAccessToken()) {
     // not logged in: remember which game they wanted, so they land on it after signing up
-    const wanted = new URLSearchParams(location.search).get("game");
-    window.location.href = wanted && /^[a-z0-9-]{2,20}$/.test(wanted) ? `/?game=${encodeURIComponent(wanted)}` : "/";
+    const q = new URLSearchParams(location.search);
+    const wanted = q.get("game"), next = q.get("next") || "";
+    const keep = new URLSearchParams();
+    if (wanted && /^[a-z0-9-]{2,20}$/.test(wanted)) keep.set("game", wanted);
+    if (/^\/u\/[A-Za-z0-9_.-]{3,24}$/.test(next)) keep.set("next", next);
+    window.location.href = keep.toString() ? `/?${keep}` : "/";
     return;
   }
   localStorage.removeItem("pm_last_squad_sig"); // old versions
@@ -1837,6 +1907,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     return;
   }
 
+  captureIntentFromUrl();
   const fromUrl = new URLSearchParams(location.search).get("game");
   const saved = localStorage.getItem("pm_game");
   const pick = [fromUrl, saved, state.myGames[0]].find(g => g && state.games.some(x => x.id === g));
