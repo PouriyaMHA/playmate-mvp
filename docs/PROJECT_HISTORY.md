@@ -87,13 +87,25 @@ public squads respect the viewer's blocks; `state.gameReady`. Testing: real-Chro
 all migrations). Rate limits on every write route (per account) and public reads (per IP). Account deletion in one
 transaction (`delete_account_data`, migration 003). Migrations 001–003 have all been run on production.
 
+2026-10-18 (evening, rounds 6–8 while the owner was away): CI now really fails on failing tests (bash pipefail; proven
+with a canary), failures show as annotations; `ci/**` branches run CI before main (used to test every migration on a
+real Postgres before running it on production). Migration 005: FKs profiles/likes/blocks → auth.users ON DELETE
+CASCADE (no orphan data after deletion; late writes → 401) and `accounts.avatar` as the single avatar source with
+row-locked `set_account_avatar` / `sync_profile_avatar`; 006: same lock order for deletion (no deadlock), retired 004.
+Rate limits: shared social budget, Retry-After = longest saturated rule, idle-key sweep, validated IPs. Product (from
+Codex's top-10): light "Like sent" toast, "Save & Find Teammates", 40 px phone targets, readable modal names, no
+placeholder badges, **Like / Like back from a public profile** (`/api/relationship`, live refresh, opens Squad).
+Tests: ~103 fake-DB/browser + 14 real-Postgres integration, all green; live suites 94/94.
+
 ## Roadmap
 1. Before public launch: turn on Supabase **Confirm email**; ~~reliable keep-alive~~ done 2026-10-17 (cron-job.org, every 10 min, `/health?deep=1`); finalise Terms/Privacy; manual check of Sign up / Log in / password reset.
 2. Grow: invite rewards (badges for referrals), share cards, Persian community marketing.
 3. Profile photo upload (Supabase Storage + report/moderation), highlights upload.
 4. Squad chat / notifications by email, rank verification ("Verified" badge). (Self-service account deletion: done 2026-10-18.)
 6. Open from the reviews: append-only reports/moderation queue + a support contact; Render "deploy only after CI passes"
-   (Render dashboard setting — owner); own domain.
+   (Render dashboard setting — owner); own domain; keep the shared player through sign-up; saved/unsaved indicator.
+7. Owner decisions from review 7's product top 10: launch focus (one game/region + seeded players + "alert me"),
+   game-specific direct contact (Steam profile link), email alerts (needs a domain), two-step first profile, bio on cards.
 5. Later: i18n (UI English only for now), mobile app.
 
 ## Decisions to respect
