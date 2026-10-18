@@ -9,7 +9,7 @@
   <link rel="icon" href="/static/img/logo.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
   <link rel="stylesheet" href="/static/css/ui.css?v=12">
-  <link rel="stylesheet" href="/static/css/profile.css?v=3">
+  <link rel="stylesheet" href="/static/css/profile.css?v=4">
 </head>
 
 <body class="profile-page">
@@ -108,13 +108,27 @@
         <button type="button" class="btn-secondary" id="edit-cancel">Cancel</button>
         <button type="button" class="btn-primary" id="edit-save">Save profile</button>
       </div>
+
+      <section class="edit-section danger-zone">
+        <h3>Danger zone</h3>
+        <p>Delete your PlayMate account and everything in it: all game profiles, likes, squads and your login.
+          This can't be undone.</p>
+        <button type="button" class="btn-danger-outline" id="delete-start">Delete my account</button>
+        <div class="delete-confirm" id="delete-confirm" hidden>
+          <label for="delete-input">Type <b>DELETE</b> to confirm</label>
+          <div class="delete-row">
+            <input type="text" id="delete-input" autocomplete="off" spellcheck="false" placeholder="DELETE">
+            <button type="button" class="btn-danger" id="delete-go" disabled>Delete forever</button>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 
   <div class="toast-container" id="toast-container"></div>
 
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="/static/js/profile.js?v=4"></script>
+  <script src="/static/js/profile.js?v=5"></script>
 </body>
 
 </html>

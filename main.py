@@ -5,6 +5,7 @@ Per-game profiles live in `profiles` (unique user_id + game); account-level data
 (bio, banner, avatar, links, referral) lives in the auth user's app_metadata["playmate"],
 which only the server (secret key) can write.
 """
+import logging
 import os
 import re
 from datetime import datetime, timedelta, timezone
@@ -24,6 +25,8 @@ from supabase.lib.client_options import SyncClientOptions
 
 from games import GAME_ORDER, GAMES, LANGUAGES, REGIONS, clean_fields, game_meta, game_summary, region_label
 from locations import country_of_city, get_country
+
+logger = logging.getLogger("playmate")
 
 LANGUAGE_LABELS = {lang["code"]: lang["label"] for lang in LANGUAGES}
 
@@ -822,6 +825,29 @@ def update_account(req: AccountUpdate, user_id: str = Depends(get_current_user_i
     if changes:
         save_account_meta(user, changes)
     return my_account_payload(user_id)
+
+
+class DeleteAccountRequest(BaseModel):
+    confirm: str
+
+
+@app.delete(f"{API_PREFIX}/account")
+def delete_account(req: DeleteAccountRequest, user_id: str = Depends(get_current_user_id)):
+    """Permanently delete my account: every game profile, my likes (sent and received), blocks/reports that
+    involve me, and the login itself. The client must send confirm="DELETE"."""
+    if (req.confirm or "").strip().upper() != "DELETE":
+        raise HTTPException(status_code=422, detail='Type DELETE to confirm')
+    supabase.table("likes").delete().eq("from_user_id", user_id).execute()
+    supabase.table("likes").delete().eq("to_user_id", user_id).execute()
+    supabase.table("blocks").delete().eq("blocker_id", user_id).execute()
+    supabase.table("blocks").delete().eq("blocked_id", user_id).execute()
+    supabase.table("profiles").delete().eq("user_id", user_id).execute()
+    try:
+        supabase.auth.admin.delete_user(user_id)
+    except Exception:
+        logger.exception("delete_account: auth user %s could not be deleted", user_id)
+        raise HTTPException(status_code=500, detail="Your PlayMate data was removed, but the login could not be deleted. Please contact support.")
+    return {"status": "deleted"}
 
 
 class ReferralRequest(BaseModel):

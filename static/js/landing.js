@@ -201,4 +201,8 @@ document.addEventListener("click", (e) => {
 $("year").textContent = new Date().getFullYear();
 
 setAuthMode(new URLSearchParams(location.search).get("ref") ? "signup" : "login");
+if (new URLSearchParams(location.search).has("deleted")) {
+  setOk("Your account and all its data have been deleted. Thanks for playing with PlayMate.");
+  history.replaceState(null, "", "/");
+}
 loadGames();

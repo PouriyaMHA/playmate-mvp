@@ -768,3 +768,70 @@ body.profile-page {
     font-size: 0.8rem;
   }
 }
+
+
+/* ---------- danger zone (delete account) ---------- */
+.danger-zone {
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 77, 109, 0.25);
+}
+
+.danger-zone h3 {
+  color: var(--red);
+}
+
+.danger-zone p {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+  margin: 6px 0 12px;
+}
+
+.btn-danger-outline,
+.btn-danger {
+  padding: 10px 18px;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.btn-danger-outline {
+  background: transparent;
+  color: var(--red);
+  border: 1px solid rgba(255, 77, 109, 0.55);
+}
+
+.btn-danger-outline:hover {
+  background: rgba(255, 77, 109, 0.08);
+}
+
+.btn-danger {
+  background: var(--red);
+  color: #fff;
+  border: none;
+  white-space: nowrap;
+}
+
+.btn-danger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.delete-confirm label {
+  display: block;
+  font-size: 0.86rem;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.delete-row {
+  display: flex;
+  gap: 10px;
+}
+
+.delete-row input {
+  flex: 1;
+  min-width: 0;
+}
