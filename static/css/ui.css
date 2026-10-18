@@ -2463,3 +2463,19 @@ input.field-invalid {
   outline: 1px solid var(--red, #ff4d6d);
   box-shadow: 0 0 0 3px rgba(255, 77, 109, 0.12);
 }
+
+
+/* chosen avatar picture instead of the coloured initial (paintAvatar / avatarInner in ui.js) */
+.avatar-face.has-img {
+  padding: 0;
+  overflow: hidden;
+  background: #0b1219;
+}
+
+.avatar-face.has-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
+}

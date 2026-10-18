@@ -169,10 +169,29 @@ function avatarHue(name) {
   return h;
 }
 
-function paintAvatar(el, name) {
+// avatar-1..12 are SVG art, avatar-13 and up illustrated WebP (same rule as profile.js)
+function avatarSrc(id) {
+  const m = /^avatar-(\d+)$/.exec(String(id || ""));
+  return m ? `/static/img/avatars/${id}.${Number(m[1]) > 12 ? "webp" : "svg"}` : "";
+}
+
+// Chosen avatar picture, or the coloured initial when the player has none
+function paintAvatar(el, name, avatar) {
   if (!el) return;
-  el.textContent = initialOf(name);
+  const src = avatarSrc(avatar);
+  el.classList.toggle("has-img", !!src);
   el.style.setProperty("--hue", avatarHue(name));
+  if (src) el.innerHTML = `<img src="${esc(src)}" alt="">`;
+  else el.textContent = initialOf(name);
+}
+
+// same thing as an HTML string, for list/card templates
+function avatarInner(name, avatar) {
+  const src = avatarSrc(avatar);
+  return src ? `<img src="${esc(src)}" alt="" loading="lazy">` : getInitials(name);
+}
+function avatarClass(avatar) {
+  return avatarSrc(avatar) ? " has-img" : "";
 }
 
 function svgIcon(id) {
@@ -254,8 +273,8 @@ function setIdentity(display) {
   localStorage.setItem("pm_username", d);
 
   $("pm-username-display").textContent = d;
-  paintAvatar($("me-avatar"), d);
-  paintAvatar($("me-chip-avatar"), d);
+  paintAvatar($("me-avatar"), d, state.myAvatar);
+  paintAvatar($("me-chip-avatar"), d, state.myAvatar);
   $("me-chip-name").textContent = d;
 
   const href = "/u/" + encodeURIComponent(state.username);
@@ -468,6 +487,7 @@ async function loadProfileForGame() {
   try {
     const p = await apiJson(`${API_BASE}/my-profile?game=${encodeURIComponent(state.game)}`);
     state.profile = p;
+    if (p.avatar) state.myAvatar = p.avatar;
     state.hasProfile = true;
     setIdentity(p.display_username || p.username);
     applyProfileToForm(p);
@@ -702,7 +722,7 @@ function renderCard() {
   els.cardWrapper.innerHTML = `
 <div class="card-stack">
   <div class="match-card" id="active-card">
-    <div class="card-avatar"><div class="avatar-face" style="--hue:${avatarHue(name)}">${getInitials(name)}</div></div>
+    <div class="card-avatar"><div class="avatar-face${avatarClass(p.avatar)}" style="--hue:${avatarHue(name)}">${avatarInner(name, p.avatar)}</div></div>
 
     <div class="match-percent" title="Match score">
       <svg viewBox="0 0 80 80">
@@ -905,7 +925,7 @@ function renderSquadList() {
     return `
       <div class="squad-member">
         <span class="status-dot ${status}"></span>
-        <a class="sm-avatar avatar-face" href="/u/${encodeURIComponent(mate.username)}" target="_blank" rel="noopener" style="--hue:${avatarHue(name)}">${getInitials(name)}</a>
+        <a class="sm-avatar avatar-face${avatarClass(mate.avatar)}" href="/u/${encodeURIComponent(mate.username)}" target="_blank" rel="noopener" style="--hue:${avatarHue(name)}">${avatarInner(name, mate.avatar)}</a>
         <div class="sm-info">
           <a class="sm-name" href="/u/${encodeURIComponent(mate.username)}" target="_blank" rel="noopener">${esc(name)}</a>
           <span class="sm-status ${status}">${esc(statusText)}</span>
@@ -947,7 +967,7 @@ function renderPendingList(list) {
     const name = p.display_username || p.username || "";
     return `
       <div class="squad-member pending">
-        <div class="sm-avatar avatar-face" style="--hue:${avatarHue(name)}">${getInitials(name)}</div>
+        <div class="sm-avatar avatar-face${avatarClass(p.avatar)}" style="--hue:${avatarHue(name)}">${avatarInner(name, p.avatar)}</div>
         <div class="sm-info">
           <span class="sm-name">${esc(name)}</span>
           <span class="sm-status">Waiting for them to like you back</span>
@@ -972,8 +992,8 @@ function triggerMatchModal(mate, opts = {}) {
     ? `You liked <b class="hl">${esc(mateName)}</b>. If they like you back, you'll match.`
     : `You're now squadmates with <b class="hl">${esc(mateName)}</b>!`;
 
-  paintAvatar($("modal-me-avatar"), meName);
-  paintAvatar($("modal-them-avatar"), mateName);
+  paintAvatar($("modal-me-avatar"), meName, state.myAvatar);
+  paintAvatar($("modal-them-avatar"), mateName, mate?.avatar);
   $("modal-me-name").textContent = meName;
   $("modal-me-ign").textContent = `${ignLabel}: ${meIGN}`;
   $("modal-them-name-2").textContent = mateName;
@@ -1071,6 +1091,11 @@ async function refreshInvite() {
   if (!state.username || inviteLoaded) return;
   try {
     const acc = await apiJson(`${API_BASE}/account`);
+    if (acc.avatar !== undefined && acc.avatar !== state.myAvatar) {
+      state.myAvatar = acc.avatar;
+      paintAvatar($("me-avatar"), state.displayName, state.myAvatar);
+      paintAvatar($("me-chip-avatar"), state.displayName, state.myAvatar);
+    }
     if (!acc.invite_path) return;
     inviteLoaded = true;
     $("invite-card").style.display = "";

@@ -133,6 +133,22 @@ def profile_country(p: dict) -> str | None:
     return ((p.get("game_meta") or {}).get("country")) or country_of_city(p.get("region"), p.get("city"))
 
 
+def profile_avatar(p: dict) -> str:
+    """The player's chosen avatar, copied onto each game profile (game_meta.avatar) so match lists need no extra lookups."""
+    a = (p.get("game_meta") or {}).get("avatar")
+    return a if a in AVATARS else ""
+
+
+def sync_profile_avatar(user_id: str, avatar: str) -> None:
+    """Copy the account avatar onto every game profile of this user."""
+    rows = supabase.table("profiles").select("id,game_meta").eq("user_id", user_id).execute().data or []
+    for r in rows:
+        meta = dict(r.get("game_meta") or {})
+        if meta.get("avatar") != avatar:
+            meta["avatar"] = avatar
+            supabase.table("profiles").update({"game_meta": meta}).eq("id", r["id"]).execute()
+
+
 def public_view(p: dict) -> dict:
     """A profile row as other players may see it."""
     return {
@@ -143,6 +159,7 @@ def public_view(p: dict) -> dict:
         "region": p.get("region"),
         "country": profile_country(p),
         "city": p.get("city"),
+        "avatar": profile_avatar(p),
         "languages": p.get("languages"),
         "mic": p.get("mic"),
         "fields": profile_fields(p),
@@ -445,7 +462,11 @@ def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)
         "city": city,
         "mic": mic,
         "languages": languages,
-        "game_meta": {"fields": fields, "country": country_def["name"] if country_def else None},
+        "game_meta": {
+            "fields": fields,
+            "country": country_def["name"] if country_def else None,
+            "avatar": account_data(auth_user(user_id)).get("avatar") or "",
+        },
     }
     for f in g["fields"]:
         if f.get("column"):
@@ -716,13 +737,14 @@ def pending_likes(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_u
 
     rows = (
         supabase.table("profiles")
-        .select("user_id,username,display_username,region,last_active,looking_until")
+        .select("user_id,username,display_username,region,last_active,looking_until,game_meta")
         .eq("game", game).in_("user_id", pending_ids).execute().data or []
     )
     pending = [{
         "username": p.get("username"),
         "display_username": p.get("display_username") or p.get("username"),
         "region": p.get("region"),
+        "avatar": profile_avatar(p),
         "last_active": p.get("last_active"),
         "liked_at": liked_at.get(str(p["user_id"])),
     } for p in rows]
@@ -824,6 +846,8 @@ def update_account(req: AccountUpdate, user_id: str = Depends(get_current_user_i
         changes["links"] = links
     if changes:
         save_account_meta(user, changes)
+        if "avatar" in changes:
+            sync_profile_avatar(user_id, changes["avatar"])
     return my_account_payload(user_id)
 
 
