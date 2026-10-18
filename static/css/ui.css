@@ -2649,3 +2649,8 @@ input.field-invalid {
   .sm-btn { min-height: 40px; padding: 8px 12px; font-size: 0.8rem; }
   .sm-btn.danger { margin-left: auto; }
 }
+
+/* Steam profile link (squad card + match modal) */
+a.sm-btn { display: inline-flex; align-items: center; text-decoration: none; }
+.info-steam { display: inline-block; margin-top: 6px; font-size: 0.8rem; font-weight: 700; color: var(--cyan); text-decoration: none; }
+.info-steam:hover { text-decoration: underline; }

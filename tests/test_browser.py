@@ -478,3 +478,28 @@ def test_signed_in_player_without_a_profile_is_told_to_add_the_game(open_page, u
     make_profile(users["alice"], "Alice")
     page = open_page("/u/alice", as_user=users["carol"])
     page.wait_for_selector("text=Add Counter-Strike 2 to your games to like them")
+
+
+def test_steam_profile_field_and_squad_link(open_page, users, make_profile, api):
+    """Steam games on PC offer the field; a friend code is saved as a link; the mutual squadmate gets 'Open Steam profile'."""
+    make_profile(users["alice"], "Alice")
+    make_profile(users["alice"], "Alice", "lol")
+    make_profile(users["bob"], "Bob")
+    page = open_page("/app?game=cs2", as_user=users["alice"])
+    wait_for(page, READY)
+    assert page.locator("#steam-row").is_visible()
+    page.fill("#steam_profile", "22202")
+    page.click("#btn-find-matches")
+    wait_for(page, "() => !state.loading && !!document.getElementById('active-card')")
+    assert api.get("/api/my-profile?game=cs2", user=users["alice"])[1]["steam_profile"] == "profiles/76561197960287930"
+    assert page.input_value("#steam_profile") == "https://steamcommunity.com/profiles/76561197960287930"
+    page.evaluate("selectGame('lol')")
+    wait_for(page, "() => state.game === 'lol' && state.gameReady")
+    assert not page.locator("#steam-row").is_visible()                 # LoL isn't a Steam game
+    api.post("/api/like", user=users["bob"], json={"to_user": "alice", "game": "cs2"})
+    api.post("/api/like", user=users["alice"], json={"to_user": "bob", "game": "cs2"})
+    bob = open_page("/app?game=cs2", as_user=users["bob"])
+    bob.wait_for_selector('a.sm-btn:has-text("Open Steam profile")')
+    href = bob.get_attribute('a.sm-btn:has-text("Open Steam profile")', "href")
+    assert href == "https://steamcommunity.com/profiles/76561197960287930"
+    assert bob.get_attribute('a.sm-btn:has-text("Open Steam profile")', "rel") == "noopener noreferrer"

@@ -10,6 +10,7 @@ Each game defines:
     `column` mirrors the value into an old profiles column (Battlefield only, for compatibility).
     `must_match` fields are hard filters: players with different values can't play together at all
     (Minecraft Java vs Bedrock, League of Legends servers).
+  - steam (optional): True when the game is played through Steam on PC (offers a Steam profile link)
   - crossplay (optional): groups of platforms that can play together. Default: every platform together.
     Players on platforms from different groups are never matched.
   - crossplay_note (optional): one line shown under the form explaining the filter.
@@ -43,6 +44,7 @@ def _field(fid, label, options, weight, required=True, column=None, match="same"
 
 GAMES = {
     "battlefield": {
+        "steam": True,   # on PC: players can share their Steam profile link
         "name": "Battlefield 6",
         "short": "BF6",
         "genre": "Large-scale FPS",
@@ -56,6 +58,7 @@ GAMES = {
         ],
     },
     "cs2": {
+        "steam": True,   # on PC: players can share their Steam profile link
         "name": "Counter-Strike 2",
         "short": "CS2",
         "genre": "Tactical shooter",
@@ -81,6 +84,7 @@ GAMES = {
         ],
     },
     "apex": {
+        "steam": True,   # on PC: players can share their Steam profile link
         "name": "Apex Legends",
         "short": "APX",
         "genre": "Squad battle royale",
@@ -146,6 +150,7 @@ GAMES = {
         ],
     },
     "helldivers2": {
+        "steam": True,   # on PC: players can share their Steam profile link
         "name": "Helldivers 2",
         "short": "HD2",
         "genre": "Co-op shooter",
@@ -158,6 +163,7 @@ GAMES = {
         ],
     },
     "fc": {
+        "steam": True,   # on PC: players can share their Steam profile link
         "name": "EA SPORTS FC 27",
         "short": "FC27",
         "genre": "Football",
@@ -174,6 +180,7 @@ GAMES = {
         ],
     },
     "gta": {
+        "steam": True,   # on PC: players can share their Steam profile link
         "name": "GTA Online",
         "short": "GTA",
         "genre": "Open-world crime",
@@ -189,6 +196,7 @@ GAMES = {
         ],
     },
     "rocket-league": {
+        "steam": True,   # on PC: players can share their Steam profile link
         "name": "Rocket League",
         "short": "RL",
         "genre": "Car soccer",
@@ -241,6 +249,7 @@ def game_meta(game_id: str) -> dict:
         "ign_label": g["ign_label"],
         "fields": g["fields"],
         "crossplay_note": g.get("crossplay_note", ""),
+        "steam": bool(g.get("steam")),
         "regions": REGIONS,
         "languages": LANGUAGES,
         # kept for older clients (Battlefield page)
@@ -279,3 +288,8 @@ def clean_fields(game_id: str, raw: dict | None) -> tuple[dict, list[str]]:
         elif f["required"]:
             missing.append(f["label"])
     return out, missing
+
+
+def offers_steam(game_id: str, platform: str | None) -> bool:
+    """The Steam profile link is offered for Steam games played on PC."""
+    return bool(GAMES.get(game_id, {}).get("steam")) and str(platform or "").startswith("PC")

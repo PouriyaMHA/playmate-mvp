@@ -107,7 +107,7 @@ def test_browser_roles_can_read_or_call_nothing(users, make_profile):
 def test_like_back_mutual_contact_unmatch_on_real_db(api, users, make_profile):
     a, b = users["alice"], users["bob"]
     make_profile(a, "Alice", in_game_username="AliceCS")
-    make_profile(b, "Bob", in_game_username="BobCS", discord_username="bob_dc")
+    make_profile(b, "Bob", in_game_username="BobCS", discord_username="bob_dc", steam_profile="steamcommunity.com/id/bobsteam")
     api.post("/api/like", user=b, json={"to_user": "alice", "game": "cs2"})
     _, d = api.get("/api/poll?game=cs2", user=a)
     assert [p["username"] for p in d["incoming"]] == ["bob"] and "BobCS" not in str(d)
@@ -115,6 +115,7 @@ def test_like_back_mutual_contact_unmatch_on_real_db(api, users, make_profile):
     assert api.post("/api/like", user=a, json={"to_user": "bob", "game": "cs2"})[1]["status"] == "already_exists"
     _, d = api.get("/api/poll?game=cs2", user=a)
     assert d["squadmates"][0]["in_game_username"] == "BobCS" and d["squadmates"][0]["discord_username"] == "bob_dc"
+    assert d["squadmates"][0]["steam_profile"] == "id/bobsteam"   # migration 007 column, via social_snapshot
     assert rows("likes") == 2
     api.delete("/api/like?to_user=bob&game=cs2", user=a)
     _, d = api.get("/api/poll?game=cs2", user=a)

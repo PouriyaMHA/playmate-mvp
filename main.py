@@ -31,7 +31,7 @@ from supabase_auth.errors import AuthApiError
 from supabase.lib.client_options import SyncClientOptions
 
 from games import (GAME_ORDER, GAMES, LANGUAGES, REGIONS, can_play_together, clean_fields, game_meta, game_summary,
-                   region_label)
+                   offers_steam, region_label)
 from locations import country_of_city, get_country
 
 logger = logging.getLogger("playmate")
@@ -144,6 +144,37 @@ def norm_game(game: str | None) -> str:
 
 def parse_languages(lang_str: str | None) -> list[str]:
     return [x.strip().lower() for x in (lang_str or "").split(",") if x.strip()]
+
+
+STEAM_ID64_BASE = 76561197960265728   # SteamID64 = friend code (32-bit account id) + this
+STEAM_ID64_RE = re.compile(r"^7656119\d{10}$")
+STEAM_CUSTOM_RE = re.compile(r"^[A-Za-z0-9_-]{2,32}$")
+STEAM_URL_RE = re.compile(r"^(?:https?://)?(?:www\.)?steamcommunity\.com/(id|profiles)/([^/?#\s]+)/?(?:[?#]\S*)?$", re.I)
+STEAM_HELP = ("Steam profile: paste your profile link (steamcommunity.com/id/… or /profiles/…), "
+              "your friend code, or your custom URL name.")
+
+
+def clean_steam_profile(raw: str | None) -> str | None:
+    """A Steam profile as the path after https://steamcommunity.com/ — "id/<custom>" or "profiles/<SteamID64>".
+    Accepts a profile link, a SteamID64, a friend code (converted) or a custom URL name; anything else is a 422.
+    Stored only in this canonical form, so the link the squad sees always points at steamcommunity.com."""
+    v = (raw or "").strip()
+    if not v:
+        return None
+    m = STEAM_URL_RE.match(v)
+    if m:
+        kind, val = m.group(1).lower(), m.group(2)
+    elif STEAM_ID64_RE.match(v):
+        kind, val = "profiles", v
+    elif v.isdigit() and len(v) <= 10:
+        kind, val = "profiles", str(int(v) + STEAM_ID64_BASE)   # friend code
+    elif v.isdigit():
+        raise HTTPException(status_code=422, detail=STEAM_HELP)   # digits that are neither: ambiguous, ask for the link
+    else:
+        kind, val = "id", v
+    if (kind == "profiles" and not STEAM_ID64_RE.match(val)) or (kind == "id" and not STEAM_CUSTOM_RE.match(val)):
+        raise HTTPException(status_code=422, detail=STEAM_HELP)
+    return f"{kind}/{val}"
 
 
 def clean_optional_text(value, field: str) -> str | None:
@@ -653,6 +684,7 @@ class ProfileIn(BaseModel):
     game: str | None = DEFAULT_GAME
     in_game_username: str | None = None
     discord_username: str | None = None
+    steam_profile: str | None = None
     platform: str | None = None
     region: str | None = None
     country: str | None = None
@@ -737,6 +769,7 @@ def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)
         "game": game,
         "in_game_username": clean_optional_text(profile.in_game_username, g["ign_label"]),
         "discord_username": clean_optional_text(profile.discord_username, "Discord username"),
+        "steam_profile": clean_steam_profile(profile.steam_profile) if offers_steam(game, platform) else None,
         "platform": platform,
         "region": region,
         "city": city,
@@ -792,6 +825,7 @@ def my_profile(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user
     out.update({
         "in_game_username": row.get("in_game_username"),
         "discord_username": row.get("discord_username"),
+        "steam_profile": row.get("steam_profile"),
         "looking_until": row.get("looking_until"),
     })
     return out
@@ -1048,6 +1082,7 @@ def social_state(user_id: str, game: str, me: dict | None = None) -> dict:
             # mutual squadmates may see how to reach each other
             v["in_game_username"] = p.get("in_game_username")
             v["discord_username"] = p.get("discord_username")
+            v["steam_profile"] = p.get("steam_profile")
             squad.append(v)
         elif uid in pending:
             waiting.append({"username": v["username"], "display_username": v["display_username"], "region": v["region"],

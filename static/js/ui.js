@@ -230,6 +230,8 @@ const els = {
   mic: $("mic"),
   ign: $("in_game_username"),
   discord: $("discord_username"),
+  steam: $("steam_profile"),
+  steamRow: $("steam-row"),
   usernameRow: $("username-row"),
   usernameInput: $("username-input"),
   btnLooking: $("btn-looking"),
@@ -550,6 +552,7 @@ function buildForm() {
   fillSelect(els.city, [], "Optional — skip or select…");
   els.city.disabled = true;
   fillSelect(els.platform, m.platforms, m.platforms.length > 1 ? "Select platform…" : null);
+  updateSteamRow();
   $("ign-label").textContent = m.ign_label || "In-game name";
   els.ign.placeholder = `Your ${m.ign_label || "in-game name"}`;
 
@@ -618,6 +621,8 @@ function applyProfileToForm(p) {
   });
   els.ign.value = p.in_game_username || "";
   els.discord.value = p.discord_username || "";
+  els.steam.value = p.steam_profile ? `https://steamcommunity.com/${p.steam_profile}` : "";
+  updateSteamRow();
   const fields = p.fields || {};
   els.gameFields.querySelectorAll("select[data-field]").forEach(s => { s.value = fields[s.dataset.field] || ""; });
 }
@@ -656,7 +661,8 @@ async function loadProfileForGame(gen = state.gen) {
     if (other) {
       try {
         const o = await apiJson(`${API_BASE}/my-profile?game=${encodeURIComponent(other)}`);
-        shared = { region: o.region, country: o.country, city: o.city, mic: o.mic, languages: o.languages, discord_username: o.discord_username };
+        shared = { region: o.region, country: o.country, city: o.city, mic: o.mic, languages: o.languages, discord_username: o.discord_username,
+                   steam_profile: o.steam_profile };
         setIdentity(o.display_username || o.username);
       } catch { }
       if (!isCurrent(gen)) return;
@@ -674,6 +680,16 @@ async function loadProfileForGame(gen = state.gen) {
   renderLookingButton();
 }
 
+// the Steam profile link is offered for Steam games played on PC (same rule as the server: games.offers_steam)
+function updateSteamRow() {
+  els.steamRow.hidden = !(state.meta?.steam && String(els.platform.value || "").startsWith("PC"));
+}
+
+// "id/name" or "profiles/7656…" (validated by the server) → the link squadmates open
+function steamUrl(path) {
+  return /^(id|profiles)\/[A-Za-z0-9_-]+$/.test(path || "") ? `https://steamcommunity.com/${path}` : "";
+}
+
 function collectProfile() {
   const fields = {};
   els.gameFields.querySelectorAll("select[data-field]").forEach(s => { if (s.value) fields[s.dataset.field] = s.value; });
@@ -688,6 +704,7 @@ function collectProfile() {
     languages: selectedLanguages().join(","),
     in_game_username: els.ign.value.trim() || null,
     discord_username: els.discord.value.trim() || null,
+    steam_profile: els.steamRow.hidden ? null : (els.steam.value.trim() || null),
     fields,
   };
 }
@@ -753,7 +770,9 @@ async function saveProfile() {
       uid: tokenUserId(),
       region: payload.region, country: payload.country, city: payload.city, mic: payload.mic, languages: payload.languages,
       discord_username: payload.discord_username,
+      steam_profile: saved.steam_profile || null,
     }));
+    if (saved.steam_profile !== undefined) els.steam.value = saved.steam_profile ? steamUrl(saved.steam_profile) : "";
     els.status.textContent = "";
     if (!payload.in_game_username && !payload.discord_username) {
       showToast(`Tip: add your ${state.meta?.ign_label || "in-game name"} or Discord so squadmates can reach you`, "info");
@@ -1004,6 +1023,7 @@ async function handleLike() {
       if (!isCurrent(gen)) return;
       const fromSquad = (state.squad || []).find(m => (m.username || "").toLowerCase() === key);
       if (fromSquad?.in_game_username) mate.in_game_username = fromSquad.in_game_username;
+      if (fromSquad?.steam_profile) mate.steam_profile = fromSquad.steam_profile;
       triggerMatchModal(mate, { kind: "match" });
     } else {
       // one-way like: a light confirmation; the big modal is for a real (mutual) match
@@ -1035,7 +1055,7 @@ async function handleLike() {
 ========================================================= */
 function computeSquadSignature(squad) {
   return (squad || [])
-    .map(m => `${(m.username || "").toLowerCase()}|${m.in_game_username || ""}|${m.discord_username || ""}|${m.looking_now ? 1 : 0}|${m.last_active || ""}`)
+    .map(m => `${(m.username || "").toLowerCase()}|${m.in_game_username || ""}|${m.discord_username || ""}|${m.steam_profile || ""}|${m.looking_now ? 1 : 0}|${m.last_active || ""}`)
     .sort()
     .join(";");
 }
@@ -1158,6 +1178,7 @@ function renderSquadList() {
       : presence === "online" ? "Online" : presence === "away" ? "Away · " + label.replace("Last seen ", "") : label;
     const ign = mate.in_game_username || "";
     const discord = mate.discord_username || "";
+    const steam = steamUrl(mate.steam_profile);
     const name = mate.display_username || mate.username || "";
     return `
       <div class="squad-member">
@@ -1166,10 +1187,11 @@ function renderSquadList() {
         <div class="sm-info">
           <a class="sm-name" href="/u/${encodeURIComponent(mate.username)}" target="_blank" rel="noopener">${esc(name)}</a>
           <span class="sm-status ${status}">${esc(statusText)}</span>
-          ${ign || discord
+          ${ign || discord || steam
       ? `<span class="sm-ign">${ign ? `${esc(state.meta?.ign_label || "In-game")}: <b>${esc(ign)}</b>` : ""}${ign && discord ? "<br>" : ""}${discord ? `Discord: <b>${esc(discord)}</b>` : ""}</span>`
       : `<span class="sm-ign muted">No contact added yet — check back soon</span>`}
           <div class="sm-actions">
+            ${steam ? `<a class="sm-btn primary" href="${esc(steam)}" target="_blank" rel="noopener noreferrer">Open Steam profile ↗</a>` : ""}
             ${ign ? `<button type="button" class="sm-btn" data-copy="${esc(ign)}" data-copy-label="${esc(state.meta?.ign_label || "In-game name")}">Copy ${esc(state.meta?.ign_label || "name")}</button>` : ""}
             ${discord ? `<button type="button" class="sm-btn" data-copy="${esc(discord)}" data-copy-label="Discord">Copy Discord</button>` : ""}
             <button type="button" class="sm-btn" data-unmatch-user="${esc(mate.username)}">Unmatch</button>
@@ -1306,6 +1328,9 @@ function triggerMatchModal(mate, opts = {}) {
   $("modal-me-ign").textContent = `${ignLabel}: ${meIGN}`;
   $("modal-them-name-2").textContent = mateName;
   $("modal-them-ign").textContent = `${ignLabel}: ${mateIGN}`;
+  const steamLink = $("modal-them-steam"), mateSteam = steamUrl(mate?.steam_profile);
+  steamLink.hidden = !mateSteam;
+  if (mateSteam) steamLink.href = mateSteam;
 
   els.modal.classList.toggle("is-like", kind === "like");
   if (!els.modal.classList.contains("active")) rememberFocus(els.modal);
@@ -1519,6 +1544,7 @@ function setupEventListeners() {
 
   els.region.addEventListener("change", () => { fillCountries(els.region.value); fillCities(els.region.value, els.country.value); refreshStats(); });
   els.country.addEventListener("change", () => fillCities(els.region.value, els.country.value));
+  els.platform.addEventListener("change", updateSteamRow);
   els.btnLooking.addEventListener("click", toggleLooking);
 
   const runFind = async (e) => {
