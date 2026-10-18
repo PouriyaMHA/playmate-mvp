@@ -234,21 +234,18 @@ def test_account_deletion_leaves_nothing(api, users, make_profile):
     assert api.client.get("/u/alice").status_code == 404
 
 
-def test_set_profile_avatar_changes_only_the_avatar_key(api, users, make_profile, db):
+def test_avatar_copy_changes_only_the_avatar_key(api, users, make_profile, db):
     a = users["alice"]
     make_profile(a, "Alice", fields={"mode": "Premier", "rank": "Gold Nova"})
     make_profile(a, "Alice", "gta")
-    assert db.rpc("set_profile_avatar", {"uid": a, "a": "avatar-4"}).execute().data == 2
-    assert db.rpc("set_profile_avatar", {"uid": a, "a": "avatar-4"}).execute().data == 0   # nothing to change
+    assert db.rpc("set_account_avatar", {"uid": a, "a": "avatar-4"}).execute().data == 2
+    assert db.rpc("sync_profile_avatar", {"uid": a}).execute().data == 0   # nothing to change
     metas = dict(sql("select game, game_meta from public.profiles where user_id = %s", (a,), fetch=True))
     assert metas["cs2"]["avatar"] == "avatar-4" and metas["cs2"]["fields"] == {"mode": "Premier", "rank": "Gold Nova"}
-    assert db.rpc("set_profile_avatar", {"uid": a, "a": ""}).execute().data == 2
+    assert db.rpc("set_account_avatar", {"uid": a, "a": ""}).execute().data == 2
     metas = dict(sql("select game, game_meta from public.profiles where user_id = %s", (a,), fetch=True))
     assert "avatar" not in metas["cs2"] and metas["cs2"]["country"] == "Iran"
-    from postgrest.exceptions import APIError
-    with pytest.raises(APIError):
-        rest_client(make_token(a, role="authenticated")).rpc("set_profile_avatar", {"uid": a, "a": "avatar-1"}).execute()
-
+    assert sql("select count(*) from pg_proc where proname = 'set_profile_avatar'", fetch=True)[0][0] == 0   # retired (006)
 
 
 # ---------------------------------------------------------------------------------------------- migration 005
@@ -319,3 +316,33 @@ def test_avatar_functions_are_server_only(users, make_profile):
             with pytest.raises(APIError) as e:
                 rest_client(token).rpc(fn, params).execute()
             assert "permission denied" in str(e.value)
+
+
+
+def test_deletion_and_avatar_change_queue_instead_of_deadlocking(users, make_profile, db):
+    """R7-M02: both take the accounts row lock first (006), whichever runs first, the other waits — no deadlock."""
+    import psycopg
+    for first, second in (("set_account_avatar(%s, 'avatar-5')", "delete_account_data(%s)"),
+                          ("delete_account_data(%s)", "set_account_avatar(%s, 'avatar-6')")):
+        uid = db.auth.admin.create_user(email=f"{first[:5]}@example.com")
+        make_profile(uid, "Lock" + first[:3], fields={"mode": "Premier", "rank": "Silver"})
+        make_profile(uid, "Lock" + first[:3], "gta")
+        t1 = psycopg.connect(PG_URL)
+        t1.execute(f"select public.{first}", (uid,))   # holds its locks, not committed
+        result = {}
+
+        def run_second():
+            try:
+                with psycopg.connect(PG_URL, autocommit=True) as t2:
+                    result["value"] = t2.execute(f"select public.{second}", (uid,)).fetchone()[0]
+            except Exception as e:   # a deadlock would land here
+                result["error"] = repr(e)
+        th = threading.Thread(target=run_second)
+        th.start()
+        th.join(1.0)
+        assert th.is_alive()   # waits for the first one's lock
+        t1.commit()
+        t1.close()
+        th.join(10)
+        assert "error" not in result, result
+        assert rows("profiles", f"user_id = '{uid}'") == 0 and rows("accounts", f"user_id = '{uid}'") == 0

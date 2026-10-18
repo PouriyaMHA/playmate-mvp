@@ -63,11 +63,12 @@ def test_profiles_always_end_with_the_account_avatar(api, users, make_profile, d
     assert {r["game_meta"].get("avatar") for r in db.tables["profiles"]} == {"avatar-7"}
 
 
-def test_first_profile_carries_an_avatar_chosen_before_it(api, users, db):
+def test_avatar_needs_a_claimed_account_first(api, users, make_profile, db):
+    """R7-M01: no accounts row = nothing to serialize avatar changes on, so they wait for the first profile."""
     a = users["alice"]
-    api.put("/api/account", user=a, json={"avatar": "avatar-9"})   # no accounts row yet: Auth copy only
-    from conftest import BASE_PROFILE
-    assert api.post("/api/profile", user=a, json={**BASE_PROFILE, "username": "Alice", "game": "cs2", "platform": "PC",
-                                                   "fields": {"mode": "Premier", "rank": "Silver"}})[0] == 200
-    assert next(r for r in db.tables["accounts"] if r["user_id"] == a)["avatar"] == "avatar-9"
+    status, d = api.put("/api/account", user=a, json={"avatar": "avatar-9"})
+    assert status == 409 and "first game profile" in d["detail"]
+    assert api.put("/api/account", user=a, json={"bio": "hi"})[0] == 200   # other account fields are fine
+    make_profile(a, "Alice")
+    assert api.put("/api/account", user=a, json={"avatar": "avatar-9"})[0] == 200
     assert db.tables["profiles"][0]["game_meta"]["avatar"] == "avatar-9"

@@ -253,7 +253,6 @@ class FakeSupabase:
     # --- SQL functions (db/migrations) -------------------------------------------------------------------------
     def rpc(self, name, params):
         fn = {"social_snapshot": self._social_snapshot, "delete_account_data": self._delete_account_data,
-              "set_profile_avatar": self._set_profile_avatar,
               "sync_profile_avatar": self._sync_profile_avatar,
               "set_account_avatar": self._set_account_avatar}[name]
         return SimpleNamespace(execute=lambda: Result(fn(**params)))
@@ -283,7 +282,7 @@ class FakeSupabase:
         return out
 
     def _set_profile_avatar(self, uid, a):
-        """Same as public.set_profile_avatar (004): only game_meta.avatar changes, in place."""
+        """Only game_meta.avatar changes, in place (helper; the SQL function of 004 was retired in 006)."""
         n = 0
         for p in self.tables.get("profiles", []):
             meta = p.get("game_meta") or {}

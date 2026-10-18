@@ -2638,3 +2638,14 @@ input.field-invalid {
 .sm-ign, .sm-ign b, .info-ign, .info-name, .player-name, .ign-row, .pending-item, .squad-member { overflow-wrap: anywhere; }
 .squad-member, .sm-info, .squad-list, .panel { min-width: 0; max-width: 100%; }
 .sm-actions { flex-wrap: wrap; }
+
+/* phones: readable names in the match modal and real tap targets in the squad list (Codex review 7, product #9) */
+@media (max-width: 760px) {
+  .match-avatars-area { grid-template-columns: 1fr 28px 1fr; }
+  .connector { overflow: hidden; }
+  .info-name { white-space: normal; font-size: 0.86rem; }
+  .info-ign { font-size: 0.85rem; }
+  .sm-actions { gap: 8px; }
+  .sm-btn { min-height: 40px; padding: 8px 12px; font-size: 0.8rem; }
+  .sm-btn.danger { margin-left: auto; }
+}

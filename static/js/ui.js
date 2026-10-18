@@ -533,7 +533,7 @@ async function selectGame(gameId) {
     refreshSquad().catch(() => { });
     refreshPending();
     refreshIncoming();
-    // returning player: show matches straight away instead of making them press Find Matches
+    // returning player: show matches straight away instead of making them press Save & Find Teammates
     findMatches({ keepTab: true });
   }
 }
@@ -662,7 +662,7 @@ async function loadProfileForGame(gen = state.gen) {
       if (!isCurrent(gen)) return;
     }
     applyProfileToForm({ ...shared, in_game_username: "", fields: {} });
-    els.status.textContent = `New ${gameInfo(state.game)?.name || ""} profile — fill in the game details and hit Find Matches.`;
+    els.status.textContent = `New ${gameInfo(state.game)?.name || ""} profile — fill in the game details and hit Save & Find Teammates.`;
   }
   if (!state.username) {
     const pending = (localStorage.getItem("pm_username") || "").trim();
@@ -792,13 +792,13 @@ function renderIdleCenter() {
     ? `<div class="empty-state">
         <img class="empty-cover" src="${esc(g?.cover || "")}" alt="" data-fallback="${esc(g?.art || "/static/img/games/default.svg")}">
         <h3>Ready when you are</h3>
-        <p>Hit <b>Find Matches</b> to see ${esc(g?.name || "")} players who fit how you play.</p>
-        <div style="margin-top:16px;"><button class="btn-primary" type="button" data-action="find">Find Matches</button></div>
+        <p>Hit <b>Save & Find Teammates</b> to see ${esc(g?.name || "")} players who fit how you play.</p>
+        <div style="margin-top:16px;"><button class="btn-primary" type="button" data-action="find">Find Teammates</button></div>
       </div>`
     : `<div class="empty-state">
         <img class="empty-cover" src="${esc(g?.cover || "")}" alt="" data-fallback="${esc(g?.art || "/static/img/games/default.svg")}">
         <h3>Set up your ${esc(g?.name || "")} profile</h3>
-        <p>Fill in the form — region, game details and languages — then hit <b>Find Matches</b>.</p>
+        <p>Fill in the form — region, game details and languages — then hit <b>Save & Find Teammates</b>.</p>
         <div class="mobile-only" style="margin-top:16px;"><button class="btn-primary" type="button" data-action="edit-profile">Set up profile</button></div>
       </div>`;
 }
@@ -1006,7 +1006,8 @@ async function handleLike() {
       if (fromSquad?.in_game_username) mate.in_game_username = fromSquad.in_game_username;
       triggerMatchModal(mate, { kind: "match" });
     } else {
-      triggerMatchModal(mate, { kind: "like" });
+      // one-way like: a light confirmation; the big modal is for a real (mutual) match
+      showToast(`Like sent to ${mate.display_username} — you'll match if they like you back`, "success");
       refreshSquad().catch(() => { });
     }
     refreshPending();
@@ -1077,7 +1078,11 @@ function startSocial(ping) {
       renderIncomingList([]);
       return;
     }
-    if (!res.ok) throw new Error(`poll failed: ${res.status}`);
+    if (!res.ok) {
+      const err = new Error(`poll failed: ${res.status}`);
+      err.status = res.status;   // 429 = rate limited: the next tick tries again, no "connection issue" banner
+      throw err;
+    }
     const d = await res.json();
     if (!isCurrent(gen)) return;
     hideNetError();

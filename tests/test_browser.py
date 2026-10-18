@@ -380,3 +380,32 @@ def test_settings_and_profile_refresh_returning_another_account_send_nothing_wit
         writes = [s for s in sent if s[0] in ("PUT", "DELETE")]
         assert writes and all(u == users["alice"] for _, _, u in writes)   # only A's own (expired) token
     assert users["bob"] in db.users and (db.users[users["bob"]].app_metadata.get("playmate") or {}).get("bio") != "A_PRIVATE"
+
+
+def test_rate_limited_poll_shows_no_connection_warning_but_a_real_failure_does(open_page, users, make_profile):
+    """R7-L01: 429 = try again next tick (no banner); a 500 still shows the banner (positive control)."""
+    make_profile(users["alice"], "Alice")
+    make_profile(users["bob"], "Bob")
+    page = open_page("/app?game=cs2", as_user=users["alice"])
+    wait_for(page, READY)
+    banner = "getComputedStyle(document.getElementById('net-banner')).display"
+    page.route("**/api/poll**", lambda r: r.fulfill(status=429, headers={"Retry-After": "30"},
+                                                    content_type="application/json", body='{"detail": "Too many requests."}'))
+    page.evaluate("refreshSquad().catch(() => {})")
+    page.wait_for_timeout(400)
+    assert page.evaluate(banner) == "none"
+    page.unroute("**/api/poll**")
+    page.route("**/api/poll**", lambda r: r.fulfill(status=500, content_type="application/json", body='{"detail": "x"}'))
+    page.evaluate("refreshSquad().catch(() => {})")
+    page.wait_for_timeout(400)
+    assert page.evaluate(banner) == "flex"
+
+
+def test_one_way_like_is_a_light_confirmation_not_the_match_modal(open_page, users, make_profile):
+    make_profile(users["alice"], "Alice")
+    make_profile(users["bob"], "Bob")
+    page = open_page("/app?game=cs2", as_user=users["alice"])
+    wait_for(page, READY)
+    page.click('[data-action="like"]')
+    wait_for(page, "() => [...document.querySelectorAll('.toast')].some(t => t.textContent.includes('Like sent'))")
+    assert not page.evaluate("document.getElementById('match-modal').classList.contains('active')")

@@ -370,8 +370,6 @@ def badges_for(user, mutual_count: int) -> list[dict]:
          "earned": bool(created and created < EARLY_MEMBER_BEFORE)},
         {"id": "first-match", "label": "First Match", "desc": "Made a first mutual match", "earned": mutual_count >= 1},
         {"id": "squad-leader", "label": "Squad Leader", "desc": "5 or more squadmates", "earned": mutual_count >= 5},
-        {"id": "verified", "label": "Verified", "desc": "Coming soon", "earned": False},
-        {"id": "legendary", "label": "Legendary", "desc": "Coming soon", "earned": False},
     ]
 
 
@@ -1233,6 +1231,10 @@ def update_account(req: AccountUpdate, user_id: str = Depends(get_current_user_i
     if req.avatar is not None:
         if req.avatar and req.avatar not in AVATARS:
             raise HTTPException(status_code=422, detail="Unknown avatar")
+        # the accounts row is where avatar changes queue up (its row lock): without one there is nothing to
+        # serialize against, so the avatar can be chosen once the first game profile has claimed the username
+        if not account_row(user_id):
+            raise HTTPException(status_code=409, detail="Save your first game profile before choosing an avatar.")
         changes["avatar"] = req.avatar
     if req.links is not None:
         links = {}
