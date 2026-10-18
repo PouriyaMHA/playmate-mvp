@@ -94,9 +94,12 @@ def test_browser_roles_can_read_or_call_nothing(users, make_profile):
         with pytest.raises(APIError) as e:
             c.rpc("social_snapshot", {"viewer": users["alice"], "g": "cs2"}).execute()
         assert "permission denied" in str(e.value)
+        with pytest.raises(APIError) as e:
+            c.rpc("delete_account_data", {"uid": users["alice"]}).execute()
+        assert "permission denied" in str(e.value)
         with pytest.raises(APIError):
             c.table("likes").insert({"from_user_id": users["alice"], "to_user_id": users["bob"], "game": "cs2"}).execute()
-    assert rows("likes") == 0
+    assert rows("likes") == 0 and rows("profiles") == 1 and rows("accounts") == 1
 
 
 # ---------------------------------------------------------------------------------------------- main flows

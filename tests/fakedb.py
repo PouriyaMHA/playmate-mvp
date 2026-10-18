@@ -230,7 +230,7 @@ class FakeSupabase:
 
     # --- SQL functions (db/migrations) -------------------------------------------------------------------------
     def rpc(self, name, params):
-        fn = {"social_snapshot": self._social_snapshot}[name]
+        fn = {"social_snapshot": self._social_snapshot, "delete_account_data": self._delete_account_data}[name]
         return SimpleNamespace(execute=lambda: Result(fn(**params)))
 
     def _social_snapshot(self, viewer, g, with_profiles=True):
@@ -245,3 +245,14 @@ class FakeSupabase:
         profiles = [copy.deepcopy(p) for p in self.tables.get("profiles", [])
                     if with_profiles and p.get("game") == g and str(p.get("user_id")) in others - blocked]
         return copy.deepcopy({"likes": likes, "blocked": sorted(blocked), "profiles": profiles})
+
+    def _delete_account_data(self, uid):
+        """Same as public.delete_account_data (003): one atomic delete of everything about one account."""
+        u, out = str(uid), {}
+        for table, cols in (("likes", ("from_user_id", "to_user_id")), ("blocks", ("blocker_id", "blocked_id")),
+                            ("profiles", ("user_id",)), ("accounts", ("user_id",))):
+            rows = self.tables.get(table, [])
+            keep = [r for r in rows if all(str(r.get(c)) != u for c in cols)]
+            out[table] = len(rows) - len(keep)
+            self.tables[table] = keep
+        return out

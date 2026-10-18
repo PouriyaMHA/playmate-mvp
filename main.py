@@ -1199,12 +1199,9 @@ def delete_account(req: DeleteAccountRequest, user_id: str = Depends(get_current
     involve me, and the login itself. The client must send confirm="DELETE"."""
     if (req.confirm or "").strip().upper() != "DELETE":
         raise HTTPException(status_code=422, detail='Type DELETE to confirm')
-    supabase.table("likes").delete().eq("from_user_id", user_id).execute()
-    supabase.table("likes").delete().eq("to_user_id", user_id).execute()
-    supabase.table("blocks").delete().eq("blocker_id", user_id).execute()
-    supabase.table("blocks").delete().eq("blocked_id", user_id).execute()
-    supabase.table("profiles").delete().eq("user_id", user_id).execute()
-    supabase.table("accounts").delete().eq("user_id", user_id).execute()
+    # likes, blocks/reports, profiles and the username: one transaction (db/migrations/003) — all or nothing
+    supabase.rpc("delete_account_data", {"uid": user_id}).execute()
+    forget_counts()
     try:
         supabase.auth.admin.delete_user(user_id)
     except Exception:
