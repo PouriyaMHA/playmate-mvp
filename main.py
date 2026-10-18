@@ -59,10 +59,11 @@ API_PREFIX = "/api"
 
 _SUPABASE_HOST = (os.getenv("SUPABASE_URL") or "").rstrip("/")
 PUBLIC_URL = (os.getenv("PUBLIC_URL") or "https://playmate-api-aamc.onrender.com").rstrip("/")
-# 'unsafe-inline' is still needed for a few inline onclick/onerror handlers; everything else is locked down
+# No inline scripts or inline event handlers anywhere, so scripts need no 'unsafe-inline'.
+# (style-src keeps it for style="" attributes, which can't run code.)
 CSP = "; ".join([
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://unpkg.com",
+    "script-src 'self' https://unpkg.com",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     "font-src 'self'",
@@ -243,74 +244,68 @@ def require_profile(user_id: str, game: str, columns: str = "*") -> dict:
     return row
 
 
+def like_maps(user_id: str, game: str) -> tuple[dict[str, str], dict[str, str]]:
+    """({who I liked: when}, {who liked me: when}) for one game, read with ONE query — a single SQL statement sees
+    one consistent snapshot, so "mutual" (which unlocks contact info) can never be pieced together from two
+    different moments (e.g. my like read before I took it back + their like read after they made it)."""
+    rows = (
+        supabase.table("likes").select("from_user_id,to_user_id,created_at").eq("game", game)
+        .or_(f"from_user_id.eq.{user_id},to_user_id.eq.{user_id}").execute().data or []
+    )
+    i_liked, liked_me = {}, {}
+    for r in rows:
+        if str(r.get("from_user_id")) == user_id and r.get("to_user_id"):
+            i_liked[str(r["to_user_id"])] = r.get("created_at")
+        elif str(r.get("to_user_id")) == user_id and r.get("from_user_id"):
+            liked_me[str(r["from_user_id"])] = r.get("created_at")
+    return i_liked, liked_me
+
+
 def mutual_ids(user_id: str, game: str, blocked: set[str] | None = None) -> list[str]:
     """Players who liked me back in this game (blocked players excluded)."""
-    out_res = supabase.table("likes").select("to_user_id").eq("from_user_id", user_id).eq("game", game).execute()
-    outgoing = [str(r["to_user_id"]) for r in (out_res.data or []) if r.get("to_user_id")]
-    if not outgoing:
+    i_liked, liked_me = like_maps(user_id, game)
+    mutual = [u for u in i_liked if u in liked_me]
+    if not mutual:
         return []
-    in_res = (
-        supabase.table("likes").select("from_user_id")
-        .eq("to_user_id", user_id).eq("game", game).in_("from_user_id", outgoing).execute()
-    )
     if blocked is None:
         blocked = get_blocked_ids(user_id)
-    return [str(r["from_user_id"]) for r in (in_res.data or []) if r.get("from_user_id") and str(r["from_user_id"]) not in blocked]
+    return [u for u in mutual if u not in blocked]
 
 
-_accounts_check = {"ok": False, "at": -1e9}
+def is_unique_violation(e: Exception) -> bool:
+    return "23505" in str(e) or "duplicate key" in str(e)
 
 
-def accounts_enabled() -> bool:
-    """True once db/migrations/001 (the accounts table) has been run. Until then the app keeps using the
-    username stored on game profiles. Re-checked every 5 minutes while the table is missing."""
-    if _accounts_check["ok"]:
-        return True
-    now = time.monotonic()
-    if now - _accounts_check["at"] < 300:
-        return False
-    _accounts_check["at"] = now
-    try:
-        supabase.table("accounts").select("user_id").limit(1).execute()
-        _accounts_check["ok"] = True
-    except Exception:
-        logger.info("accounts table not found yet — using profile usernames (run db/migrations/001)")
-    return _accounts_check["ok"]
-
-
+# The accounts table (db/migrations/001, applied 2026-10-18) is the one source of truth for usernames.
+# Any error reading it is an error (503 from the handler below) — never a silent fallback to profile names.
 def account_row(user_id: str) -> dict | None:
-    if not accounts_enabled():
-        return None
     res = supabase.table("accounts").select("username,display_username").eq("user_id", user_id).limit(1).execute()
     return res.data[0] if res.data else None
 
 
 def user_id_for_username(username: str) -> str | None:
     u = (username or "").strip().lower()
-    if not u:
+    if not USERNAME_RE.match(u):
         return None
-    if accounts_enabled():
-        res = supabase.table("accounts").select("user_id").eq("username", u).limit(1).execute()
-        if res.data:
-            return str(res.data[0]["user_id"])
-    res = supabase.table("profiles").select("user_id").eq("username", u).limit(1).execute()
-    return str(res.data[0]["user_id"]) if res.data and res.data[0].get("user_id") else None
+    res = supabase.table("accounts").select("user_id").eq("username", u).limit(1).execute()
+    return str(res.data[0]["user_id"]) if res.data else None
 
 
-def claim_username(user_id: str, username: str, display_username: str) -> None:
-    """Reserve a username for this account for good (unique in the DB, so two sign-ups can't both get it)."""
-    if not accounts_enabled():
-        return
+def claim_username(user_id: str, username: str, display_username: str) -> tuple[str, str]:
+    """Reserve a username for this account for good, and return the account's name as stored.
+    If two first saves of the same user race, the first one wins and the second uses the winner's name
+    (so profiles and accounts never disagree); a name owned by someone else is a 409."""
     try:
         supabase.table("accounts").insert(
             {"user_id": user_id, "username": username, "display_username": display_username}).execute()
+        return username, display_username
     except Exception as e:
-        msg = str(e)
-        if "duplicate key" in msg and "username" in msg:
-            raise HTTPException(status_code=409, detail="This PlayMate username is already taken.")
-        if "duplicate key" in msg:
-            return   # this account already has a row (e.g. another tab saved first) — fine
-        raise
+        if not is_unique_violation(e):
+            raise
+    mine = account_row(user_id)
+    if mine:
+        return mine["username"], mine.get("display_username") or mine["username"]
+    raise HTTPException(status_code=409, detail="This PlayMate username is already taken.")
 
 
 def auth_user(user_id: str):
@@ -423,19 +418,20 @@ def ui_redirect():
 @app.get("/u/{username}", response_class=HTMLResponse)
 def profile_page(username: str | None = None):
     """Profile page with the player's name in <title> and share previews (Discord/Telegram don't run JS)."""
-    name = (username or "").strip().lower()
-    if not USERNAME_RE.match(name):
+    if username is None:
         return page("profile.html")   # /profile without a name: the page shows its own message
-    rows = supabase.table("profiles").select("username,display_username,game").eq("username", name).execute().data or []
-    if not rows:
+    uid = user_id_for_username(username)
+    account = account_row(uid) if uid else None
+    if not account:
         return HTMLResponse((BASE_DIR / "404.html").read_text(encoding="utf-8"), status_code=404,
                             headers={"Cache-Control": "no-cache"})
-    shown = rows[0].get("display_username") or rows[0]["username"]
+    rows = supabase.table("profiles").select("game").eq("user_id", uid).execute().data or []
+    shown = account.get("display_username") or account["username"]
     games = ", ".join(GAMES[r["game"]]["name"] for r in rows if r.get("game") in GAMES)
     title = f"{shown} on PlayMate"
     desc = f"{shown} plays {games}. Find teammates by region, language and mic on PlayMate." if games \
         else f"{shown} is on PlayMate — find teammates by region, language and mic."
-    url = f"{PUBLIC_URL}/u/{rows[0]['username']}"
+    url = f"{PUBLIC_URL}/u/{account['username']}"
     t, d, u = html.escape(title), html.escape(desc), html.escape(url)
     meta = (f'<title>{t}</title>\n  <meta name="description" content="{d}">\n'
             f'  <meta property="og:type" content="profile">\n  <meta property="og:title" content="{t}">\n'
@@ -491,13 +487,19 @@ def count_profiles(**filters) -> int:
 _cache: dict[str, tuple[float, object]] = {}
 
 
+_CACHE_MAX = 200
+
+
 def cached(key: str, seconds: float, compute):
-    """Tiny per-process cache for public numbers that don't need to be exact to the second."""
+    """Tiny per-process cache for public numbers that don't need to be exact to the second.
+    Keys only come from validated values (game ids, known regions) and the cache is capped."""
     hit = _cache.get(key)
     now = time.monotonic()
     if hit and now - hit[0] < seconds:
         return hit[1]
     value = compute()
+    if len(_cache) >= _CACHE_MAX:
+        _cache.clear()
     _cache[key] = (now, value)
     return value
 
@@ -509,14 +511,8 @@ def forget_counts() -> None:
 
 
 def player_counts() -> dict[str, int]:
-    """Profiles per game in one query (instead of one count per game), cached for a minute."""
-    def compute():
-        counts = {g: 0 for g in GAME_ORDER}
-        for r in supabase.table("profiles").select("game").execute().data or []:
-            if r.get("game") in counts:
-                counts[r["game"]] += 1
-        return counts
-    return cached("player_counts", 60, compute)
+    """Profiles per game, as exact counts (a plain select would stop at the API's row limit), cached a minute."""
+    return cached("player_counts", 60, lambda: {g: count_profiles(game=("eq", g)) for g in GAME_ORDER})
 
 
 @app.get(f"{API_PREFIX}/games")
@@ -534,6 +530,8 @@ def get_game_meta(game: str):
 def stats(game: str = DEFAULT_GAME, region: str | None = None):
     """Small 'the site is alive' numbers for empty states."""
     game = norm_game(game)
+    if region not in {r["id"] for r in REGIONS}:
+        region = None   # unknown values don't reach the DB or the cache
 
     def compute():
         now_iso = now_utc().isoformat()
@@ -656,7 +654,8 @@ def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)
             payload[f["column"]] = fields.get(f["id"])
 
     if needs_claim:
-        claim_username(user_id, username, display_username)
+        username, display_username = claim_username(user_id, username, display_username)
+        payload["username"], payload["display_username"] = username, display_username
     try:
         result = supabase.table("profiles").upsert(payload, on_conflict="user_id,game").execute()
     except Exception as e:
@@ -872,17 +871,19 @@ def add_like(like: LikeRequest, user_id: str = Depends(get_current_user_id)):
     if not to_user:
         raise HTTPException(status_code=400, detail="to_user is required")
 
-    me = require_profile(user_id, game, "username")
+    me = require_profile(user_id, game)
     from_user = (me.get("username") or "").strip().lower()
     if from_user == to_user:
         raise HTTPException(status_code=400, detail="You cannot like yourself")
 
-    target = supabase.table("profiles").select("user_id").eq("username", to_user).eq("game", game).limit(1).execute()
+    target = supabase.table("profiles").select("*").eq("username", to_user).eq("game", game).limit(1).execute()
     if not target.data or not target.data[0].get("user_id"):
         raise HTTPException(status_code=404, detail="Target user not found")
     to_user_id = str(target.data[0]["user_id"])
     if to_user_id in get_blocked_ids(user_id):
         raise HTTPException(status_code=403, detail="You can't like this player")
+    if not compatible(game, me, target.data[0]):
+        raise HTTPException(status_code=409, detail="You can't play together: different platform, edition or server.")
 
     payload = {"from_user": from_user, "to_user": to_user, "from_user_id": user_id, "to_user_id": to_user_id, "game": game}
     exists = (
@@ -920,19 +921,22 @@ def unmatch(to_user: str, game: str = DEFAULT_GAME, user_id: str = Depends(get_c
     return {"status": "unmatched", "game": game}
 
 
-def social_state(user_id: str, game: str) -> dict:
-    """Squad, pending likes and "liked you" for one game, from just 4 queries
-    (my likes, likes to me, blocks, and one profiles lookup for everyone involved)."""
-    out_rows = supabase.table("likes").select("to_user_id,created_at").eq("from_user_id", user_id).eq("game", game).execute().data or []
-    in_rows = supabase.table("likes").select("from_user_id,created_at").eq("to_user_id", user_id).eq("game", game).execute().data or []
-    i_liked = {str(r["to_user_id"]): r.get("created_at") for r in out_rows if r.get("to_user_id")}
-    liked_me = {str(r["from_user_id"]): r.get("created_at") for r in in_rows if r.get("from_user_id")}
+def compatible(game: str, a: dict, b: dict) -> bool:
+    return can_play_together(game, a.get("platform"), b.get("platform"), profile_fields(a), profile_fields(b))
+
+
+def social_state(user_id: str, game: str, me: dict | None = None) -> dict:
+    """Squad, pending likes and "liked you" for one game, from 3 queries: all likes involving me (ONE consistent
+    read, see like_maps), blocks, and one profiles lookup for everyone involved."""
+    i_liked, liked_me = like_maps(user_id, game)
     blocked = get_blocked_ids(user_id) if (i_liked or liked_me) else set()
     mutual = {u for u in i_liked if u in liked_me and u not in blocked}
     pending = {u for u in i_liked if u not in liked_me and u not in blocked}
     incoming = {u for u in liked_me if u not in i_liked and u not in blocked}
     everyone = mutual | pending | incoming
     rows = supabase.table("profiles").select("*").eq("game", game).in_("user_id", list(everyone)).execute().data or [] if everyone else []
+    if me is None:
+        me = my_profile_row(user_id, game)
 
     squad, waiting, liked_you = [], [], []
     for p in rows:
@@ -947,6 +951,8 @@ def social_state(user_id: str, game: str) -> dict:
             waiting.append({"username": v["username"], "display_username": v["display_username"], "region": v["region"],
                             "avatar": v["avatar"], "last_active": v["last_active"], "liked_at": i_liked.get(uid)})
         elif uid in incoming:
+            if me and not compatible(game, me, p):
+                continue   # they changed platform/edition/server since: you couldn't play together
             v["liked_at"] = liked_me.get(uid)
             liked_you.append(v)
     waiting.sort(key=lambda x: x.get("liked_at") or "", reverse=True)
@@ -959,18 +965,18 @@ def poll(game: str = DEFAULT_GAME, ping: bool = False, user_id: str = Depends(ge
     """Everything the app refreshes every few seconds, in one request: marks me active (ping=1),
     and returns my squad (with contacts), my pending likes and who liked me."""
     game = norm_game(game)
-    me = require_profile(user_id, game, "username")
+    me = require_profile(user_id, game)
     if ping:
         supabase.table("profiles").update({"last_active": now_utc().isoformat()}).eq("user_id", user_id).eq("game", game).execute()
-    return {"username": me.get("username"), "game": game, **social_state(user_id, game)}
+    return {"username": me.get("username"), "game": game, **social_state(user_id, game, me)}
 
 
 @app.get(f"{API_PREFIX}/incoming-likes")
 def incoming_likes(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user_id)):
     """People who liked me in this game and I haven't answered yet (no contact info: not mutual)."""
     game = norm_game(game)
-    require_profile(user_id, game, "username")
-    return {"game": game, "incoming": social_state(user_id, game)["incoming"]}
+    me = require_profile(user_id, game)
+    return {"game": game, "incoming": social_state(user_id, game, me)["incoming"]}
 
 
 @app.get(f"{API_PREFIX}/my-squad-details")
@@ -1003,18 +1009,20 @@ def block_player(req: BlockRequest, user_id: str = Depends(get_current_user_id))
         raise HTTPException(status_code=404, detail="Player not found")
     if blocked_id == user_id:
         raise HTTPException(status_code=400, detail="You cannot block yourself")
-    prev = (
-        supabase.table("blocks").select("reported,reason")
-        .eq("blocker_id", user_id).eq("blocked_id", blocked_id).eq("game", game).limit(1).execute().data or []
-    )
-    prev = prev[0] if prev else {}
-    reported = bool(req.report) or bool(prev.get("reported"))   # a report is never withdrawn by a later block
-    reason = ((req.reason or "").strip()[:300] or None) if req.report else prev.get("reason")
-    supabase.table("blocks").upsert(
-        {"blocker_id": user_id, "blocked_id": blocked_id, "game": game, "reported": reported, "reason": reason},
-        on_conflict="blocker_id,blocked_id,game",
-    ).execute()
-    return {"status": "blocked", "reported": reported}
+    key = {"blocker_id": user_id, "blocked_id": blocked_id, "game": game}
+    if req.report:
+        # sets reported=true (and the reason, if given) on the row; never writes reported=false
+        row = {**key, "reported": True}
+        reason = (req.reason or "").strip()[:300]
+        if reason:
+            row["reason"] = reason
+        supabase.table("blocks").upsert(row, on_conflict="blocker_id,blocked_id,game").execute()
+    else:
+        # a plain block only creates the row; an existing row (and any report on it) is left untouched
+        supabase.table("blocks").upsert({**key, "reported": False}, on_conflict="blocker_id,blocked_id,game",
+                                        ignore_duplicates=True).execute()
+    now = supabase.table("blocks").select("reported").eq("blocker_id", user_id).eq("blocked_id", blocked_id).eq("game", game).execute().data or []
+    return {"status": "blocked", "reported": any(r.get("reported") for r in now)}
 
 
 @app.get(f"{API_PREFIX}/blocks")
@@ -1027,17 +1035,19 @@ def my_blocks(user_id: str = Depends(get_current_user_id)):
         b["reported"] = b["reported"] or bool(r.get("reported"))
     if not by_user:
         return {"blocked": []}
-    profiles = supabase.table("profiles").select("user_id,username,display_username,game_meta").in_("user_id", list(by_user)).execute().data or []
-    names = {}
-    for p in profiles:
-        names.setdefault(str(p["user_id"]), p)
+    ids = list(by_user)
+    accounts = {str(a["user_id"]): a for a in
+                supabase.table("accounts").select("user_id,username,display_username").in_("user_id", ids).execute().data or []}
+    avatars = {}
+    for p in supabase.table("profiles").select("user_id,game_meta").in_("user_id", ids).execute().data or []:
+        avatars.setdefault(str(p["user_id"]), profile_avatar(p))
     out = []
     for uid, b in by_user.items():
-        p = names.get(uid)
-        if not p:
+        a = accounts.get(uid)
+        if not a:
             continue   # that player deleted their account
-        out.append({"username": p.get("username"), "display_username": p.get("display_username") or p.get("username"),
-                    "avatar": profile_avatar(p), "reported": b["reported"], "blocked_at": b["blocked_at"]})
+        out.append({"username": a["username"], "display_username": a.get("display_username") or a["username"],
+                    "avatar": avatars.get(uid, ""), "reported": b["reported"], "blocked_at": b["blocked_at"]})
     out.sort(key=lambda x: x.get("blocked_at") or "", reverse=True)
     return {"blocked": out}
 
@@ -1048,10 +1058,11 @@ def unblock(to_user: str, user_id: str = Depends(get_current_user_id)):
     other_id = user_id_for_username(to_user)
     if not other_id:
         raise HTTPException(status_code=404, detail="Player not found")
-    rows = supabase.table("blocks").select("reported").eq("blocker_id", user_id).eq("blocked_id", other_id).execute().data or []
-    if any(r.get("reported") for r in rows):
+    # only plain blocks are removed (a report arriving at the same moment can't be deleted by this)
+    supabase.table("blocks").delete().eq("blocker_id", user_id).eq("blocked_id", other_id).eq("reported", False).execute()
+    left = supabase.table("blocks").select("id").eq("blocker_id", user_id).eq("blocked_id", other_id).execute().data or []
+    if left:
         raise HTTPException(status_code=409, detail="You reported this player, so they stay blocked.")
-    supabase.table("blocks").delete().eq("blocker_id", user_id).eq("blocked_id", other_id).execute()
     return {"status": "unblocked"}
 
 
@@ -1141,8 +1152,7 @@ def delete_account(req: DeleteAccountRequest, user_id: str = Depends(get_current
     supabase.table("blocks").delete().eq("blocker_id", user_id).execute()
     supabase.table("blocks").delete().eq("blocked_id", user_id).execute()
     supabase.table("profiles").delete().eq("user_id", user_id).execute()
-    if accounts_enabled():
-        supabase.table("accounts").delete().eq("user_id", user_id).execute()
+    supabase.table("accounts").delete().eq("user_id", user_id).execute()
     try:
         supabase.auth.admin.delete_user(user_id)
     except Exception:
@@ -1190,14 +1200,15 @@ def public_profile(username: str, viewer_id: str | None = Depends(optional_user_
     if viewer_id and viewer_id != uid and viewer_id in get_blocked_ids(uid):
         raise HTTPException(status_code=404, detail="Player not found")   # blocked either way
     user = auth_user(uid)
+    names = account_row(uid) or {}
     rows = supabase.table("profiles").select(PUBLIC_PROFILE_FIELDS).eq("user_id", uid).execute().data or []
     blocked = get_blocked_ids(uid)
     mutual_count = sum(len(mutual_ids(uid, r["game"], blocked)) for r in rows)
     acc = account_data(user) if user else account_data(None)
     last_active = max((r.get("last_active") or "" for r in rows), default="") or None
     return {
-        "username": rows[0]["username"] if rows else username.lower(),
-        "display_username": (rows[0].get("display_username") or rows[0]["username"]) if rows else username,
+        "username": names.get("username") or username.lower(),
+        "display_username": names.get("display_username") or names.get("username") or username,
         "bio": acc["bio"],
         "banner": acc["banner"],
         "avatar": acc["avatar"],

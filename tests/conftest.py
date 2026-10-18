@@ -101,9 +101,3 @@ def make_profile(api):
         return data
     return _make
 
-
-@pytest.fixture(autouse=True)
-def _accounts_table_state(monkeypatch):
-    """Every test starts with the accounts table "present" (the fake DB has it); tests can switch it off."""
-    monkeypatch.setitem(main._accounts_check, "ok", False)
-    monkeypatch.setitem(main._accounts_check, "at", -1e9)

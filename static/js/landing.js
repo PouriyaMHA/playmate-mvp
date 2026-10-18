@@ -213,7 +213,7 @@ async function loadGames() {
     const games = (await res.json()).games || [];
     $("lp-games").innerHTML = games.map(g => `
       <a class="lp-game" href="#auth" data-mode="signup" data-game="${esc(g.id)}" style="--accent:${esc(g.accent)}">
-        <img src="${esc(g.cover)}" alt="${esc(g.name)} — ${esc(g.genre)}" loading="lazy" onerror="this.onerror=null;this.src='${esc(g.art || "/static/img/games/default.svg")}'">
+        <img src="${esc(g.cover)}" alt="${esc(g.name)} — ${esc(g.genre)}" loading="lazy" data-fallback="${esc(g.art || "/static/img/games/default.svg")}">
       </a>`).join("");
     const covers = games.map(g => `<img src="${esc(g.cover)}" alt="">`).join("");
     $("lp-marquee").innerHTML = covers + covers;
@@ -221,6 +221,15 @@ async function loadGames() {
     if (total >= 50) $("lp-stat").textContent = `${total} player profiles across ${games.length} games — and growing.`;
   } catch { }
 }
+
+// broken cover image -> our own SVG art (data-fallback); no inline onerror, so the CSP needs no 'unsafe-inline'
+document.addEventListener("error", (e) => {
+  const img = e.target;
+  if (img instanceof HTMLImageElement && img.dataset.fallback && !img.src.endsWith(img.dataset.fallback)) {
+    img.src = img.dataset.fallback;
+    delete img.dataset.fallback;
+  }
+}, true);
 
 /* ---------------- events ---------------- */
 $("mode-login").addEventListener("click", () => setAuthMode("login"));

@@ -13,8 +13,11 @@ Full background, decisions and open issues: `docs/PROJECT_HISTORY.md`. Raw ChatG
 - Run locally: `uvicorn main:app --reload` (needs `.env` with SUPABASE_URL, SUPABASE_KEY, SUPABASE_JWT_SECRET).
 - Tests: `python -m pytest` (installs from `requirements-dev.txt`). They run against an in-memory fake DB (`tests/fakedb.py`) —
   never the real Supabase — and run in GitHub Actions on every push (`.github/workflows/tests.yml`). Add a test with every change.
-- Database changes: SQL files in `db/migrations/` (numbered), run by the owner in Supabase → SQL Editor. Code must keep
-  working before a migration is applied (see `accounts_enabled()`); the fake DB mirrors the unique constraints.
+- Database changes: SQL files in `db/migrations/` (numbered), run in Supabase → SQL Editor. Ship code that needs a new
+  table only after the migration ran (001 ran 2026-10-18; `accounts` is now required — no silent fallbacks).
+  The fake DB mirrors the unique constraints and PostgREST's 1000-row cap.
+- Security headers: CSP has no `'unsafe-inline'` for scripts — never add inline `<script>` or `on*=` handlers;
+  use listeners (image fallbacks: `data-fallback` attribute).
 - `requirements.txt` pins exact versions; upgrade on purpose and run the tests.
 
 ## Rules

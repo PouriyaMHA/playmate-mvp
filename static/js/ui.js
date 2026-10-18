@@ -20,9 +20,28 @@ const SUPABASE_URL = "https://fffejwdrqhizgxpjacgn.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmZmVqd2RycWhpemd4cGphY2duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMTExNjgsImV4cCI6MjA4MDc4NzE2OH0.Zr2And6oP8PKmCDiW3rNcimBWh5cUV22YvnWwhQQz7s";
 const supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) || null;
 
-// supabase-js refreshes the session in the background; keep our copy of the token in sync
-supabaseClient?.auth.onAuthStateChange((_event, session) => {
-  if (session?.access_token) localStorage.setItem("pm_access_token", session.access_token);
+// supabase-js refreshes the session in the background; keep our copy of the token in sync.
+// If the session now belongs to a different account, everything on this page belongs to the old one: reload.
+supabaseClient?.auth.onAuthStateChange((event, session) => {
+  if (event === "SIGNED_OUT") return clearAuthAndRedirect();
+  if (!session?.access_token) return;
+  if (pageUid && tokenUserId(session.access_token) !== pageUid) return accountChanged();
+  localStorage.setItem("pm_access_token", session.access_token);
+});
+
+// the account this page was loaded for (set at init); never mix its form/state with another account's token
+let pageUid = "";
+function accountChanged() {
+  stopRealtime();
+  state.gen++;   // drop every answer that is still on its way
+  location.reload();
+}
+// another tab logged out or logged in as someone else
+window.addEventListener("storage", (e) => {
+  if (!pageUid || (e.key !== "pm_access_token" && e.key !== null)) return;
+  const uid = tokenUserId();
+  if (!uid) clearAuthAndRedirect();
+  else if (uid !== pageUid) accountChanged();
 });
 
 function getAccessToken() {
@@ -96,9 +115,10 @@ async function clearAuthAndRedirect() {
   try {
     await Promise.race([supabaseClient?.auth.signOut(), new Promise(r => setTimeout(r, 1500))]);
   } catch { }
+  const game = state.game;
   clearAccountCache();
   try { sessionStorage.clear(); } catch { }
-  window.location.href = "/";
+  window.location.href = game && /^[a-z0-9-]{2,20}$/.test(game) ? `/?game=${encodeURIComponent(game)}` : "/";
 }
 
 async function authFetch(url, options = {}) {
@@ -106,6 +126,10 @@ async function authFetch(url, options = {}) {
   if (!token) {
     clearAuthAndRedirect();
     throw new Error("AUTH_MISSING");
+  }
+  if (pageUid && tokenUserId(token) !== pageUid) {   // the stored token is another account's now
+    accountChanged();
+    throw new Error("AUTH_SWITCHED");
   }
   const send = (t) => fetch(url, { ...options, headers: { ...(options.headers || {}), Authorization: `Bearer ${t}` } });
   let res = await send(token);
@@ -151,7 +175,10 @@ const state = {
   currentMatchIndex: 0,
   squad: [],
   loading: false,
+  gen: 0,    // bumped on every game selection (and account change): answers for an older one are dropped
+  deck: 0,   // bumped on every new match list: swipe timers for an older list do nothing
 };
+const isCurrent = (gen) => gen === state.gen;
 
 const inFlight = { match: false, like: false, swipe: false, find: false };
 
@@ -366,7 +393,7 @@ function renderGamePicker() {
     const current = g.id === state.game;
     return `
       <button type="button" class="game-card ${current ? "current" : ""}" data-game="${esc(g.id)}" style="--accent:${esc(g.accent)}" aria-label="${esc(g.name)}">
-        <img src="${esc(g.cover)}" alt="" loading="lazy" onerror="this.onerror=null;this.src='${esc(g.art || "/static/img/games/default.svg")}'">
+        <img src="${esc(g.cover)}" alt="" loading="lazy" data-fallback="${esc(g.art || "/static/img/games/default.svg")}">
         ${g.players >= SHOW_COUNTS_FROM ? `<span class="game-card-body"><span class="game-card-meta">${g.players} players</span></span>` : ""}
         ${mine ? `<span class="game-card-tag">${current ? "Playing" : "Added"}</span>` : ""}
       </button>`;
@@ -415,10 +442,13 @@ function renderGameChrome() {
 
 async function refreshStats() {
   if (!state.game) return;
+  const gen = state.gen, game = state.game;
   try {
     const region = state.profile.region || els.region.value || "";
-    const res = await fetch(`${API_BASE}/stats?game=${encodeURIComponent(state.game)}&region=${encodeURIComponent(region)}`);
+    const res = await fetch(`${API_BASE}/stats?game=${encodeURIComponent(game)}&region=${encodeURIComponent(region)}`);
+    if (!res.ok) return;
     const s = await res.json();
+    if (!isCurrent(gen)) return;
     const parts = [];
     if (s.players >= SHOW_COUNTS_FROM) {
       parts.push(`${s.players} players`);
@@ -441,7 +471,11 @@ async function selectGame(gameId) {
   if (sameGame) return;
 
   stopRealtime();
+  const gen = ++state.gen;
   state.game = gameId;
+  state.hasProfile = false;
+  state.profile = {};
+  els.btnFind.disabled = true;   // no saving a half-loaded form; re-enabled once this game is ready
   localStorage.setItem("pm_game", gameId);
   const url = new URL(location.href);
   url.searchParams.set("game", gameId);
@@ -466,15 +500,17 @@ async function selectGame(gameId) {
     if (!res.ok) throw new Error("meta");
     meta = await res.json();
   } catch {
-    if (state.game === gameId) showToast("Could not load this game", "error");
+    if (isCurrent(gen)) showToast("Could not load this game", "error");
     return;
   }
-  if (state.game !== gameId) return;   // switched again while loading
+  if (!isCurrent(gen)) return;   // switched again while loading
   state.meta = meta;
 
   buildForm();
-  await loadProfileForGame();
-  if (state.game !== gameId) return;
+  await loadProfileForGame(gen);
+  if (!isCurrent(gen)) return;
+  if (state.loadFailed) return;   // keep the "Couldn't load — Try again" message on screen
+  els.btnFind.disabled = false;
   renderGameChrome();
   refreshStats();
   renderIdleCenter();
@@ -573,13 +609,13 @@ function applyProfileToForm(p) {
   els.gameFields.querySelectorAll("select[data-field]").forEach(s => { s.value = fields[s.dataset.field] || ""; });
 }
 
-async function loadProfileForGame() {
+async function loadProfileForGame(gen = state.gen) {
   const game = state.game;
   state.hasProfile = false;
   state.profile = {};
   try {
     const p = await apiJson(`${API_BASE}/my-profile?game=${encodeURIComponent(game)}`);
-    if (state.game !== game) return;   // stale: another game was picked meanwhile
+    if (!isCurrent(gen)) return;   // stale: another game (or the same one again) was picked meanwhile
     state.profile = p;
     if (p.avatar) state.myAvatar = p.avatar;
     state.hasProfile = true;
@@ -587,7 +623,7 @@ async function loadProfileForGame() {
     applyProfileToForm(p);
     els.status.textContent = "";
   } catch (e) {
-    if (state.game !== game) return;
+    if (!isCurrent(gen)) return;
     if (e.status !== 404) {
       state.loadFailed = true;
       els.btnFind.disabled = true;
@@ -610,7 +646,7 @@ async function loadProfileForGame() {
         shared = { region: o.region, country: o.country, city: o.city, mic: o.mic, languages: o.languages, discord_username: o.discord_username };
         setIdentity(o.display_username || o.username);
       } catch { }
-      if (state.game !== game) return;
+      if (!isCurrent(gen)) return;
     }
     applyProfileToForm({ ...shared, in_game_username: "", fields: {} });
     els.status.textContent = `New ${gameInfo(state.game)?.name || ""} profile — fill in the game details and hit Find Matches.`;
@@ -686,8 +722,10 @@ async function saveProfile() {
     showToast(`Please fill in: ${missing.map(m => m.label).join(", ")}`, "error");
     throw new Error("Validation");
   }
+  const gen = state.gen;
   try {
     const d = await postJson(`${API_BASE}/profile`, payload);
+    if (!isCurrent(gen)) throw new Error("STALE");   // saved for the previous game; this page moved on
     const saved = d.data || {};
     state.hasProfile = true;
     state.profile = {
@@ -712,7 +750,7 @@ async function saveProfile() {
     await captureReferral();
     refreshInvite();
   } catch (e) {
-    if (e.message !== "AUTH_EXPIRED" && e.message !== "AUTH_MISSING") showToast(e.message || "Failed to save profile", "error");
+    if (e.message !== "STALE" && !String(e.message).startsWith("AUTH")) showToast(e.message || "Failed to save profile", "error");
     throw e;
   }
 }
@@ -738,13 +776,13 @@ function renderIdleCenter() {
   const g = gameInfo(state.game);
   els.cardWrapper.innerHTML = state.hasProfile
     ? `<div class="empty-state">
-        <img class="empty-cover" src="${esc(g?.cover || "")}" alt="" onerror="this.onerror=null;this.src='${esc(g?.art || "/static/img/games/default.svg")}'">
+        <img class="empty-cover" src="${esc(g?.cover || "")}" alt="" data-fallback="${esc(g?.art || "/static/img/games/default.svg")}">
         <h3>Ready when you are</h3>
         <p>Hit <b>Find Matches</b> to see ${esc(g?.name || "")} players who fit how you play.</p>
         <div style="margin-top:16px;"><button class="btn-primary" type="button" data-action="find">Find Matches</button></div>
       </div>`
     : `<div class="empty-state">
-        <img class="empty-cover" src="${esc(g?.cover || "")}" alt="" onerror="this.onerror=null;this.src='${esc(g?.art || "/static/img/games/default.svg")}'">
+        <img class="empty-cover" src="${esc(g?.cover || "")}" alt="" data-fallback="${esc(g?.art || "/static/img/games/default.svg")}">
         <h3>Set up your ${esc(g?.name || "")} profile</h3>
         <p>Fill in the form — region, game details and languages — then hit <b>Find Matches</b>.</p>
         <div class="mobile-only" style="margin-top:16px;"><button class="btn-primary" type="button" data-action="edit-profile">Set up profile</button></div>
@@ -784,7 +822,7 @@ function renderNoMatches(total) {
 async function findMatches({ keepTab = false } = {}) {
   if (state.loading || inFlight.match || !state.game) return;
   inFlight.match = true;
-  const game = state.game;
+  const game = state.game, gen = state.gen;
   if (!keepTab && window.innerWidth <= 760) setTab("match");   // results (and errors) are shown on the Match tab
   try {
     setLoading(true);
@@ -794,8 +832,9 @@ async function findMatches({ keepTab = false } = {}) {
       looking_only: els.optLookingOnly.checked,
       exclude: [...getSkipped(game)],
     });
-    if (state.game !== game) { setLoading(false); return; }   // switched game while loading
+    if (!isCurrent(gen)) { setLoading(false); return; }   // switched game while loading
     state.hasMore = !!data.has_more;
+    state.deck++;
     state.matches = data.matches || [];
     state.currentMatchIndex = 0;
     setLoading(false);
@@ -900,14 +939,14 @@ function handleSkip() {
   const card = $("active-card");
   if (!card) return;
   inFlight.swipe = true;
-  const game = state.game;
+  const game = state.game, deck = state.deck;
   const index = state.currentMatchIndex;
   card.classList.add("swipe-left");
   document.querySelectorAll(".action-btn").forEach(b => b.disabled = true);
   const skippedUser = state.matches[index]?.username;
   setTimeout(() => {
     inFlight.swipe = false;
-    if (state.game !== game || state.currentMatchIndex !== index) return;
+    if (state.deck !== deck || state.currentMatchIndex !== index) return;
     if (skippedUser) addSkipped(skippedUser, game);
     state.currentMatchIndex++;
     renderCard();
@@ -922,7 +961,7 @@ async function handleLike() {
   const matchUser = state.matches[state.currentMatchIndex];
   if (!matchUser) return;
   inFlight.like = true;
-  const game = state.game;
+  const game = state.game, gen = state.gen, deck = state.deck;
   const index = state.currentMatchIndex;
 
   const card = $("active-card");
@@ -933,7 +972,7 @@ async function handleLike() {
 
   try {
     const data = await postJson(`${API_BASE}/like`, { to_user: matchUser.username, game });
-    if (state.game !== game) return;   // switched game while the like was in flight
+    if (!isCurrent(gen)) return;   // switched game while the like was in flight
     const isMutual = data?.mutual === true || data?.status === "mutual";
     const mp = matchUser.profile || {};
     const mate = {
@@ -946,6 +985,7 @@ async function handleLike() {
       const key = (matchUser.username || "").toLowerCase();
       announced.add(`${game}:${key}`);
       try { await refreshSquad(); } catch { }
+      if (!isCurrent(gen)) return;
       const fromSquad = (state.squad || []).find(m => (m.username || "").toLowerCase() === key);
       if (fromSquad?.in_game_username) mate.in_game_username = fromSquad.in_game_username;
       triggerMatchModal(mate, { kind: "match" });
@@ -959,7 +999,7 @@ async function handleLike() {
     if (!String(e.message).startsWith("AUTH")) showToast(e.message || "Could not send like", "error");
   } finally {
     setTimeout(() => {
-      if (state.game !== game || state.currentMatchIndex !== index) {
+      if (state.deck !== deck || state.currentMatchIndex !== index) {
         // the deck changed meanwhile (other game / new scan): leave it alone
       } else if (liked) {
         state.currentMatchIndex++;
@@ -984,24 +1024,37 @@ function computeSquadSignature(squad) {
 }
 
 /* Squad, pending likes and "Liked you" all come from one /api/poll request.
-   Calls made while a request is running join it; with {fresh:true} (after the user changed something)
-   one more request runs right after it, so the answer can't be from before the change. */
-const social = { promise: null, game: null, again: false, againPing: false };
+   A plain call made while a request is running just joins it. A {fresh:true} call (after the user changed
+   something) can't use an answer that was asked for before the change: it queues ONE follow-up request and
+   resolves only when that one has been applied. */
+const social = { promise: null, gen: -1, follow: null, followPing: false };
 
 function refreshSocial({ ping = false, fresh = false } = {}) {
   if (!state.game || !state.hasProfile) return Promise.resolve();
-  if (social.promise && social.game === state.game) {
-    if (fresh || ping) {
-      social.again = true;
-      social.againPing = social.againPing || ping;
+  if (social.promise && social.gen === state.gen) {
+    if (!fresh && !ping) return social.promise;
+    social.followPing = social.followPing || ping;
+    if (!social.follow) {
+      const running = social.promise;
+      social.follow = running.catch(() => { }).then(() => {
+        const p = social.followPing;
+        social.follow = null;
+        social.followPing = false;
+        return startSocial(p);
+      });
     }
-    return social.promise;
+    return social.follow;
   }
-  const game = state.game;
-  social.game = game;
-  social.promise = (async () => {
+  return startSocial(ping);
+}
+
+function startSocial(ping) {
+  if (!state.game || !state.hasProfile) return Promise.resolve();
+  const game = state.game, gen = state.gen;
+  social.gen = gen;
+  const run = (async () => {
     const res = await authFetch(`${API_BASE}/poll?game=${encodeURIComponent(game)}${ping ? "&ping=1" : ""}`);
-    if (game !== state.game) return;            // user switched game meanwhile
+    if (!isCurrent(gen)) return;            // user switched game meanwhile
     if (res.status === 404) {
       applySquad(game, []);
       renderPendingList([]);
@@ -1010,28 +1063,24 @@ function refreshSocial({ ping = false, fresh = false } = {}) {
     }
     if (!res.ok) throw new Error(`poll failed: ${res.status}`);
     const d = await res.json();
-    if (game !== state.game) return;
+    if (!isCurrent(gen)) return;
     hideNetError();
     applySquad(game, d.squadmates || []);
     renderPendingList(d.pending || []);
     renderIncomingList(d.incoming || []);
   })();
 
-  return social.promise
+  const p = run
     .catch(err => {
       console.error("Refresh failed", err);
       if (!String(err.message).startsWith("AUTH")) showNetError();
       throw err;
     })
     .finally(() => {
-      if (social.game !== game) return;
-      social.promise = null;
-      if (social.again) {
-        const pingAgain = social.againPing;
-        social.again = social.againPing = false;
-        refreshSocial({ ping: pingAgain }).catch(() => { });
-      }
+      if (social.promise === p) social.promise = null;   // done: the next call starts a new request
     });
+  social.promise = p;
+  return p;
 }
 
 // squad changed? redraw it, and show the match modal for squadmates that just appeared
@@ -1136,24 +1185,31 @@ function renderIncomingList(list) {
   }).join("");
 }
 
+// take one player out of the current card list (after Like back, Pass, Unmatch, Block)
+function removeFromDeck(username) {
+  const key = String(username).toLowerCase();
+  const before = state.matches.length;
+  state.matches = state.matches.filter((m, i) => {
+    const drop = (m.username || "").toLowerCase() === key;
+    if (drop && i < state.currentMatchIndex) state.currentMatchIndex--;
+    return !drop;
+  });
+  if (state.matches.length !== before && $("active-card")) renderCard();
+}
+
 async function likeBack(username, btn) {
   if (inFlight.like) return;
   inFlight.like = true;
   if (btn) btn.disabled = true;
-  const game = state.game;
+  const game = state.game, gen = state.gen;
   const key = String(username).toLowerCase();
   try {
     const data = await postJson(`${API_BASE}/like`, { to_user: username, game });
-    if (state.game !== game) return;
-    // they're no longer a card to swipe
-    state.matches = state.matches.filter((m, i) => {
-      const drop = (m.username || "").toLowerCase() === key;
-      if (drop && i < state.currentMatchIndex) state.currentMatchIndex--;
-      return !drop;
-    });
-    if ($("active-card")) renderCard();
+    if (!isCurrent(gen)) return;
+    removeFromDeck(username);   // they're no longer a card to swipe
     announced.add(`${game}:${key}`);
     try { await refreshSquad(); } catch { }
+    if (!isCurrent(gen)) return;
     const mate = (state.squad || []).find(m => (m.username || "").toLowerCase() === key);
     if (data?.mutual && mate) triggerMatchModal(mate, { kind: "match" });
     refreshIncoming();
@@ -1169,11 +1225,12 @@ async function likeBack(username, btn) {
 async function unmatchPlayer(username, kind) {
   const decline = kind === "decline";
   if (!decline && !confirm(`Unmatch ${username}? You'll leave each other's squad in ${gameInfo(state.game)?.name || "this game"} and your contact info is hidden again.`)) return;
-  const game = state.game;
+  const game = state.game, gen = state.gen;
   try {
     await apiJson(`${API_BASE}/like?to_user=${encodeURIComponent(username)}&game=${encodeURIComponent(game)}`, { method: "DELETE" });
-    if (state.game !== game) return;
+    if (!isCurrent(gen)) return;
     addSkipped(username, game);   // don't bring them straight back as a card
+    removeFromDeck(username);
     showToast(decline ? "Passed" : "Unmatched", "success");
     lastSquadSignature = null;
     refreshSquad().catch(() => { });
@@ -1270,9 +1327,9 @@ async function toggleLooking() {
     Notification.requestPermission().catch(() => { });
   }
   try {
-    const game = state.game;
+    const game = state.game, gen = state.gen;
     const d = await postJson(`${API_BASE}/looking`, { minutes: turningOn ? 60 : 0, game });
-    if (state.game !== game) return;
+    if (!isCurrent(gen)) return;
     state.profile.looking_until = d.looking_until;
     renderLookingButton();
     refreshStats();
@@ -1319,14 +1376,7 @@ async function blockPlayer(username, report, reason = null) {
   try {
     await postJson(`${API_BASE}/block`, { to_user: username, game: state.game, report: !!report, reason });
     showToast(report ? "Reported and blocked" : "Blocked", "success");
-    const key = String(username).toLowerCase();
-    const before = state.matches.length;
-    state.matches = state.matches.filter((m, i) => {
-      const drop = (m.username || "").toLowerCase() === key;
-      if (drop && i < state.currentMatchIndex) state.currentMatchIndex--;
-      return !drop;
-    });
-    if (state.matches.length !== before) renderCard();
+    removeFromDeck(username);
     lastSquadSignature = null;
     refreshSquad().catch(() => { });
     refreshPending();
@@ -1512,6 +1562,7 @@ function setupEventListeners() {
 
   // keyboard: ← skip, → like, Esc closes dialogs
   document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $("report-modal").classList.contains("active")) return closeReport();
     if (e.target instanceof Element && e.target.closest("input, select, textarea")) return;
     if (e.key === "Escape") {
       if ($("report-modal").classList.contains("active")) return closeReport();
@@ -1526,6 +1577,9 @@ function setupEventListeners() {
 
   document.querySelectorAll(".tabbar button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
   $("report-form").addEventListener("submit", sendReport);
+  $("modal-close-btn").addEventListener("click", closeModal);
+  $("btn-keep-matching").addEventListener("click", closeModal);
+  $("btn-view-squad").addEventListener("click", goToSquad);
   $("report-cancel").addEventListener("click", closeReport);
   $("report-modal").addEventListener("click", (e) => { if (e.target === $("report-modal")) closeReport(); });
 
@@ -1537,6 +1591,15 @@ function setupEventListeners() {
   });
   window.addEventListener("beforeunload", stopRealtime);
 }
+
+// broken cover image -> our own SVG art (data-fallback); no inline onerror, so the CSP needs no 'unsafe-inline'
+document.addEventListener("error", (e) => {
+  const img = e.target;
+  if (img instanceof HTMLImageElement && img.dataset.fallback && !img.src.endsWith(img.dataset.fallback)) {
+    img.src = img.dataset.fallback;
+    delete img.dataset.fallback;
+  }
+}, true);
 
 /* =========================================================
    INIT
@@ -1551,6 +1614,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   localStorage.removeItem("pm_last_squad_sig"); // old versions
   ensureCacheOwner();
+  pageUid = tokenUserId();
   setupEventListeners();
 
   const cachedName = (localStorage.getItem("pm_username") || "").trim();

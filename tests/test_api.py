@@ -289,20 +289,3 @@ def test_delete_account_frees_the_name(api, users, make_profile, db):
     api.call("DELETE", "/api/account", user=users["alice"], json={"confirm": "DELETE"})
     assert db.tables["accounts"] == []
     make_profile(users["bob"], "Alice")
-
-
-def test_works_before_the_migration(api, users, make_profile, db, monkeypatch):
-    """Without the accounts table the app falls back to profile usernames."""
-    real_table = db.table
-
-    def no_accounts(name):
-        if name == "accounts":
-            raise Exception('relation "public.accounts" does not exist')
-        return real_table(name)
-    monkeypatch.setattr(db, "table", no_accounts)
-    make_profile(users["alice"], "Alice")
-    _, d = api.get("/api/my-games", user=users["alice"])
-    assert d["username"] == "alice"
-    assert api.post("/api/profile", user=users["bob"], json={
-        "username": "alice", "game": "cs2", "region": "middle-east", "country": "Iran", "mic": "voice",
-        "languages": "fa", "fields": {"mode": "Premier", "rank": "Silver"}})[0] == 409

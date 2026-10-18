@@ -44,6 +44,7 @@ class Query:
         self.op, self.payload, self.on_conflict = "select", None, None
         self.cols, self.want_count, self.head = "*", False, False
         self.filters, self.order_by, self.max_rows = [], None, None
+        self.ignore_duplicates = False
 
     # ---- verbs
     def select(self, cols="*", count=None, head=False):
@@ -54,8 +55,9 @@ class Query:
         self.op, self.payload = "insert", payload
         return self
 
-    def upsert(self, payload, on_conflict=None):
+    def upsert(self, payload, on_conflict=None, ignore_duplicates=False):
         self.op, self.payload, self.on_conflict = "upsert", payload, on_conflict
+        self.ignore_duplicates = ignore_duplicates
         return self
 
     def update(self, payload):
@@ -94,7 +96,7 @@ class Query:
         return self
 
     def order(self, col, desc=False, nullsfirst=False):
-        self.order_by = (col, desc)
+        self.order_by = (col, desc, nullsfirst)
         return self
 
     def limit(self, n):
@@ -134,11 +136,13 @@ class Query:
         if self.op == "select":
             found = self._matches()
             if self.order_by:
-                col, desc = self.order_by
-                found.sort(key=lambda r: (r.get(col) is None, r.get(col) or ""), reverse=desc)
+                col, desc, nullsfirst = self.order_by
+                present = sorted([r for r in found if r.get(col) is not None], key=lambda r: r.get(col), reverse=desc)
+                nulls = [r for r in found if r.get(col) is None]
+                found = nulls + present if nullsfirst else present + nulls
             count = len(found) if self.want_count else None
-            if self.max_rows is not None:
-                found = found[: self.max_rows]
+            # like PostgREST's default max-rows: a plain select never returns more than 1000 rows
+            found = found[: min(self.max_rows if self.max_rows is not None else 1000, 1000)]
             return Result([] if self.head else [self._project(r) for r in found], count)
         if self.op == "insert":
             items = self.payload if isinstance(self.payload, list) else [self.payload]
@@ -153,6 +157,8 @@ class Query:
             keys = [c.strip() for c in (self.on_conflict or "id").split(",")]
             p = self.payload
             existing = next((r for r in rows if all(_same(r.get(k), p.get(k)) for k in keys)), None)
+            if existing and getattr(self, "ignore_duplicates", False):
+                return Result([])   # ON CONFLICT DO NOTHING
             if existing:
                 merged = {**existing, **copy.deepcopy(p)}
                 self._check_unique(merged, ignore=existing)

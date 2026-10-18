@@ -149,7 +149,7 @@ function renderTab() {
       const langs = String(g.languages || "").split(",").filter(Boolean).map(c => LANG_LABELS[c] || c).join(", ");
       return `
           <article class="pp-game" style="--accent:${esc(g.accent)}">
-            <img class="pp-game-cover" src="${esc(g.cover)}" alt="" onerror="this.onerror=null;this.src='${esc(g.art || "/static/img/games/default.svg")}'">
+            <img class="pp-game-cover" src="${esc(g.cover)}" alt="" data-fallback="${esc(g.art || "/static/img/games/default.svg")}">
             <div class="pp-game-body">
               <h3>${esc(g.name)} ${g.looking_now ? '<span class="looking-badge">● Looking now</span>' : ""}</h3>
               <div class="pp-game-pills">
@@ -272,6 +272,15 @@ async function removeGame(gameId, name) {
     toast(e.message, "error");
   }
 }
+
+// broken cover image -> our own SVG art (data-fallback); no inline onerror, so the CSP needs no 'unsafe-inline'
+document.addEventListener("error", (e) => {
+  const img = e.target;
+  if (img instanceof HTMLImageElement && img.dataset.fallback && !img.src.endsWith(img.dataset.fallback)) {
+    img.src = img.dataset.fallback;
+    delete img.dataset.fallback;
+  }
+}, true);
 
 /* ---------------- events ---------------- */
 document.addEventListener("click", async (e) => {
