@@ -143,27 +143,53 @@ def test_rejected_session_at_start_keeps_the_requested_game(open_page, users, ma
     page.wait_for_url("**/?game=cs2", timeout=8000)
 
 
-def test_an_old_find_never_unlocks_a_half_loaded_game(open_page, users, make_profile):
-    """R4-M02: Find in CS2, switch to GTA while the save is held, the old save fails: GTA's Find stays locked
-    until GTA has loaded, no CS2 form is ever saved as GTA, and no old error is shown."""
+def test_a_save_in_flight_locks_the_form_and_a_failure_keeps_the_edits(open_page, users, make_profile):
+    """R4-M02 (now prevented by design) + pre-launch #4: no game switch while saving; a failed save keeps the edits,
+    says so, and leaving with unsaved changes asks first."""
     make_profile(users["alice"], "Alice")
     make_profile(users["alice"], "Alice", "gta")
     make_profile(users["bob"], "Bob")
     page = open_page("/app?game=cs2", as_user=users["alice"])
     wait_for(page, READY)
-    page.evaluate("() => { __hold('/api/profile'); __hold('/api/meta/gta'); document.getElementById('btn-find-matches').click(); }")
-    page.evaluate("() => { selectGame('gta'); }")
+    assert page.inner_text("#save-state") == "Saved ✓" and page.text_content("#btn-find-label") == "Find Teammates"
+    page.select_option("#gf-rank", "Silver")
+    assert page.inner_text("#save-state") == "Unsaved changes" and page.text_content("#btn-find-label") == "Save changes"
+    page.evaluate("() => { __hold('/api/profile'); document.getElementById('btn-find-matches').click(); }")
+    wait_for(page, "() => state.saving && document.getElementById('form-step-1').disabled")
+    page.evaluate("selectGame('gta')")   # refused while saving
+    assert page.evaluate("state.game") == "cs2"
     page.evaluate("__release('/api/profile', 'fail')")
-    page.wait_for_timeout(300)
-    assert page.evaluate("state.game") == "gta" and page.evaluate("document.getElementById('btn-find-matches').disabled")
-    page.evaluate("() => document.getElementById('profile-form')?.requestSubmit?.()")   # Enter in the old form
-    page.wait_for_timeout(300)
-    posts = page.evaluate("__sends.filter(s => s[0] === 'POST' && s[1].includes('/api/profile')).length")
-    assert posts == 1                                                   # only the original CS2 save
-    page.evaluate("__release('/api/meta/gta')")
-    wait_for(page, "() => state.gameReady && !document.getElementById('btn-find-matches').disabled")
-    assert page.evaluate("[...document.querySelectorAll('.toast.error')].length") == 0
+    wait_for(page, "() => !state.saving && !document.getElementById('form-step-1').disabled")
+    assert page.input_value("#gf-rank") == "Silver"                       # the edit is kept
+    assert "Couldn't save" in page.inner_text("#save-state")
+    assert page.evaluate("__sends.filter(s => s[0] === 'POST' && s[1].includes('/api/profile')).length") == 1
+    dialogs = []
+    page.once("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+    page.evaluate("selectGame('gta')")                                    # unsaved changes: asks, Cancel stays
+    assert dialogs and "Discard unsaved changes" in dialogs[0] and page.evaluate("state.game") == "cs2"
+    page.once("dialog", lambda d: d.accept())
+    page.evaluate("selectGame('gta')")                                    # OK: switches
+    wait_for(page, "() => state.game === 'gta' && state.gameReady")
+    assert page.inner_text("#save-state") == "Saved ✓"
 
+
+def test_clean_profile_only_scans_and_revert_is_clean(open_page, users, make_profile):
+    make_profile(users["alice"], "Alice")
+    make_profile(users["bob"], "Bob")
+    page = open_page("/app?game=cs2", as_user=users["alice"])
+    wait_for(page, READY)
+    before = page.evaluate("__sends.filter(s => s[0] === 'POST' && s[1].includes('/api/profile')).length")
+    page.click("#btn-find-matches")
+    wait_for(page, "() => !state.loading && !inFlight.find")
+    assert page.evaluate("__sends.filter(s => s[0] === 'POST' && s[1].includes('/api/profile')).length") == before
+    page.select_option("#gf-rank", "Silver")
+    page.select_option("#gf-rank", "Gold Nova")                           # edit then revert = clean
+    assert page.inner_text("#save-state") == "Saved ✓"
+    page.click('.lang-pill[data-code="tr"]')
+    assert page.inner_text("#save-state") == "Unsaved changes"
+    page.evaluate("document.getElementById('opt-same-language').click()")   # a filter is not a saved preference
+    page.click('.lang-pill[data-code="tr"]')
+    assert page.inner_text("#save-state") == "Saved ✓"
 
 def test_an_old_like_failing_shows_no_error_in_the_new_game(open_page, users, make_profile):
     make_profile(users["alice"], "Alice")
@@ -533,3 +559,86 @@ def test_steam_prefill_finds_it_in_any_saved_game_and_counts_as_contact(open_pag
     page.wait_for_timeout(800)
     toasts = page.evaluate("[...document.querySelectorAll('.toast')].map(t => t.textContent).join(' | ')")
     assert "so squadmates can reach you" not in toasts
+
+
+PROFILE_POSTS = "__sends.filter(s => s[0] === 'POST' && s[1].includes('/api/profile')).length"
+
+
+def fill_step1_cs2(page):
+    page.select_option("#region", "middle-east")
+    page.select_option("#country", "Iran")
+    page.select_option("#gf-mode", "Premier")
+    page.select_option("#gf-rank", "Silver")
+    page.click('.lang-pill[data-code="fa"]')
+
+
+def test_first_profile_is_a_two_step_setup(open_page, users, make_profile, api, db):
+    """Pre-launch #1: a brand-new player gets 'How you play' → 'Connect with squadmates'; Next/Back never save;
+    a taken username sends them back to step 2 with everything kept; the final save creates one profile."""
+    make_profile(users["bob"], "Bob")                       # takes the name "bob"
+    page = open_page("/app?game=cs2", as_user=users["alice"])
+    wait_for(page, "() => typeof state !== 'undefined' && state.gameReady && state.wizard")
+    assert page.is_visible("#form-step-1") and not page.is_visible("#form-step-2")
+    assert page.inner_text("#wizard-step") == "Step 1 of 2" and not page.is_visible("#btn-find-matches")
+    page.click("#btn-wizard-next")                          # nothing filled: stays on step 1
+    assert page.evaluate("state.step") == 1 and page.is_visible("#form-step-1")
+    fill_step1_cs2(page)
+    page.click("#btn-wizard-next")
+    wait_for(page, "() => state.step === 2")
+    assert page.is_visible("#form-step-2") and not page.is_visible("#form-step-1")
+    assert page.is_visible("#username-input") and page.is_visible("#steam-row")   # CS2 on PC offers Steam
+    page.click("#btn-wizard-back")
+    assert page.input_value("#gf-rank") == "Silver"         # values survive Back
+    page.click("#btn-wizard-next")
+    assert page.evaluate(PROFILE_POSTS) == 0                # Next / Back never save
+    page.fill("#username-input", "Bob")
+    page.fill("#in_game_username", "AliceCS")
+    page.click("#btn-find-matches")
+    wait_for(page, "() => !state.saving && state.saveError")
+    assert page.evaluate("state.step") == 2 and page.evaluate("document.activeElement.id") == "username-input"
+    assert page.input_value("#in_game_username") == "AliceCS" and page.evaluate("state.wizard")
+    page.fill("#username-input", "Alice")
+    page.click("#btn-find-matches")
+    wait_for(page, "() => !state.wizard && state.hasProfile")
+    assert page.inner_text("#save-state") == "Saved ✓" and page.is_visible("#form-step-1") and page.is_visible("#form-step-2")
+    assert page.evaluate(PROFILE_POSTS) == 2
+    rows = [r for r in db.tables["profiles"] if r["user_id"] == users["alice"]]
+    assert len(rows) == 1 and rows[0]["in_game_username"] == "AliceCS" and rows[0]["game_meta"]["fields"]["rank"] == "Silver"
+
+
+def test_adding_a_game_uses_the_setup_and_optional_fields_sit_in_more_details(open_page, users, make_profile):
+    make_profile(users["alice"], "Alice")
+    page = open_page("/app?game=cs2", as_user=users["alice"])
+    wait_for(page, "() => typeof state !== 'undefined' && state.gameReady")
+    assert not page.evaluate("state.wizard")                # saved game: one form
+    page.evaluate("selectGame('battlefield')")
+    wait_for(page, "() => state.game === 'battlefield' && state.gameReady && state.wizard")
+    assert page.is_visible("#platform-row")                 # BF: several platforms — asked
+    assert page.locator("#form-step-1 #gf-class_type").count() == 0   # optional class is not in step 1...
+    assert page.locator("#more-details #gf-class_type").count() == 1  # ...but under "More game details"
+    page.select_option("#platform", "PC")
+    page.select_option("#gf-favorite_mode", index=1)
+    page.click("#btn-wizard-next")
+    wait_for(page, "() => state.step === 2")
+    assert not page.is_visible("#username-input")           # name already claimed
+    page.click("#more-details summary")
+    page.select_option("#gf-class_type", index=1)
+    page.click("#btn-find-matches")
+    wait_for(page, "() => !state.wizard && state.hasProfile")
+    assert page.evaluate("state.profile.fields.class_type")
+    page.evaluate("selectGame('lol')")
+    wait_for(page, "() => state.game === 'lol' && state.gameReady && state.wizard")
+    assert not page.is_visible("#platform-row")             # LoL: PC only — not asked
+
+def test_new_game_on_a_phone_opens_the_setup(browser, base_url, db, users, make_profile):
+    ctx = mobile_context(browser)
+    page = ctx.new_page()
+    login(page, base_url, users["alice"])
+    page.goto(base_url + "/app?game=cs2")
+    poll(page, "typeof state !== 'undefined' && state.gameReady === true && state.wizard === true")
+    poll(page, "document.body.dataset.view === 'profile'")
+    assert page.locator("#btn-wizard-next").is_visible()
+    box = page.locator("#btn-wizard-next").bounding_box()
+    assert box["height"] >= 44
+    no_sideways_scroll(page, "setup step 1")
+    close_clean(ctx)

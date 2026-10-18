@@ -8,7 +8,7 @@
   <title>PlayMate | Find your squad</title>
   <link rel="icon" href="/static/img/logo.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
-  <link rel="stylesheet" href="/static/css/ui.css?v=20">
+  <link rel="stylesheet" href="/static/css/ui.css?v=21">
 </head>
 
 <body data-view="match">
@@ -114,102 +114,130 @@
         <button type="button" id="btn-looking" class="looking-btn" style="display:none;">🟢 I'm looking for a squad
           now</button>
 
-        <form id="profile-form" autocomplete="off">
+        <form id="profile-form" autocomplete="off" novalidate>
           <input type="hidden" id="username">
 
-          <div class="field-row" id="username-row" style="display:none;">
-            <label class="field-label" for="username-input"><svg class="icon">
-                <use href="#i-user" />
-              </svg>Username</label>
-            <input type="text" id="username-input" maxlength="24" placeholder="Pick a PlayMate name">
+          <!-- a game's first profile is a 2-step setup; a saved profile shows both steps as one form -->
+          <div class="wizard-head" id="wizard-head" hidden>
+            <h2 class="wizard-title" id="wizard-title" tabindex="-1">How you play</h2>
+            <span class="wizard-step" id="wizard-step">Step 1 of 2</span>
+            <div class="wizard-bar" aria-hidden="true"><i id="wizard-bar-fill"></i></div>
           </div>
 
-          <div class="field-row">
-            <label class="field-label" for="region"><svg class="icon">
-                <use href="#i-globe" />
-              </svg>Region</label>
-            <select id="region" required>
-              <option value="">Select region…</option>
-            </select>
-          </div>
+          <fieldset class="form-step" id="form-step-1">
+            <legend class="sr-only">How you play</legend>
+            <div class="field-row">
+              <label class="field-label" for="region"><svg class="icon">
+                  <use href="#i-globe" />
+                </svg>Region</label>
+              <select id="region" required>
+                <option value="">Select region…</option>
+              </select>
+            </div>
 
-          <div class="field-row">
-            <label class="field-label" for="country"><svg class="icon">
-                <use href="#i-flag" />
-              </svg>Country</label>
-            <select id="country" required>
-              <option value="">Select country…</option>
-            </select>
-          </div>
+            <div class="field-row">
+              <label class="field-label" for="country"><svg class="icon">
+                  <use href="#i-flag" />
+                </svg>Country</label>
+              <select id="country" required>
+                <option value="">Select country…</option>
+              </select>
+            </div>
 
-          <div class="field-row">
-            <label class="field-label" for="city"><svg class="icon">
-                <use href="#i-pin" />
-              </svg>City</label>
-            <select id="city">
-              <option value="">Optional — skip or select…</option>
-            </select>
-          </div>
+            <div class="field-row" id="platform-row">
+              <label class="field-label" for="platform"><svg class="icon">
+                  <use href="#i-monitor" />
+                </svg>Platform</label>
+              <select id="platform"></select>
+            </div>
 
-          <div class="field-row">
-            <label class="field-label" for="platform"><svg class="icon">
-                <use href="#i-monitor" />
-              </svg>Platform</label>
-            <select id="platform"></select>
-          </div>
+            <!-- the game's required fields -->
+            <div id="game-fields"></div>
 
-          <!-- game-specific fields are rendered here -->
-          <div id="game-fields"></div>
+            <div class="field-row">
+              <label class="field-label" for="mic"><svg class="icon">
+                  <use href="#i-mic" />
+                </svg>Mic</label>
+              <select id="mic">
+                <option value="voice">Voice</option>
+                <option value="both">Voice + Text</option>
+                <option value="none">No mic</option>
+              </select>
+            </div>
 
-          <div class="field-row">
-            <label class="field-label" for="mic"><svg class="icon">
-                <use href="#i-mic" />
-              </svg>Mic</label>
-            <select id="mic">
-              <option value="voice">Voice</option>
-              <option value="both">Voice + Text</option>
-              <option value="none">No mic</option>
-            </select>
-          </div>
+            <div class="field-row stacked">
+              <span class="field-label"><svg class="icon">
+                  <use href="#i-chat" />
+                </svg>Languages</span>
+              <div class="lang-grid" id="lang-container"></div>
+            </div>
+          </fieldset>
 
-          <div class="field-row stacked">
-            <span class="field-label"><svg class="icon">
-                <use href="#i-chat" />
-              </svg>Languages</span>
-            <div class="lang-grid" id="lang-container"></div>
-          </div>
+          <fieldset class="form-step" id="form-step-2">
+            <legend class="sr-only">Connect with squadmates</legend>
+            <div class="field-row" id="username-row" style="display:none;">
+              <label class="field-label" for="username-input"><svg class="icon">
+                  <use href="#i-user" />
+                </svg>Username</label>
+              <input type="text" id="username-input" maxlength="24" placeholder="Pick a PlayMate name"
+                aria-describedby="username-hint">
+            </div>
+            <p class="field-note" id="username-hint" hidden>Your public PlayMate name (3–24 letters, numbers, _ . -). We
+              check it's free when you save.</p>
 
-          <div class="field-row stacked">
-            <label class="field-label" for="in_game_username"><svg class="icon">
-                <use href="#i-gamepad" />
-              </svg><span id="ign-label">In-game name</span> <span class="field-hint">(recommended)</span></label>
-            <input type="text" id="in_game_username" placeholder="Your in-game name" maxlength="40">
-          </div>
+            <div class="field-row stacked">
+              <label class="field-label" for="in_game_username"><svg class="icon">
+                  <use href="#i-gamepad" />
+                </svg><span id="ign-label">In-game name</span> <span class="field-hint">(recommended)</span></label>
+              <input type="text" id="in_game_username" placeholder="Your in-game name" maxlength="40">
+            </div>
 
-          <div class="field-row stacked">
-            <label class="field-label" for="discord_username"><svg class="icon">
-                <use href="#i-discord" />
-              </svg>Discord <span class="field-hint">(optional)</span></label>
-            <input type="text" id="discord_username" placeholder="yourname" maxlength="40">
-          </div>
+            <div class="field-row stacked">
+              <label class="field-label" for="discord_username"><svg class="icon">
+                  <use href="#i-discord" />
+                </svg>Discord <span class="field-hint">(optional)</span></label>
+              <input type="text" id="discord_username" placeholder="yourname" maxlength="40">
+            </div>
 
-          <div class="field-row stacked" id="steam-row" hidden>
-            <label class="field-label" for="steam_profile"><svg class="icon">
-                <use href="#i-link" />
-              </svg>Steam profile <span class="field-hint">(optional — squadmates can open your Steam profile)</span></label>
-            <input type="text" id="steam_profile" placeholder="steamcommunity.com/id/yourname or friend code" maxlength="120">
-          </div>
+            <div class="field-row stacked" id="steam-row" hidden>
+              <label class="field-label" for="steam_profile"><svg class="icon">
+                  <use href="#i-link" />
+                </svg>Steam profile <span class="field-hint">(optional — squadmates can open your Steam profile)</span></label>
+              <input type="text" id="steam_profile" placeholder="steamcommunity.com/id/yourname or friend code" maxlength="120">
+            </div>
+            <p class="field-note">Only squadmates see these — after you both like each other. You can save without them.</p>
 
-          <div class="match-options">
+            <details class="more-details" id="more-details">
+              <summary>More game details <span class="field-hint">(optional, public)</span></summary>
+              <div class="field-row">
+                <label class="field-label" for="city"><svg class="icon">
+                    <use href="#i-pin" />
+                  </svg>City</label>
+                <select id="city">
+                  <option value="">Optional — skip or select…</option>
+                </select>
+              </div>
+              <!-- the game's optional fields (e.g. BF class, LoL role) -->
+              <div id="game-fields-optional"></div>
+            </details>
+          </fieldset>
+
+          <div class="match-options" id="match-options">
             <label class="switch"><input type="checkbox" id="opt-same-language"><span class="switch-ui"></span>Same
               language only</label>
             <label class="switch"><input type="checkbox" id="opt-looking-only"><span class="switch-ui"></span>Only
               players looking now</label>
           </div>
 
-          <button type="button" id="btn-find-matches" class="btn-primary">Save &amp; Find Teammates <svg class="icon">
-              <use href="#i-search" />
-            </svg></button>
+          <div class="save-state" id="save-state" role="status" aria-live="polite"></div>
+          <div class="form-actions">
+            <button type="button" id="btn-wizard-back" class="btn-secondary" hidden>← Back</button>
+            <button type="button" id="btn-wizard-next" class="btn-primary" hidden>Next →</button>
+            <button type="button" id="btn-find-matches" class="btn-primary"><span id="btn-find-label">Save &amp; Find
+                Teammates</span> <svg class="icon">
+                <use href="#i-search" />
+              </svg></button>
+          </div>
           <p class="cta-note">In-game names, Discord and Steam are only shared after a mutual like.</p>
         </form>
       </div>
@@ -387,7 +415,7 @@
 
   <!-- Supabase JS: keeps the login session fresh (access tokens expire after 1 hour) -->
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
-  <script src="/static/js/ui.js?v=32"></script>
+  <script src="/static/js/ui.js?v=33"></script>
 </body>
 
 </html>

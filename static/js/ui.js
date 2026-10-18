@@ -31,7 +31,9 @@ supabaseClient?.auth.onAuthStateChange((event, session) => {
 
 // the account this page was loaded for (set at init); never mix its form/state with another account's token
 let pageUid = "";
+let leaving = false;   // set when the app itself navigates away (account change, logout): no unsaved-changes prompt
 function accountChanged() {
+  leaving = true;
   stopRealtime();
   state.gen++;   // drop every answer that is still on its way
   location.reload();
@@ -108,6 +110,7 @@ let loggingOut = false;
 async function clearAuthAndRedirect() {
   if (loggingOut) return;
   loggingOut = true;
+  leaving = true;
   stopRealtime();
   // revoke the refresh token on the server too (don't hang the logout if the network is slow)
   try {
@@ -180,6 +183,11 @@ const state = {
   gen: 0,    // bumped on every game selection (and account change): answers for an older one are dropped
   deck: 0,   // bumped on every new match list: swipe timers for an older list do nothing
   gameReady: false,   // the selected game's form + profile are loaded (no saving a half-loaded/old form)
+  wizard: false,      // this game has no saved profile yet: 2-step setup (step 1 how you play, step 2 contact)
+  step: 1,
+  baseline: null,     // the saved profile as formSnapshot() — null = not saved yet
+  saving: false,
+  saveError: "",
 };
 const isCurrent = (gen) => gen === state.gen;
 
@@ -236,6 +244,13 @@ const els = {
   btnFind: $("btn-find-matches"),
   optSameLang: $("opt-same-language"),
   optLookingOnly: $("opt-looking-only"),
+  gameFieldsOptional: $("game-fields-optional"),
+  step1: $("form-step-1"),
+  step2: $("form-step-2"),
+  wizardHead: $("wizard-head"),
+  btnNext: $("btn-wizard-next"),
+  btnBack: $("btn-wizard-back"),
+  saveState: $("save-state"),
 };
 
 /* ---------------- helpers ---------------- */
@@ -474,6 +489,8 @@ async function selectGame(gameId) {
     els.gameModal._returnFocus = null;
   }
   if (sameGame && state.gameReady) return;   // not ready yet (still loading, or loading failed): load it again
+  if (state.saving) return showToast("Saving your profile — one moment", "info");
+  if (!sameGame && isDirty() && !confirm(`Discard unsaved changes to your ${gameInfo(state.game)?.name || ""} profile?`)) return;
 
   stopRealtime();
   const gen = ++state.gen;
@@ -481,6 +498,9 @@ async function selectGame(gameId) {
   state.game = gameId;
   state.hasProfile = false;
   state.gameReady = false;
+  state.wizard = false;
+  state.baseline = null;
+  state.saveError = "";
   state.profile = {};
   els.btnFind.disabled = true;   // no saving a half-loaded form; re-enabled once this game is ready
   localStorage.setItem("pm_game", gameId);
@@ -524,6 +544,8 @@ async function selectGame(gameId) {
   if (state.loadFailed) return;   // keep the "Couldn't load — Try again" message on screen
   state.gameReady = true;
   els.btnFind.disabled = false;
+  renderWizard();
+  if (state.wizard && window.innerWidth <= 760) setTab("profile");   // new game on a phone: start the setup
   renderGameChrome();
   refreshStats();
   renderIdleCenter();
@@ -550,18 +572,21 @@ function buildForm() {
   fillSelect(els.city, [], "Optional — skip or select…");
   els.city.disabled = true;
   fillSelect(els.platform, m.platforms, m.platforms.length > 1 ? "Select platform…" : null);
+  $("platform-row").hidden = m.platforms.length <= 1;   // one choice: nothing to ask (the value is still sent)
   updateSteamRow();
   $("ign-label").textContent = m.ign_label || "In-game name";
   els.ign.placeholder = `Your ${m.ign_label || "in-game name"}`;
 
-  els.gameFields.innerHTML = m.fields.map(f => `
+  const fieldRow = f => `
     <div class="field-row">
       <label class="field-label" for="gf-${esc(f.id)}">${svgIcon(FIELD_ICONS[f.id] || "class")}${esc(f.label)}</label>
       <select id="gf-${esc(f.id)}" data-field="${esc(f.id)}" ${f.required ? "required" : ""}>
         <option value="">${f.required ? "Select…" : "Optional — skip or select…"}</option>
         ${f.options.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join("")}
       </select>
-    </div>`).join("");
+    </div>`;
+  els.gameFields.innerHTML = m.fields.filter(f => f.required).map(fieldRow).join("");
+  els.gameFieldsOptional.innerHTML = m.fields.filter(f => !f.required).map(fieldRow).join("");
 
   if (m.crossplay_note) {
     els.gameFields.insertAdjacentHTML("beforeend", `<p class="crossplay-note">${svgIcon("globe")}${esc(m.crossplay_note)}</p>`);
@@ -578,6 +603,7 @@ function buildForm() {
     pill.addEventListener("click", () => {
       const on = pill.classList.toggle("active");
       pill.setAttribute("aria-pressed", String(on));
+      renderSaveState();
     });
     els.langContainer.appendChild(pill);
   });
@@ -622,7 +648,7 @@ function applyProfileToForm(p) {
   els.steam.value = p.steam_profile ? `https://steamcommunity.com/${p.steam_profile}` : "";
   updateSteamRow();
   const fields = p.fields || {};
-  els.gameFields.querySelectorAll("select[data-field]").forEach(s => { s.value = fields[s.dataset.field] || ""; });
+  els.form.querySelectorAll("select[data-field]").forEach(s => { s.value = fields[s.dataset.field] || ""; });
 }
 
 async function loadProfileForGame(gen = state.gen) {
@@ -638,6 +664,8 @@ async function loadProfileForGame(gen = state.gen) {
     setIdentity(p.display_username || p.username);
     applyProfileToForm(p);
     els.status.textContent = "";
+    state.wizard = false;
+    state.baseline = formSnapshot();   // what is saved = what the form shows now
   } catch (e) {
     if (!isCurrent(gen)) return;
     if (e.status !== 404) {
@@ -673,6 +701,9 @@ async function loadProfileForGame(gen = state.gen) {
       if (!isCurrent(gen)) return;
     }
     applyProfileToForm({ ...shared, in_game_username: "", fields: {} });
+    state.wizard = true;   // no profile for this game yet: the short 2-step setup
+    state.step = 1;
+    state.baseline = null;
     els.status.textContent = `New ${gameInfo(state.game)?.name || ""} profile — fill in the game details and hit Save & Find Teammates.`;
   }
   if (!state.username) {
@@ -683,6 +714,74 @@ async function loadProfileForGame(gen = state.gen) {
     paintAvatar($("me-avatar"), pending || "?");
   }
   renderLookingButton();
+}
+
+/* ---- saved / unsaved state and the 2-step first setup ---- */
+// the saved preferences in one canonical string: filters, Looking now and UI state are not part of it
+function formSnapshot() {
+  const p = collectProfile();
+  const fields = Object.keys(p.fields).sort().reduce((o, k) => (o[k] = p.fields[k], o), {});
+  return JSON.stringify([p.region || "", p.country || "", p.city || "", p.platform || "", p.mic || "",
+    String(p.languages || "").split(",").filter(Boolean).sort().join(","), p.in_game_username || "",
+    p.discord_username || "", p.steam_profile || "", fields]);
+}
+function isDirty() {
+  if (!state.gameReady || state.loadFailed) return false;
+  return state.baseline === null ? state.wizard && state.step === 2 : formSnapshot() !== state.baseline;
+}
+function setSaved() {
+  state.baseline = formSnapshot();
+  state.saveError = "";
+  renderSaveState();
+}
+function renderSaveState() {
+  if (!state.gameReady) { els.saveState.textContent = ""; return; }
+  const dirty = isDirty();
+  let text = "", cls = "";
+  if (state.saving) text = "Saving…";
+  else if (state.saveError) { text = state.saveError; cls = "error"; }
+  else if (state.wizard) text = state.step === 2 ? "Not saved yet" : "";
+  else if (dirty) { text = "Unsaved changes"; cls = "dirty"; }
+  else if (state.hasProfile) { text = "Saved ✓"; cls = "saved"; }
+  els.saveState.textContent = text;
+  els.saveState.className = `save-state ${cls}`;
+  $("btn-find-label").textContent = state.wizard ? "Save & Find Teammates" : dirty ? "Save changes" : "Find Teammates";
+  els.btnFind.classList.toggle("is-dirty", !state.wizard && dirty);
+}
+function renderWizard() {
+  const w = state.wizard;
+  els.wizardHead.hidden = !w;
+  els.step1.hidden = w && state.step !== 1;
+  els.step2.hidden = w && state.step !== 2;
+  $("match-options").hidden = w && state.step === 1;
+  els.btnNext.hidden = !(w && state.step === 1);
+  els.btnBack.hidden = !(w && state.step === 2);
+  els.btnFind.hidden = w && state.step === 1;
+  $("username-hint").hidden = !(w && els.usernameRow.style.display !== "none");
+  if (w) {
+    $("wizard-title").textContent = state.step === 1 ? "How you play" : "Connect with squadmates";
+    $("wizard-step").textContent = `Step ${state.step} of 2`;
+    $("wizard-bar-fill").style.width = state.step === 1 ? "50%" : "100%";
+    els.status.textContent = "";
+  }
+  renderSaveState();
+}
+function goToStep(step) {
+  state.step = step;
+  renderWizard();
+  if (window.innerWidth <= 760) setTab("profile");
+  $("wizard-title").focus({ preventScroll: true });
+  els.wizardHead.scrollIntoView({ block: "start" });
+}
+function stepOf(el) { return el && els.step1.contains(el) ? 1 : 2; }
+function wizardNext() {
+  const missing = validateProfile(collectProfile()).filter(m => stepOf(m.el) === 1);
+  if (missing.length) {
+    markMissing(missing);
+    showToast(`Please fill in: ${missing.map(m => m.label).join(", ")}`, "error");
+    return;
+  }
+  goToStep(2);
 }
 
 // the Steam profile link is offered for Steam games played on PC (same rule as the server: games.offers_steam)
@@ -704,7 +803,7 @@ function steamUrl(path) {
 
 function collectProfile() {
   const fields = {};
-  els.gameFields.querySelectorAll("select[data-field]").forEach(s => { if (s.value) fields[s.dataset.field] = s.value; });
+  els.form.querySelectorAll("select[data-field]").forEach(s => { if (s.value) fields[s.dataset.field] = s.value; });
   return {
     username: state.displayName || els.usernameInput.value.trim(),
     game: state.game,
@@ -761,11 +860,16 @@ async function saveProfile() {
   const payload = collectProfile();
   const missing = validateProfile(payload);
   if (missing.length) {
+    if (state.wizard) goToStep(stepOf(missing[0].el));
     markMissing(missing);
     showToast(`Please fill in: ${missing.map(m => m.label).join(", ")}`, "error");
     throw new Error("Validation");
   }
   const gen = state.gen;
+  state.saving = true;
+  state.saveError = "";
+  els.step1.disabled = els.step2.disabled = els.btnNext.disabled = els.btnBack.disabled = true;
+  renderSaveState();
   try {
     const d = await postJson(`${API_BASE}/profile`, payload);
     if (!isCurrent(gen)) throw new Error("STALE");   // saved for the previous game; this page moved on
@@ -786,6 +890,10 @@ async function saveProfile() {
       steam_profile: els.steamRow.hidden ? (previousShared().steam_profile || null) : (saved.steam_profile || null),
     }));
     if (saved.steam_profile !== undefined) els.steam.value = saved.steam_profile ? steamUrl(saved.steam_profile) : "";
+    state.saving = false;
+    state.wizard = false;
+    renderWizard();
+    setSaved();   // the baseline is what the server stored (e.g. the canonical Steam link)
     els.status.textContent = "";
     if (!payload.in_game_username && !payload.discord_username && !saved.steam_profile) {
       const steamToo = els.steamRow.hidden ? "" : ", Discord or Steam profile";
@@ -797,8 +905,22 @@ async function saveProfile() {
     await captureReferral();
     refreshInvite();
   } catch (e) {
-    if (isCurrent(gen) && e.message !== "STALE" && !String(e.message).startsWith("AUTH")) showToast(e.message || "Failed to save profile", "error");
+    els.step1.disabled = els.step2.disabled = els.btnNext.disabled = els.btnBack.disabled = false;   // focusable again
+    if (isCurrent(gen) && e.message !== "STALE" && !String(e.message).startsWith("AUTH")) {
+      showToast(e.message || "Failed to save profile", "error");
+      state.saveError = "Couldn't save — your changes are kept.";
+      if (/username/i.test(e.message || "") && state.wizard) {   // name taken: back to it, nothing else lost
+        goToStep(2);
+        markMissing([{ label: "Username", el: els.usernameInput }]);
+      } else if (/Steam profile/.test(e.message || "")) {
+        markMissing([{ label: "Steam profile", el: els.steam }]);
+      }
+    }
     throw e;
+  } finally {
+    state.saving = false;
+    els.step1.disabled = els.step2.disabled = els.btnNext.disabled = els.btnBack.disabled = false;
+    if (isCurrent(gen)) renderSaveState();
   }
 }
 
@@ -1564,11 +1686,14 @@ function setupEventListeners() {
   const runFind = async (e) => {
     e?.preventDefault();
     if (inFlight.find) return;
+    if (state.wizard && state.step === 1) return wizardNext();   // Enter on step 1 = Next
     inFlight.find = true;
     const gen = state.gen;
     els.btnFind.disabled = true;
     try {
-      try { await saveProfile(); } catch { return; }
+      if (state.wizard || !state.hasProfile || isDirty()) {
+        try { await saveProfile(); } catch { return; }
+      }
       if (!isCurrent(gen)) return;
       await findMatches();
     } finally {
@@ -1579,6 +1704,12 @@ function setupEventListeners() {
   };
   els.btnFind.addEventListener("click", runFind);
   els.form.addEventListener("submit", runFind);
+  els.btnNext.addEventListener("click", wizardNext);
+  els.btnBack.addEventListener("click", () => goToStep(1));
+  // any edit of a saved preference updates "Saved ✓ / Unsaved changes" (filters are not preferences)
+  const onEdit = (e) => { if (els.step1.contains(e.target) || els.step2.contains(e.target)) renderSaveState(); };
+  els.form.addEventListener("input", onEdit);
+  els.form.addEventListener("change", onEdit);
 
   $("btn-refresh-squad").addEventListener("click", async () => {
     const btn = $("btn-refresh-squad");
@@ -1660,7 +1791,12 @@ function setupEventListeners() {
     startRealtime();
     if (document.visibilityState === "visible" && document.title.startsWith("🎮")) document.title = baseTitle;
   });
-  window.addEventListener("beforeunload", stopRealtime);
+  window.addEventListener("pagehide", stopRealtime);
+  window.addEventListener("beforeunload", (e) => {
+    if (leaving || !isDirty()) return;
+    e.preventDefault();
+    e.returnValue = "";   // the browser shows its own "leave site?" prompt
+  });
 }
 
 // broken cover image -> our own SVG art (data-fallback); no inline onerror, so the CSP needs no 'unsafe-inline'

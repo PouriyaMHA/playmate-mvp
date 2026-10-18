@@ -2654,3 +2654,30 @@ input.field-invalid {
 a.sm-btn { display: inline-flex; align-items: center; text-decoration: none; }
 .info-steam { display: inline-block; margin-top: 6px; font-size: 0.8rem; font-weight: 700; color: var(--cyan); text-decoration: none; }
 .info-steam:hover { text-decoration: underline; }
+
+/* ---- profile form: 2-step first setup, saved/unsaved state (pre-launch #1, #4) ---- */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.form-step { border: 0; padding: 0; margin: 0; min-width: 0; }
+.form-step[hidden] { display: none; }
+.form-step:disabled { opacity: 0.7; }
+.wizard-head { margin: 4px 0 16px; }
+.wizard-head[hidden] { display: none; }
+.wizard-title { font-size: 1.05rem; font-weight: 800; margin: 0; outline: none; }
+.wizard-step { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+.wizard-bar { height: 4px; border-radius: 4px; background: var(--line); margin-top: 8px; overflow: hidden; }
+.wizard-bar i { display: block; height: 100%; width: 50%; background: var(--green); transition: width 0.25s; }
+.field-note { color: var(--muted); font-size: 0.78rem; margin: -4px 0 12px; }
+.field-note[hidden] { display: none; }
+.more-details { margin: 4px 0 12px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.more-details summary { cursor: pointer; font-weight: 700; font-size: 0.88rem; min-height: 28px; }
+.more-details[open] summary { margin-bottom: 10px; }
+.match-options[hidden] { display: none; }
+.form-actions { display: flex; gap: 10px; }
+.form-actions > button { flex: 1; min-height: 44px; }
+.form-actions > button[hidden] { display: none; }
+#btn-wizard-back { flex: 0 0 auto; }
+.save-state { min-height: 1.2em; font-size: 0.82rem; margin: 6px 0 8px; color: var(--muted); }
+.save-state.saved { color: var(--green); }
+.save-state.dirty { color: var(--amber); font-weight: 700; }
+.save-state.error { color: #ff6b81; font-weight: 700; }
+#btn-find-matches.is-dirty { box-shadow: 0 0 0 2px var(--amber), 0 0 18px rgba(255, 190, 70, 0.35); }
