@@ -7,6 +7,12 @@ on:
     branches: [main]
   pull_request:
 
+# bash with pipefail (GitHub's explicit `shell: bash` = `bash --noprofile --norc -eo pipefail {0}`): a failing pytest
+# piped into tee must fail the step (Codex review 6, R6-H01).
+defaults:
+  run:
+    shell: bash
+
 jobs:
   test:
     runs-on: ubuntu-latest
