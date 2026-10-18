@@ -1024,33 +1024,51 @@ function renderIdleCenter() {
       </div>`;
 }
 
-function renderNoMatches(total) {
-  const filtered = els.optSameLang.checked || els.optLookingOnly.checked;
-  const skipped = getSkipped().size;
+// an honest empty state: say WHY there is nobody, from the server's counts (pre-launch #6)
+function renderNoMatches(total, pool = {}) {
+  const gameName = esc(gameInfo(state.game)?.name || "");
   if (state.hasMore) {
     els.cardWrapper.innerHTML = `
     <div class="empty-state">
       <h3>That's this batch</h3>
-      <p>There are more ${esc(gameInfo(state.game)?.name || "")} players to see.</p>
+      <p>There are more ${gameName} players to see.</p>
       <div style="margin-top:16px;"><button class="btn-primary" type="button" data-action="more">Show more players</button></div>
     </div>`;
     return;
   }
+  const n = (k) => Number(pool[k] || 0);
+  const plural = (c, w) => `${c} ${w}${c === 1 ? "" : "s"}`;
+  let title, text, primary;
+  if (n("filtered")) {
+    title = "Your filters hide everyone";
+    text = `${plural(n("filtered"), "player")} would show up without "Same language only" / "Only players looking now".`;
+    primary = `<button class="btn-primary" type="button" data-action="clear-filters">Show everyone</button>`;
+  } else if (n("skipped")) {
+    title = "You've seen everyone for now";
+    text = `You skipped ${plural(n("skipped"), "player")} this session — you can look at them again.`;
+    primary = `<button class="btn-primary" type="button" data-action="reset-skipped">See the ${plural(n("skipped"), "player")} you skipped</button>`;
+  } else if (n("liked")) {
+    title = "You've liked everyone available";
+    text = `When one of the ${plural(n("liked"), "player")} you liked likes you back, they appear in your Squad with their contact.`;
+    primary = `<button class="btn-primary" type="button" data-action="find">Scan again</button>`;
+  } else if (n("incompatible")) {
+    title = "No one you can team up with yet";
+    text = `The ${gameName} players here so far play on a platform, edition or server that can't play with yours. New players join every day.`;
+    primary = `<button class="btn-primary" type="button" data-action="find">Scan again</button>`;
+  } else {
+    title = `You're one of the first ${gameName} players here`;
+    text = "PlayMate is in early access — every new player makes matches better.";
+    primary = `<button class="btn-primary" type="button" data-action="find">Scan again</button>`;
+  }
   els.cardWrapper.innerHTML = `
     <div class="empty-state wide">
-      <h3>${total === 0 ? "No new players right now" : "You're all caught up"}</h3>
-      <p>${filtered
-      ? "Your filters are hiding some players. Turn them off to see everyone."
-      : `PlayMate is in early access — every new ${esc(gameInfo(state.game)?.name || "")} player makes your matches better. Help it grow:`}</p>
+      <h3>${title}</h3>
+      <p>${text}</p>
+      <div style="margin-top:16px;">${primary}</div>
       <div class="empty-actions">
-        ${filtered ? `<button class="btn-primary" type="button" data-action="clear-filters">Show everyone</button>` : ""}
-        <button class="empty-action" type="button" data-action="looking">${svgIcon("bolt")}<span><b>Turn on "Looking now"</b><br>Show up first for 1 hour</span></button>
+        <button class="empty-action" type="button" data-action="looking">${svgIcon("bolt")}<span><b>Turn on "Looking now"</b><br>Others see you first for 1 hour</span></button>
         <button class="empty-action" type="button" data-action="invite">${svgIcon("link")}<span><b>Invite friends</b><br>Copy your invite link</span></button>
-        <button class="empty-action" type="button" data-action="switch">${svgIcon("gamepad")}<span><b>Add another game</b><br>More games, more squads</span></button>
       </div>
-      <div style="margin-top:16px;">${skipped
-      ? `<button class="btn-secondary" type="button" data-action="reset-skipped">See the ${skipped} player${skipped === 1 ? "" : "s"} you skipped again</button>`
-      : `<button class="btn-secondary" type="button" data-action="find">Scan again</button>`}</div>
     </div>`;
 }
 
@@ -1075,7 +1093,7 @@ async function findMatches({ keepTab = false } = {}) {
     setLoading(false);
     await refreshStats();
     if (!isCurrent(gen)) return;
-    if (!state.matches.length) return renderNoMatches(data.total);
+    if (!state.matches.length) return renderNoMatches(data.total, data.pool);
     renderCard();
   } catch (e) {
     if (!isCurrent(gen)) { state.loading = false; return; }   // an old game's failure: leave the new game's screen alone
@@ -1097,7 +1115,11 @@ async function findMatches({ keepTab = false } = {}) {
 
 function renderCard() {
   if (state.loading) return;
-  if (state.currentMatchIndex >= state.matches.length) return renderNoMatches(state.matches.length);
+  if (state.currentMatchIndex >= state.matches.length) {
+    // end of this list: "more" if the server has more, otherwise ask it why there's nobody left (honest empty state)
+    if (state.hasMore) return renderNoMatches(state.matches.length);
+    return void findMatches({ keepTab: true });
+  }
 
   const match = state.matches[state.currentMatchIndex];
   const p = match.profile || {};

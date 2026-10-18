@@ -960,7 +960,8 @@ def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)
     my_langs = set(parse_languages(me.get("languages")))
 
     liked = supabase.table("likes").select("to_user_id").eq("from_user_id", user_id).eq("game", game).execute()
-    hidden = {str(r["to_user_id"]) for r in (liked.data or []) if r.get("to_user_id")} | get_blocked_ids(user_id) | {user_id}
+    liked_ids = {str(r["to_user_id"]) for r in (liked.data or []) if r.get("to_user_id")}
+    blocked = get_blocked_ids(user_id)
     skipped = {str(u).strip().lower() for u in (req.exclude or [])[:1000] if u}
     likes_me = {
         str(r["from_user_id"]) for r in
@@ -978,18 +979,28 @@ def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)
     players = near + far
     my_fields = profile_fields(me)
     matches = []
+    # why someone isn't in the list — counts only, about MY own view (for an honest empty state; pre-launch #6)
+    pool = {"incompatible": 0, "liked": 0, "skipped": 0, "filtered": 0}
     for p in players:
-        if not p.get("user_id") or str(p["user_id"]) in hidden:
-            continue
-        if (p.get("username") or "").lower() in skipped:
+        uid = str(p.get("user_id") or "")
+        if not uid or uid == user_id or uid in blocked:
             continue
         # no crossplay between our platforms / different Minecraft edition / different LoL server
         if not can_play_together(game, me.get("platform"), p.get("platform"), my_fields, profile_fields(p)):
+            pool["incompatible"] += 1
+            continue
+        if uid in liked_ids:
+            pool["liked"] += 1
+            continue
+        if (p.get("username") or "").lower() in skipped:
+            pool["skipped"] += 1
             continue
         if req.same_language_only and not (my_langs & set(parse_languages(p.get("languages")))):
+            pool["filtered"] += 1
             continue
         view = public_view(p)
         if req.looking_only and not view["looking_now"]:
+            pool["filtered"] += 1
             continue
         score, reasons = score_pair(me, p, game)
         likes_you = str(p["user_id"]) in likes_me
@@ -1018,7 +1029,7 @@ def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)
     for m in page:
         m["profile"]["bio"] = bios.get(m.pop("_uid"), "")
     return {"target_user": me.get("username"), "game": game, "total": len(matches), "has_more": len(matches) > 20,
-            "matches": page}
+            "matches": page, "pool": pool}
 
 
 # =========================================================

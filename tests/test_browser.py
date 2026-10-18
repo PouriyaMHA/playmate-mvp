@@ -719,3 +719,21 @@ def test_match_card_shows_the_bio_safely_in_two_lines(open_page, users, make_pro
     line = float(page.evaluate("parseFloat(getComputedStyle(document.querySelector('.card-bio')).lineHeight)"))
     assert el.bounding_box()["height"] <= line * 2 + 2                  # clamped to two lines
     assert page.locator('[data-action="like"]').is_visible()
+
+
+def test_empty_state_says_why(open_page, users, make_profile, api):
+    """Pre-launch #6: filters / skipped / liked / nobody compatible each get their own honest message."""
+    make_profile(users["alice"], "Alice", languages="fa")
+    make_profile(users["bob"], "Bob", languages="en")
+    page = open_page("/app?game=cs2", as_user=users["alice"])
+    wait_for(page, READY)
+    page.evaluate("() => { document.getElementById('opt-same-language').checked = true; findMatches({ keepTab: true }); }")
+    page.wait_for_selector("text=Your filters hide everyone")
+    page.click('[data-action="clear-filters"]')
+    wait_for(page, READY)
+    page.click('[data-action="skip"]')                                   # skip the only player → end of the list
+    page.wait_for_selector("text=You've seen everyone for now")
+    page.click('[data-action="reset-skipped"]')
+    wait_for(page, READY)
+    page.click('[data-action="like"]')
+    page.wait_for_selector("text=You've liked everyone available")
