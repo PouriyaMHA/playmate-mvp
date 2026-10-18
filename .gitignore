@@ -17,3 +17,6 @@ docs/chatgpt-history/
 
 # raw images from the user (processed copies live in static/img)
 Pictures/
+
+# Chromium / browser-test logs
+debug.log
