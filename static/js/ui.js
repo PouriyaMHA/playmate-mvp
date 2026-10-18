@@ -93,15 +93,13 @@ function ensureCacheOwner() {
   const uid = tokenUserId();
   const owner = localStorage.getItem("pm_uid");
   if (uid && owner && owner !== uid) {
-    const token = getAccessToken();
-    const keep = {};
-    for (let i = 0; i < localStorage.length; i++) {
+    // forget the previous account's cached data, but never touch the current session itself: removing and
+    // re-adding the token would let another open tab read "no token" in between and log out
+    for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
-      if (k && k.startsWith("sb-") && k.endsWith("-auth-token")) keep[k] = localStorage.getItem(k);
+      const session = k === "pm_access_token" || (k && k.startsWith("sb-") && k.endsWith("-auth-token"));
+      if (k && !session && (k.startsWith("pm_") || k.startsWith("playmate_"))) localStorage.removeItem(k);
     }
-    clearAccountCache();
-    localStorage.setItem("pm_access_token", token);
-    Object.entries(keep).forEach(([k, v]) => localStorage.setItem(k, v));
   }
   if (uid) localStorage.setItem("pm_uid", uid);
 }

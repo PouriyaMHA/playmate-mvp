@@ -480,7 +480,7 @@ def test_signed_in_player_without_a_profile_is_told_to_add_the_game(open_page, u
     page.wait_for_selector("text=Add Counter-Strike 2 to your games to like them")
 
 
-def test_steam_profile_field_and_squad_link(open_page, users, make_profile, api):
+def test_steam_profile_field_and_squad_link(open_page, browser, users, make_profile, api):
     """Steam games on PC offer the field; a friend code is saved as a link; the mutual squadmate gets 'Open Steam profile'."""
     make_profile(users["alice"], "Alice")
     make_profile(users["alice"], "Alice", "lol")
@@ -498,8 +498,12 @@ def test_steam_profile_field_and_squad_link(open_page, users, make_profile, api)
     assert not page.locator("#steam-row").is_visible()                 # LoL isn't a Steam game
     api.post("/api/like", user=users["bob"], json={"to_user": "alice", "game": "cs2"})
     api.post("/api/like", user=users["alice"], json={"to_user": "bob", "game": "cs2"})
-    bob = open_page("/app?game=cs2", as_user=users["bob"])
+    bob_device = watch_errors(browser.new_context(viewport={"width": 1280, "height": 860}, bypass_csp=True))
+    bob_device.add_init_script(FAKE_SUPABASE_JS)
+    bob_device.route("**/unpkg.com/**", lambda r: r.abort())
+    bob = open_page("/app?game=cs2", as_user=users["bob"], ctx=bob_device)   # another player = another device
     bob.wait_for_selector('a.sm-btn:has-text("Open Steam profile")')
     href = bob.get_attribute('a.sm-btn:has-text("Open Steam profile")', "href")
     assert href == "https://steamcommunity.com/profiles/76561197960287930"
     assert bob.get_attribute('a.sm-btn:has-text("Open Steam profile")', "rel") == "noopener noreferrer"
+    close_clean(bob_device)
