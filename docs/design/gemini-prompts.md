@@ -8,6 +8,8 @@ Paste them into Gemini (the image model) **in English**, one per message.
 1. Open a **new Gemini chat** and send the **Style guide** below first, with this line on top:
    `Remember this style guide and apply it to every image I ask for in this chat. Reply "OK".`
 2. Then send prompts one by one. Each prompt already repeats the key style words, so it also works in a fresh chat.
+   **If Gemini starts copying an earlier character** (same face, vest, scarf, helmet…), open a **new chat** for the next
+   image and paste the style guide again — Gemini tends to reuse what it drew earlier in the same chat.
 3. **Aspect ratio:** say it in the message too (Gemini sometimes ignores it inside a long prompt):
    avatars **1:1**, banners **21:9**, card backgrounds **3:4**.
 4. Generate 2–4 versions of each and keep the best one. If something is off, reply with a short fix
@@ -32,9 +34,14 @@ PlayMate visual style guide:
 - Look: dark sci-fi "neon + glass". Deep near-black navy backgrounds (#070b10 to #121b25), with glowing neon accents in
   mint green (#2dffb3), electric cyan (#2ee6ff) and lime (#b6ff5c). Each image may add ONE extra accent color that fits
   its theme (orange, purple, red, gold, pink or blue).
-- Rendering: high-quality digital illustration, semi-realistic stylized 3D look (like a modern game key art or esports
-  team poster), clean shapes, crisp rim lighting, soft volumetric glow, subtle film grain. Not photorealistic, not
-  cartoon-childish, not anime-chibi.
+- Rendering: bold cel-shaded comic illustration, like a modern esports team avatar or mascot logo art: clean confident
+  outlines, flat color areas with hard-edged shading, strong neon rim light on one side, soft glow behind the subject.
+  Not photorealistic, not 3D render, not childish cartoon, not anime-chibi. Every image in the set uses this same
+  rendering style so they look like one collection.
+- Every image is a brand-new, unrelated character or scene. NEVER reuse the face, hairstyle, outfit, gear, accessories,
+  pose or composition of any earlier image in this chat. Characters in the set must not look like the same person or
+  like siblings: vary gender, age (young adult to middle-aged), skin tone, face shape, hair, facial hair, body build,
+  expression, outfit and the extra accent color.
 - Composition: strong single focal point, uncluttered, readable at small sizes, plenty of dark negative space.
 - Always: no text, no letters, no numbers, no logos, no watermarks, no UI, no real brands, no real game characters,
   no real people, no gore, no blood, no weapons pointed at the viewer.
@@ -48,7 +55,7 @@ Shown as a **small circle (≈100–140 px)**, so they must read clearly when ti
 centered, simple background.
 
 **Base (add to the start of every avatar prompt if you're not in the style-guide chat):**
-`Square 1:1 profile avatar for a gaming app, head-and-shoulders portrait, centered with the face in the middle third, works when cropped to a circle, dark navy background with a soft neon glow behind the head, crisp rim light, stylized semi-realistic 3D illustration, no text, no logos.`
+`Square 1:1 profile avatar for a gaming app, head-and-shoulders close-up only, the face fills about 40% of the image and is centered, works when cropped to a small circle, dark navy background with a soft neon glow behind the head, crisp rim light, bold cel-shaded comic illustration, a completely new and unique character (do not reuse any face, outfit or gear from earlier images), no text, no letters, no logos.`
 
 | File | Prompt |
 |---|---|
@@ -72,7 +79,8 @@ centered, simple background.
 | avatar-30 | A man gamer with braided hair and an over-ear headset, laughing, lime and mint light, relaxed pose. |
 
 Tip: keep **variety** — different skin tones, genders and ages across the set, and some non-human avatars for
-players who don't want a "face".
+players who don't want a "face". If two avatars come out looking like the same person, regenerate the newer one in a
+new chat and add: `Make this person clearly different: different face shape, hair, age and skin tone.`
 
 ---
 
@@ -83,7 +91,7 @@ fades to dark, and the round avatar overlaps the **bottom-left**. So: keep the s
 **bottom third calm and dark**, keep the left-bottom corner empty.
 
 **Base (add to the start of every banner prompt if you're not in the style-guide chat):**
-`Ultra-wide 21:9 profile banner for a gaming app, cinematic key-art landscape, main subject in the center, the bottom third darker and calmer for text overlay, empty space at bottom-left, dark navy tones with neon glow, stylized semi-realistic 3D illustration, no characters' faces close-up, no text, no logos.`
+`Ultra-wide 21:9 profile banner for a gaming app, cinematic key-art landscape, main subject in the center, the bottom third darker and calmer for text overlay, empty space at bottom-left, dark navy tones with neon glow, bold cel-shaded comic illustration, no characters' faces close-up, no text, no letters, no logos.`
 
 | File | Theme | Prompt |
 |---|---|---|
@@ -136,7 +144,9 @@ become unlockable card skins.
 
 ## Quality checklist before sending me the files
 
-- [ ] No text/letters/logos anywhere (zoom in — models like to sneak in fake letters).
+- [ ] No text/letters/logos anywhere (zoom in — models like to sneak in fake letters, e.g. on neon signs).
+- [ ] Every character looks like a different person (no repeated face, outfit or gear).
+- [ ] Same cel-shaded comic style as the approved avatar-13 (tactical soldier).
 - [ ] Avatars still readable when shrunk to a 100 px circle.
 - [ ] Banners: subject centered, bottom third calm, bottom-left corner empty.
 - [ ] Card backgrounds: center is dark enough for white text.
