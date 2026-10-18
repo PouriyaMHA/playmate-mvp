@@ -245,6 +245,7 @@ function placeIntent() {
     : onPhone && document.body.dataset.view === "squad" ? $("squad-panel") : $("match-panel");
   if (el.parentElement !== host) host.prepend(el);
 }
+window.matchMedia?.("(max-width: 760px)").addEventListener?.("change", () => placeIntent());
 function renderIntent() {
   const el = $("intent-strip");
   placeIntent();
@@ -617,6 +618,7 @@ async function selectGame(gameId) {
   renderWizard();
   renderIntent();
   if (state.wizard && window.innerWidth <= 760) setTab("profile");   // new game on a phone: start the setup
+  if (state.wizard) $("wizard-title").focus({ preventScroll: true });
   renderGameChrome();
   refreshStats();
   renderIdleCenter();
@@ -636,6 +638,7 @@ async function selectGame(gameId) {
 ========================================================= */
 function buildForm() {
   const m = state.meta;
+  resetValidation();   // errors belong to the game they were shown for
 
   fillSelect(els.region, m.regions.map(r => ({ value: r.id, label: r.label })), "Select region…");
   fillSelect(els.country, [], "Select country…");
@@ -643,6 +646,8 @@ function buildForm() {
   fillSelect(els.city, [], "Optional — skip or select…");
   els.city.disabled = true;
   fillSelect(els.platform, m.platforms, m.platforms.length > 1 ? "Select platform…" : null);
+  els.platform.required = m.platforms.length > 1;
+  els.platform.setAttribute("aria-required", String(m.platforms.length > 1));
   $("platform-row").hidden = m.platforms.length <= 1;   // one choice: nothing to ask (the value is still sent)
   updateSteamRow();
   $("ign-label").textContent = m.ign_label || "In-game name";
@@ -948,11 +953,23 @@ document.addEventListener("click", (e) => {
   if (e.target.closest("[data-intent-dismiss]")) clearIntent();
   else if (e.target.closest("[data-intent-go]")) { try { sessionStorage.removeItem("pm_intent"); } catch { } }
 });
+// after an edit: only fields that are still missing stay flagged, and the summary lists exactly those
 function clearInvalid(el) {
-  if (!el?.classList?.contains("field-invalid")) return;
-  el.classList.remove("field-invalid");
-  el.removeAttribute("aria-invalid");
-  if (!document.querySelector(".field-invalid")) $("form-errors").hidden = true;
+  if (!el?.classList?.contains("field-invalid") && !document.querySelector(".field-invalid")) return;
+  if (!state.meta) return resetValidation();
+  const flagged = new Set([...document.querySelectorAll(".field-invalid")]);
+  const still = validateProfile(collectProfile()).filter(m => flagged.has(m.el));
+  flagged.forEach(f => {
+    if (!still.some(m => m.el === f)) { f.classList.remove("field-invalid"); f.removeAttribute("aria-invalid"); }
+  });
+  const box = $("form-errors");
+  box.textContent = still.length ? `Please fill in: ${still.map(m => m.label).join(", ")}` : "";
+  box.hidden = !still.length;
+}
+function resetValidation() {
+  document.querySelectorAll(".field-invalid").forEach(f => { f.classList.remove("field-invalid"); f.removeAttribute("aria-invalid"); });
+  const box = $("form-errors");
+  if (box) { box.textContent = ""; box.hidden = true; }
 }
 document.addEventListener("change", (e) => clearInvalid(e.target));
 document.addEventListener("input", (e) => clearInvalid(e.target));
@@ -1084,16 +1101,21 @@ function renderNoMatches(total, pool = {}) {
   const n = (k) => Number(pool[k] || 0);
   const plural = (c, w) => `${c} ${w}${c === 1 ? "" : "s"}`;
   let title, text, primary;
+  const scan = pool.complete === false ? " in this scan" : "";
   if (n("filtered")) {
-    title = "Your filters hide everyone";
+    title = `Your filters hide everyone${scan}`;
     text = `${plural(n("filtered"), "player")} would show up without "Same language only" / "Only players looking now".`;
     primary = `<button class="btn-primary" type="button" data-action="clear-filters">Show everyone</button>`;
   } else if (n("skipped")) {
-    title = "You've seen everyone for now";
+    title = `You've seen everyone${scan || " for now"}`;
     text = `You skipped ${plural(n("skipped"), "player")} this session — you can look at them again.`;
     primary = `<button class="btn-primary" type="button" data-action="reset-skipped">See the ${plural(n("skipped"), "player")} you skipped</button>`;
+  } else if (n("skipped_filtered")) {
+    title = `You've seen everyone${scan || " for now"}`;
+    text = `${plural(n("skipped_filtered"), "player")} you skipped would show up again without your filters.`;
+    primary = `<button class="btn-primary" type="button" data-action="reset-all">Show everyone, including skipped</button>`;
   } else if (n("liked")) {
-    title = "You've liked everyone available";
+    title = `You've liked everyone available${scan}`;
     text = `When one of the ${plural(n("liked"), "player")} you liked likes you back, they appear in your Squad with their contact.`;
     primary = `<button class="btn-primary" type="button" data-action="find">Scan again</button>`;
   } else if (n("incompatible")) {
@@ -1890,6 +1912,11 @@ function setupEventListeners() {
       case "clear-filters":
         els.optSameLang.checked = false;
         els.optLookingOnly.checked = false;
+        return findMatches();
+      case "reset-all":
+        els.optSameLang.checked = false;
+        els.optLookingOnly.checked = false;
+        clearSkipped();
         return findMatches();
       case "invite":
         if ($("invite-link").value) copyText($("invite-link").value, "Invite link");

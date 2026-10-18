@@ -839,3 +839,64 @@ def test_r11_match_card_fits_a_phone(browser, base_url, db, users, make_profile)
         poll(page, "typeof state !== 'undefined' && !!document.getElementById('active-card')")
         no_sideways_scroll(page, f"match card at {width}px")
         close_clean(ctx)
+
+
+def test_r12_every_empty_state_recovery_actually_shows_the_promised_players(open_page, users, make_profile):
+    """N1: click each recovery and check the promised player appears (filter only / skip only / both)."""
+    make_profile(users["alice"], "Alice", languages="fa")
+    make_profile(users["bob"], "Bob", languages="en")
+    page = open_page("/app?game=cs2", as_user=users["alice"])
+    wait_for(page, READY)
+    cases = (
+        ("filter only", "() => { clearSkipped(); document.getElementById('opt-same-language').checked = true; }", "clear-filters"),
+        ("skip only", "() => { addSkipped('bob'); document.getElementById('opt-same-language').checked = false; }", "reset-skipped"),
+        ("both", "() => { addSkipped('bob'); document.getElementById('opt-same-language').checked = true; }", "reset-all"),
+    )
+    for name, setup, action in cases:
+        page.evaluate(setup)
+        page.evaluate("findMatches({ keepTab: true })")
+        page.wait_for_selector(f'[data-action="{action}"]', timeout=5000)
+        page.click(f'[data-action="{action}"]')
+        wait_for(page, "() => !state.loading && !!document.getElementById('active-card')")
+        assert "Bob" in page.inner_text("#active-card"), name
+
+
+def test_r12_validation_summary_follows_the_fields_and_the_game(open_page, users, make_profile):
+    """N2: partial fixes shrink the alert; another game starts clean; the setup heading gets focus."""
+    make_profile(users["alice"], "Alice")
+    page = open_page("/app?game=minecraft", as_user=users["alice"])
+    wait_for(page, "() => typeof state !== 'undefined' && state.gameReady && state.wizard")
+    assert page.evaluate("document.activeElement.id") == "wizard-title"
+    page.click("#btn-wizard-next")
+    alert = page.inner_text("#form-errors")
+    assert "Platform" in alert and "Edition" in alert
+    page.select_option("#platform", index=1)
+    assert "Platform" not in page.inner_text("#form-errors") and "Edition" in page.inner_text("#form-errors")
+    assert page.get_attribute("#platform", "aria-invalid") is None
+    assert page.get_attribute("#platform", "aria-required") == "true"
+    page.select_option("#platform", index=0)                        # back to empty: flagged again on the next check
+    page.once("dialog", lambda d: d.accept())
+    page.evaluate("selectGame('cs2')")
+    wait_for(page, "() => state.game === 'cs2' && state.gameReady")
+    assert page.is_hidden("#form-errors") and page.locator("[aria-invalid=true]").count() == 0
+    assert page.inner_text("#save-state") == "Saved ✓"
+
+
+def test_r12_strip_follows_rotation(browser, base_url, db, users, make_profile):
+    """N3: phone setup → landscape → portrait: the shared-player strip is still on screen."""
+    make_profile(users["bob"], "Bob")
+    ctx = mobile_context(browser)
+    page = ctx.new_page()
+    page.goto(base_url + "/?game=cs2&next=%2Fu%2Fbob")
+    page.evaluate("t => localStorage.setItem('pm_access_token', t)", make_token(users["alice"], exp=int(time.time()) + 3600))
+    page.goto(base_url + "/app?game=cs2")
+    poll(page, "typeof state !== 'undefined' && state.gameReady === true && state.wizard === true")
+    page.set_viewport_size({"width": 812, "height": 375})
+    page.wait_for_timeout(200)
+    page.evaluate("async () => { await selectGame('minecraft'); await selectGame('cs2'); }")   # renders in landscape
+    poll(page, "state.game === 'cs2' && state.gameReady === true")
+    page.set_viewport_size({"width": 375, "height": 812})
+    page.wait_for_timeout(200)
+    assert page.evaluate("document.body.dataset.view") == "profile"
+    assert page.locator("#intent-strip").is_visible()
+    close_clean(ctx)

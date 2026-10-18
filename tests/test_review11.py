@@ -13,7 +13,8 @@ def test_skipped_count_respects_the_filters(api, users, make_profile):
     make_profile(users["alice"], "Alice", languages="fa")
     make_profile(users["bob"], "Bob", languages="en")
     p, names = _pool(api, users["alice"], exclude=["bob"], same_language_only=True)
-    assert names == [] and p["skipped"] == 0 and p["filtered"] == 1
+    # review 12 N1: hidden by BOTH -> its own bucket, so neither single action promises him
+    assert names == [] and p["skipped"] == 0 and p["filtered"] == 0 and p["skipped_filtered"] == 1
     p, names = _pool(api, users["alice"], exclude=["bob"])
     assert names == [] and p["skipped"] == 1
     assert p["complete"] is True

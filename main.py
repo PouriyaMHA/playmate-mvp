@@ -989,7 +989,8 @@ def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)
     my_fields = profile_fields(me)
     matches = []
     # why someone isn't in the list — counts only, about MY own view (for an honest empty state; pre-launch #6)
-    pool = {"incompatible": 0, "liked": 0, "skipped": 0, "filtered": 0,
+    # filtered = back if you clear the filters; skipped = back if you reset skips; skipped_filtered = needs both
+    pool = {"incompatible": 0, "liked": 0, "skipped": 0, "filtered": 0, "skipped_filtered": 0,
             "complete": len(near) < 500 and len(far) < 300}   # False: only the most recently active were looked at
     for p in players:
         uid = str(p.get("user_id") or "")
@@ -1003,11 +1004,12 @@ def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)
             pool["liked"] += 1
             continue
         view = public_view(p)
-        if (req.same_language_only and not (my_langs & set(parse_languages(p.get("languages"))))) or                 (req.looking_only and not view["looking_now"]):
-            pool["filtered"] += 1
-            continue
-        if (p.get("username") or "").lower() in skipped:   # counted after the filters: "see them again" really shows them
-            pool["skipped"] += 1
+        hidden_by_filter = (req.same_language_only and not (my_langs & set(parse_languages(p.get("languages"))))) \
+            or (req.looking_only and not view["looking_now"])
+        was_skipped = (p.get("username") or "").lower() in skipped
+        if hidden_by_filter or was_skipped:
+            bucket = "skipped_filtered" if hidden_by_filter and was_skipped else "filtered" if hidden_by_filter else "skipped"
+            pool[bucket] += 1
             continue
         score, reasons = score_pair(me, p, game)
         likes_you = str(p["user_id"]) in likes_me
