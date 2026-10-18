@@ -59,7 +59,7 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 DEFAULT_GAME = "battlefield"
 EARLY_MEMBER_BEFORE = datetime(2027, 1, 1, tzinfo=timezone.utc)
 BANNERS = [f"banner-{i}" for i in range(1, 9)]
-AVATARS = [f"avatar-{i}" for i in range(1, 13)]
+AVATARS = [f"avatar-{i}" for i in range(1, 15)]  # 1-12 SVG art, 13+ illustrated WebP (see avatarSrc in profile.js)
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{3,24}$")
 FREE_TEXT_RE = re.compile(r"^[^<>\"'`]{1,40}$")  # IGN / Discord / handles: no HTML-ish characters

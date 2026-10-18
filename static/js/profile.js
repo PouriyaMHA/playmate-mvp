@@ -71,10 +71,17 @@ function lastSeenText(iso) {
   return d < 30 ? `Active ${d}d ago` : `Active ${Math.floor(d / 30)}mo ago`;
 }
 
+// avatar-1..12 are our SVG art, avatar-13 and up are illustrated WebP images
+const AVATAR_COUNT = 14;
+function avatarSrc(id) {
+  const n = Number(String(id).split("-")[1]);
+  return `/static/img/avatars/${id}.${n > 12 ? "webp" : "svg"}`;
+}
+
 function avatarHtml(d, cls = "pp-avatar") {
   const name = d.display_username || d.username;
   return d.avatar
-    ? `<div class="${cls}"><img src="/static/img/avatars/${esc(d.avatar)}.svg" alt=""></div>`
+    ? `<div class="${cls}"><img src="${esc(avatarSrc(d.avatar))}" alt=""></div>`
     : `<div class="${cls}"><div class="avatar-face" style="--hue:${hue(name)}">${esc(initial(name))}</div></div>`;
 }
 
@@ -222,13 +229,14 @@ async function loadSquad() {
 /* ---------------- edit (owner) ---------------- */
 function openEdit() {
   const a = page.account;
-  const avatars = Array.from({ length: 12 }, (_, i) => `avatar-${i + 1}`);
+  // newest (illustrated) avatars first
+  const avatars = Array.from({ length: AVATAR_COUNT }, (_, i) => `avatar-${AVATAR_COUNT - i}`);
   const banners = Array.from({ length: 8 }, (_, i) => `banner-${i + 1}`);
   const name = page.data.display_username || page.data.username;
 
   $("avatar-pick").innerHTML =
     `<button type="button" data-avatar="" class="${!a.avatar ? "active" : ""}" title="Initial"><div class="avatar-face" style="--hue:${hue(name)}">${esc(initial(name))}</div></button>` +
-    avatars.map(id => `<button type="button" data-avatar="${id}" class="${a.avatar === id ? "active" : ""}"><img src="/static/img/avatars/${id}.svg" alt=""></button>`).join("");
+    avatars.map(id => `<button type="button" data-avatar="${id}" class="${a.avatar === id ? "active" : ""}"><img src="${avatarSrc(id)}" alt="" loading="lazy"></button>`).join("");
   $("banner-pick").innerHTML = banners.map(id =>
     `<button type="button" data-banner="${id}" class="${a.banner === id ? "active" : ""}"><img src="/static/img/banners/${id}.svg" alt=""></button>`).join("");
   $("edit-bio").value = a.bio || "";
