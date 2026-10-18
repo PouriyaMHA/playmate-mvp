@@ -8,6 +8,7 @@ Each game defines:
     Matching gives `weight` points when both players picked the same value.
     `column` mirrors the value into an old profiles column (Battlefield only, for compatibility).
 """
+from pathlib import Path
 
 REGIONS = [
     {"id": "na-west", "label": "North America West", "cities": ["Vancouver", "Seattle", "San Francisco", "Los Angeles"]},
@@ -167,15 +168,23 @@ def get_game(game_id: str | None) -> dict | None:
     return GAMES.get((game_id or "").strip().lower())
 
 
+PHOTO_DIR = Path(__file__).parent / "static" / "img" / "games" / "photos"
+COVER_VERSION = 1  # bump when a photo in static/img/games/photos changes
+
+
 def game_summary(game_id: str) -> dict:
     g = GAMES[game_id]
+    art = f"/static/img/games/{game_id}.svg"
+    has_photo = (PHOTO_DIR / f"{game_id}.jpg").is_file()
     return {
         "id": game_id,
         "name": g["name"],
         "short": g["short"],
         "genre": g["genre"],
         "accent": g["accent"],
-        "cover": f"/static/img/games/{game_id}.svg",
+        # official key art when we have it, our own SVG art otherwise (and as the fallback if the photo fails)
+        "cover": f"/static/img/games/photos/{game_id}.jpg?v={COVER_VERSION}" if has_photo else art,
+        "art": art,
         "icon": f"/static/img/games/{game_id}-icon.svg",
     }
 

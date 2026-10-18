@@ -139,7 +139,7 @@ function renderTab() {
       const langs = String(g.languages || "").split(",").filter(Boolean).map(c => LANG_LABELS[c] || c).join(", ");
       return `
           <article class="pp-game" style="--accent:${esc(g.accent)}">
-            <img class="pp-game-cover" src="${esc(g.cover)}" alt="">
+            <img class="pp-game-cover" src="${esc(g.cover)}" alt="" onerror="this.onerror=null;this.src='${esc(g.art || "/static/img/games/default.svg")}'">
             <div class="pp-game-body">
               <h3>${esc(g.name)} ${g.looking_now ? '<span class="looking-badge">● Looking now</span>' : ""}</h3>
               <div class="pp-game-pills">

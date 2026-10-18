@@ -287,7 +287,7 @@ function renderGamePicker() {
     const current = g.id === state.game;
     return `
       <button type="button" class="game-card ${current ? "current" : ""}" data-game="${esc(g.id)}" style="--accent:${esc(g.accent)}" aria-label="${esc(g.name)}">
-        <img src="${esc(g.cover)}" alt="" loading="lazy" onerror="this.src='/static/img/games/default.svg'">
+        <img src="${esc(g.cover)}" alt="" loading="lazy" onerror="this.onerror=null;this.src='${esc(g.art || "/static/img/games/default.svg")}'">
         ${g.players >= SHOW_COUNTS_FROM ? `<span class="game-card-body"><span class="game-card-meta">${g.players} players</span></span>` : ""}
         ${mine ? `<span class="game-card-tag">${current ? "Playing" : "Added"}</span>` : ""}
       </button>`;
@@ -315,6 +315,7 @@ function renderGameChrome() {
   document.documentElement.style.setProperty("--game-accent", g.accent);
 
   $("game-bar").style.display = "";
+  $("game-bar-cover").onerror = function () { this.onerror = null; this.src = g.art; };
   $("game-bar-cover").src = g.cover;
   $("game-bar-name").textContent = g.name;
   document.title = `PlayMate | ${g.name}`;
@@ -594,13 +595,13 @@ function renderIdleCenter() {
   const g = gameInfo(state.game);
   els.cardWrapper.innerHTML = state.hasProfile
     ? `<div class="empty-state">
-        <img class="empty-cover" src="${esc(g?.cover || "")}" alt="">
+        <img class="empty-cover" src="${esc(g?.cover || "")}" alt="" onerror="this.onerror=null;this.src='${esc(g?.art || "/static/img/games/default.svg")}'">
         <h3>Ready when you are</h3>
         <p>Hit <b>Find Matches</b> to see ${esc(g?.name || "")} players who fit how you play.</p>
         <div style="margin-top:16px;"><button class="btn-primary" type="button" data-action="find">Find Matches</button></div>
       </div>`
     : `<div class="empty-state">
-        <img class="empty-cover" src="${esc(g?.cover || "")}" alt="">
+        <img class="empty-cover" src="${esc(g?.cover || "")}" alt="" onerror="this.onerror=null;this.src='${esc(g?.art || "/static/img/games/default.svg")}'">
         <h3>Set up your ${esc(g?.name || "")} profile</h3>
         <p>Fill in the form — region, game details and languages — then hit <b>Find Matches</b>.</p>
         <div class="mobile-only" style="margin-top:16px;"><button class="btn-primary" type="button" data-action="edit-profile">Set up profile</button></div>

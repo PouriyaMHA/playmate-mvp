@@ -5,7 +5,7 @@ Full background, decisions and open issues: `docs/PROJECT_HISTORY.md`. Raw ChatG
 
 ## Layout
 - `main.py` — all routes. Pages: `/` landing.html, `/app` (and old `/bf`) ui.html, `/u/<username>` (and `/profile?username=`) profile.html, `/terms` `/privacy` legal.html. APIs under `/api`; protected ones use `Depends(get_current_user_id)` (Supabase JWT, HS256).
-- `games.py` — supported games: platforms, in-game-name label and per-game field templates. Adding a game = add an entry + art in `static/img/games/<id>.svg` and `<id>-icon.svg`.
+- `games.py` — supported games: platforms, in-game-name label and per-game field templates. Adding a game = add an entry + art in `static/img/games/<id>.svg` and `<id>-icon.svg`; optional official cover `static/img/games/photos/<id>.jpg` (960×540, used when present, SVG is the fallback — bump `COVER_VERSION` when one changes).
 - `static/css` `static/js` — one CSS/JS pair per page (`ui.*`, `profile.*`, `landing.*`; `ui.css` holds the shared tokens). Bump `?v=` in the HTML when you change them.
 - `static/img` — original SVG art (games, banners, avatars, badges, logo); `tools/gen_art.py` regenerates it.
 - Data: `profiles` (one row per user + game; game-specific values in `game_meta.fields`), `likes`, `blocks` (RLS on, server uses the secret key). Account data (bio, banner, avatar, links, referral) lives in the auth user's `app_metadata.playmate` (only the server can write it).
