@@ -14,8 +14,17 @@ function esc(v) {
   return String(v ?? "").replace(/[&<>"'`]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;" })[ch]);
 }
 
+// the game a visitor picked before logging in (from /?game=… or a game card) — opened right after login
+const GAME_RE = /^[a-z0-9-]{2,20}$/;
+(function rememberWantedGame() {
+  const g = new URLSearchParams(location.search).get("game");
+  if (g && GAME_RE.test(g)) sessionStorage.setItem("pm_next_game", g);
+})();
+
 function goToApp() {
-  window.location.href = "/app";
+  const g = sessionStorage.getItem("pm_next_game");
+  sessionStorage.removeItem("pm_next_game");
+  window.location.href = g && GAME_RE.test(g) ? `/app?game=${encodeURIComponent(g)}` : "/app";
 }
 
 function storeSession(session) {
@@ -82,9 +91,11 @@ function setAuthMode(mode) {
   const signup = mode === "signup";
   $("mode-login").classList.toggle("active", !signup);
   $("mode-signup").classList.toggle("active", signup);
+  $("mode-login").setAttribute("aria-selected", String(!signup));
+  $("mode-signup").setAttribute("aria-selected", String(signup));
   $("pm-username-group").hidden = !signup;
   $("authTitle").textContent = signup ? "Create your account" : "Welcome back";
-  $("authSubtitle").textContent = signup ? "Free forever. Takes 20 seconds." : "Log in to find your squad.";
+  $("authSubtitle").textContent = signup ? "Free forever. No spam, no ads." : "Log in to find your squad.";
   $("auth-submit").textContent = signup ? "Create account" : "Log in";
   $("password").autocomplete = signup ? "new-password" : "current-password";
   $("forgot-btn").hidden = signup;
@@ -201,7 +212,7 @@ async function loadGames() {
     const res = await fetch("/api/games");
     const games = (await res.json()).games || [];
     $("lp-games").innerHTML = games.map(g => `
-      <a class="lp-game" href="#auth" data-mode="signup" style="--accent:${esc(g.accent)}">
+      <a class="lp-game" href="#auth" data-mode="signup" data-game="${esc(g.id)}" style="--accent:${esc(g.accent)}">
         <img src="${esc(g.cover)}" alt="${esc(g.name)} — ${esc(g.genre)}" loading="lazy" onerror="this.onerror=null;this.src='${esc(g.art || "/static/img/games/default.svg")}'">
       </a>`).join("");
     const covers = games.map(g => `<img src="${esc(g.cover)}" alt="">`).join("");
@@ -218,12 +229,16 @@ $("authForm").addEventListener("submit", handleAuth);
 $("forgot-btn").addEventListener("click", forgotPassword);
 $("pw-toggle").addEventListener("click", () => {
   const p = $("password");
-  p.type = p.type === "password" ? "text" : "password";
+  const show = p.type === "password";
+  p.type = show ? "text" : "password";
+  $("pw-toggle").setAttribute("aria-label", show ? "Hide password" : "Show password");
+  $("pw-toggle").setAttribute("aria-pressed", String(show));
 });
 document.addEventListener("click", (e) => {
   const link = e.target instanceof Element && e.target.closest("[data-mode]");
   if (!link) return;
   e.preventDefault();
+  if (link.dataset.game && GAME_RE.test(link.dataset.game)) sessionStorage.setItem("pm_next_game", link.dataset.game);
   setAuthMode(link.dataset.mode);
   $("auth").scrollIntoView({ behavior: "smooth", block: "center" });
   setTimeout(() => (link.dataset.mode === "signup" ? $("pm_username") : $("email")).focus(), 350);

@@ -153,7 +153,7 @@ const state = {
   loading: false,
 };
 
-const inFlight = { match: false, like: false, swipe: false, find: false, ping: false, pending: false, incoming: false, squadPromise: null, squadGame: null };
+const inFlight = { match: false, like: false, swipe: false, find: false };
 
 /* players skipped this session, per game — "Show more" asks the server for the ones after them */
 function skippedKey(game) { return `pm_skipped:${game}`; }
@@ -377,12 +377,25 @@ function openGamePicker(firstTime = false) {
   renderGamePicker();
   $("game-modal-title").textContent = firstTime ? "Pick your first game" : "Choose your game";
   $("game-modal-close").style.display = firstTime && !state.game ? "none" : "";
+  rememberFocus(els.gameModal);
   els.gameModal.classList.add("active");
+  (els.gameModal.querySelector(".game-card.current") || els.gameModal.querySelector(".game-card"))?.focus();
 }
 
 function closeGamePicker() {
   if (!state.game) return; // must pick one first
   els.gameModal.classList.remove("active");
+  restoreFocus(els.gameModal);
+}
+
+// dialogs: move focus into them, and give it back to whatever opened them
+function rememberFocus(dialog) {
+  dialog._returnFocus = document.activeElement;
+}
+function restoreFocus(dialog) {
+  const el = dialog._returnFocus;
+  dialog._returnFocus = null;
+  if (el && document.contains(el)) el.focus?.();
 }
 
 function renderGameChrome() {
@@ -421,7 +434,10 @@ async function refreshStats() {
 async function selectGame(gameId) {
   if (!gameId) return;
   const sameGame = gameId === state.game;
-  els.gameModal.classList.remove("active");
+  if (els.gameModal.classList.contains("active")) {
+    els.gameModal.classList.remove("active");
+    els.gameModal._returnFocus = null;
+  }
   if (sameGame) return;
 
   stopRealtime();
@@ -438,8 +454,7 @@ async function selectGame(gameId) {
   lastSquadSignature = null;
   lastSquadUsernames = new Set();
   squadBootstrapped = false;
-  inFlight.squadPromise = null;
-  state.loadFailed = false;
+    state.loadFailed = false;
   renderSquadList();
   renderPendingList([]);
   state.incomingLoaded = false;
@@ -507,9 +522,13 @@ function buildForm() {
     const pill = document.createElement("button");
     pill.type = "button";
     pill.className = "lang-pill";
+    pill.setAttribute("aria-pressed", "false");
     pill.dataset.code = l.code;
     pill.textContent = l.label;
-    pill.addEventListener("click", () => pill.classList.toggle("active"));
+    pill.addEventListener("click", () => {
+      const on = pill.classList.toggle("active");
+      pill.setAttribute("aria-pressed", String(on));
+    });
     els.langContainer.appendChild(pill);
   });
 }
@@ -543,7 +562,11 @@ function applyProfileToForm(p) {
   if (p.platform && [...els.platform.options].some(o => o.value === p.platform)) els.platform.value = p.platform;
   els.mic.value = p.mic || "voice";
   const langs = new Set(String(p.languages || "").split(",").map(s => s.trim()).filter(Boolean));
-  els.langContainer.querySelectorAll(".lang-pill").forEach(pill => pill.classList.toggle("active", langs.has(pill.dataset.code)));
+  els.langContainer.querySelectorAll(".lang-pill").forEach(pill => {
+    const on = langs.has(pill.dataset.code);
+    pill.classList.toggle("active", on);
+    pill.setAttribute("aria-pressed", String(on));
+  });
   els.ign.value = p.in_game_username || "";
   els.discord.value = p.discord_username || "";
   const fields = p.fields || {};
@@ -922,8 +945,7 @@ async function handleLike() {
       // the in-game name is only revealed by the squad endpoint
       const key = (matchUser.username || "").toLowerCase();
       announced.add(`${game}:${key}`);
-      try { await inFlight.squadPromise; } catch { }
-      try { await refreshSquad({ silent: true }); } catch { }
+      try { await refreshSquad(); } catch { }
       const fromSquad = (state.squad || []).find(m => (m.username || "").toLowerCase() === key);
       if (fromSquad?.in_game_username) mate.in_game_username = fromSquad.in_game_username;
       triggerMatchModal(mate, { kind: "match" });
@@ -961,63 +983,94 @@ function computeSquadSignature(squad) {
     .join(";");
 }
 
-async function refreshSquad(opts = {}) {
-  if (!state.game || !state.hasProfile) return;
-  if (inFlight.squadPromise && inFlight.squadGame === state.game) return inFlight.squadPromise;
-  const game = state.game;
-  inFlight.squadGame = game;
+/* Squad, pending likes and "Liked you" all come from one /api/poll request.
+   Calls made while a request is running join it; with {fresh:true} (after the user changed something)
+   one more request runs right after it, so the answer can't be from before the change. */
+const social = { promise: null, game: null, again: false, againPing: false };
 
-  inFlight.squadPromise = (async () => {
-    const res = await authFetch(`${API_BASE}/my-squad-details?game=${encodeURIComponent(game)}`);
+function refreshSocial({ ping = false, fresh = false } = {}) {
+  if (!state.game || !state.hasProfile) return Promise.resolve();
+  if (social.promise && social.game === state.game) {
+    if (fresh || ping) {
+      social.again = true;
+      social.againPing = social.againPing || ping;
+    }
+    return social.promise;
+  }
+  const game = state.game;
+  social.game = game;
+  social.promise = (async () => {
+    const res = await authFetch(`${API_BASE}/poll?game=${encodeURIComponent(game)}${ping ? "&ping=1" : ""}`);
     if (game !== state.game) return;            // user switched game meanwhile
     if (res.status === 404) {
-      state.squad = [];
-      squadBootstrapped = true;
-      return renderSquadList();
+      applySquad(game, []);
+      renderPendingList([]);
+      renderIncomingList([]);
+      return;
     }
-    if (!res.ok) throw new Error(`squad failed: ${res.status}`);
-    const newSquad = (await res.json()).squadmates || [];
-
-    const newSet = new Set(newSquad.map(m => (m.username || "").toLowerCase()).filter(Boolean));
-    const newlyAdded = [...newSet].filter(u => !lastSquadUsernames.has(u) && !announced.has(`${game}:${u}`));
-    lastSquadUsernames = newSet;
-    newSet.forEach(u => announced.add(`${game}:${u}`));
-
-    // first successful refresh = baseline (no auto modal for existing squadmates)
-    const wasBootstrapped = squadBootstrapped;
-    squadBootstrapped = true;
-
-    const sig = computeSquadSignature(newSquad);
-    if (sig === lastSquadSignature) return;
-    lastSquadSignature = sig;
-    state.squad = newSquad;
-    renderSquadList();
-
-    if (wasBootstrapped && newlyAdded.length) {
-      const mate = newSquad.find(m => (m.username || "").toLowerCase() === newlyAdded[0]);
-      if (mate) {
-        triggerMatchModal({
-          username: mate.username,
-          display_username: mate.display_username || mate.username,
-          avatar: mate.avatar || "",
-          in_game_username: mate.in_game_username,
-        });
-        notifyBackgroundMatch(mate.display_username || mate.username);
-        if (window.innerWidth <= 760) $("tab-squad-dot").hidden = false;
-      }
-    }
+    if (!res.ok) throw new Error(`poll failed: ${res.status}`);
+    const d = await res.json();
+    if (game !== state.game) return;
+    hideNetError();
+    applySquad(game, d.squadmates || []);
+    renderPendingList(d.pending || []);
+    renderIncomingList(d.incoming || []);
   })();
 
-  try {
-    return await inFlight.squadPromise;
-  } catch (err) {
-    console.error("Squad fetch error", err);
-    if (!String(err.message).startsWith("AUTH")) showNetError();
-    throw err;
-  } finally {
-    if (inFlight.squadGame === game) inFlight.squadPromise = null;
+  return social.promise
+    .catch(err => {
+      console.error("Refresh failed", err);
+      if (!String(err.message).startsWith("AUTH")) showNetError();
+      throw err;
+    })
+    .finally(() => {
+      if (social.game !== game) return;
+      social.promise = null;
+      if (social.again) {
+        const pingAgain = social.againPing;
+        social.again = social.againPing = false;
+        refreshSocial({ ping: pingAgain }).catch(() => { });
+      }
+    });
+}
+
+// squad changed? redraw it, and show the match modal for squadmates that just appeared
+function applySquad(game, newSquad) {
+  const newSet = new Set(newSquad.map(m => (m.username || "").toLowerCase()).filter(Boolean));
+  const newlyAdded = [...newSet].filter(u => !lastSquadUsernames.has(u) && !announced.has(`${game}:${u}`));
+  lastSquadUsernames = newSet;
+  newSet.forEach(u => announced.add(`${game}:${u}`));
+
+  // first successful refresh = baseline (no auto modal for existing squadmates)
+  const wasBootstrapped = squadBootstrapped;
+  squadBootstrapped = true;
+
+  const sig = computeSquadSignature(newSquad);
+  if (sig === lastSquadSignature) return;
+  lastSquadSignature = sig;
+  state.squad = newSquad;
+  renderSquadList();
+
+  if (wasBootstrapped && newlyAdded.length) {
+    const mate = newSquad.find(m => (m.username || "").toLowerCase() === newlyAdded[0]);
+    if (mate) {
+      triggerMatchModal({
+        username: mate.username,
+        display_username: mate.display_username || mate.username,
+        avatar: mate.avatar || "",
+        in_game_username: mate.in_game_username,
+      });
+      notifyBackgroundMatch(mate.display_username || mate.username);
+      if (window.innerWidth <= 760) $("tab-squad-dot").hidden = false;
+    }
   }
 }
+
+// Kept as names for the call sites — all three are the same request now. Callers always run refreshSquad()
+// first after a change (fresh), so the other two just join that request instead of starting another one.
+function refreshSquad() { return refreshSocial({ fresh: true }); }
+function refreshPending() { refreshSocial().catch(() => { }); }
+function refreshIncoming() { refreshSocial().catch(() => { }); }
 
 function renderSquadList() {
   $("squad-count").textContent = state.squad?.length ? `(${state.squad.length})` : "";
@@ -1054,52 +1107,6 @@ function renderSquadList() {
         </div>
       </div>`;
   }).join("");
-}
-
-async function refreshPending() {
-  if (!state.game || !state.hasProfile) return;
-  if (inFlight.pending) {
-    inFlight.pendingAgain = true;
-    return;
-  }
-  inFlight.pending = true;
-  const game = state.game;
-  try {
-    const res = await authFetch(`${API_BASE}/pending-likes?game=${encodeURIComponent(game)}`);
-    if (!res.ok || game !== state.game) return;
-    renderPendingList((await res.json()).pending || []);
-  } catch (e) {
-    console.warn("Pending likes fetch failed", e);
-  } finally {
-    inFlight.pending = false;
-    if (inFlight.pendingAgain) {
-      inFlight.pendingAgain = false;
-      refreshPending();
-    }
-  }
-}
-
-async function refreshIncoming() {
-  if (!state.game || !state.hasProfile) return;
-  if (inFlight.incoming) {
-    inFlight.incomingAgain = true;   // something changed while a request was running: fetch again after it
-    return;
-  }
-  inFlight.incoming = true;
-  const game = state.game;
-  try {
-    const res = await authFetch(`${API_BASE}/incoming-likes?game=${encodeURIComponent(game)}`);
-    if (!res.ok || game !== state.game) return;
-    renderIncomingList((await res.json()).incoming || []);
-  } catch (e) {
-    console.warn("Incoming likes fetch failed", e);
-  } finally {
-    inFlight.incoming = false;
-    if (inFlight.incomingAgain) {
-      inFlight.incomingAgain = false;
-      refreshIncoming();
-    }
-  }
 }
 
 function renderIncomingList(list) {
@@ -1146,7 +1153,7 @@ async function likeBack(username, btn) {
     });
     if ($("active-card")) renderCard();
     announced.add(`${game}:${key}`);
-    try { await refreshSquad({ silent: true }); } catch { }
+    try { await refreshSquad(); } catch { }
     const mate = (state.squad || []).find(m => (m.username || "").toLowerCase() === key);
     if (data?.mutual && mate) triggerMatchModal(mate, { kind: "match" });
     refreshIncoming();
@@ -1222,11 +1229,14 @@ function triggerMatchModal(mate, opts = {}) {
   $("modal-them-ign").textContent = `${ignLabel}: ${mateIGN}`;
 
   els.modal.classList.toggle("is-like", kind === "like");
+  if (!els.modal.classList.contains("active")) rememberFocus(els.modal);
   els.modal.classList.add("active");
+  els.modal.querySelector(".btn-keep-matching")?.focus();
 }
 
 function closeModal() {
   els.modal.classList.remove("active");
+  restoreFocus(els.modal);
 }
 
 function goToSquad() {
@@ -1388,29 +1398,9 @@ function notifyBackgroundMatch(name) {
 
 async function realtimeTick() {
   if (!canRealtimeRun()) return;
-  if (document.visibilityState === "hidden") {
-    // background: only look for new squadmates (no ping, so we don't show as online)
-    try { await refreshSquad({ silent: true }); } catch { }
-    return;
-  }
-  if (!inFlight.ping) {
-    inFlight.ping = true;
-    try {
-      const res = await authFetch(`${API_BASE}/ping?game=${encodeURIComponent(state.game)}`, { method: "POST" });
-      if (res.ok) hideNetError();
-    } catch (e) {
-      if (!String(e.message).startsWith("AUTH")) showNetError();
-    } finally {
-      inFlight.ping = false;
-    }
-  }
-  try {
-    await refreshSquad({ silent: true });
-    hideNetError();
-  } catch { }
-  refreshPending();
-  refreshIncoming();
-  renderLookingButton();
+  // background tab: only look for new squadmates — no ping, so we don't show as online
+  const ping = document.visibilityState !== "hidden";
+  try { await refreshSocial({ ping }); } catch { }
 }
 
 function startRealtime() {
@@ -1473,7 +1463,7 @@ function setupEventListeners() {
     const btn = $("btn-refresh-squad");
     btn.classList.add("spinning");
     lastSquadSignature = null;
-    try { await refreshSquad(); await refreshPending(); } catch { } finally { btn.classList.remove("spinning"); }
+    try { await refreshSquad(); } catch { } finally { btn.classList.remove("spinning"); }
   });
   $("btn-copy-invite").addEventListener("click", () => copyText($("invite-link").value, "Invite link"));
   $("net-retry").addEventListener("click", () => { hideNetError(); refreshSquad().catch(() => { }); });
@@ -1554,7 +1544,9 @@ function setupEventListeners() {
 document.addEventListener("DOMContentLoaded", async () => {
   await syncTokenFromSession();
   if (!getAccessToken()) {
-    window.location.href = "/";
+    // not logged in: remember which game they wanted, so they land on it after signing up
+    const wanted = new URLSearchParams(location.search).get("game");
+    window.location.href = wanted && /^[a-z0-9-]{2,20}$/.test(wanted) ? `/?game=${encodeURIComponent(wanted)}` : "/";
     return;
   }
   localStorage.removeItem("pm_last_squad_sig"); // old versions

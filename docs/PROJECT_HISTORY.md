@@ -67,7 +67,14 @@ people who already like you are flagged and sorted first in the deck; skipped pl
 reported players stay blocked, delete account); a logged-in blocked viewer gets 404 on the other's public profile;
 honest Block copy; "Like" instead of "Add to squad"; Report is an in-app form with reasons; squad shows "No contact
 added yet" and saving without IGN/Discord nudges; likes are idempotent and "mutual" is decided after the insert; fixed
-the squad list not redrawing after the last squadmate was removed (empty-signature bug). Phase 3: accounts table for usernames (H03), pinned deps + automated
+the squad list not redrawing after the last squadmate was removed (empty-signature bug). Phase 3 (same day):
+`db/migrations/001_accounts_and_constraints.sql` (accounts table = reserved username that survives removing every game,
+unique likes, indexes) — the code detects the table and falls back until the owner runs it; pinned requirements;
+pytest suite on an in-memory fake Supabase (tests/, 46 tests) + GitHub Actions; `/api/poll` replaces 4 requests per
+15-second tick (~18 → ~6 DB queries) and the public counters are cached; accessibility (focus moves into dialogs and
+back, aria-pressed/selected, live region for toasts, --faint contrast ≥ 4.5:1, password toggle label); Highlights
+placeholder and the disabled photo-upload button removed; profile pages get the player's name in <title>/OG tags and a
+real 404; the chosen game survives sign-up. Earlier phase-3 plan: accounts table for usernames (H03), pinned deps + automated
 tests + schema in repo (M14), fewer Supabase round trips (M08), accessibility (M13).
 
 ## Roadmap

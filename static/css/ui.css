@@ -21,7 +21,7 @@
 
   --text: #eef5f7;
   --muted: #8c9eac;
-  --faint: #5d6e7b;
+  --faint: #8090a0;   /* ≥ 4.5:1 on the panels (WCAG AA for small text) */
 
   --grad-cta: linear-gradient(90deg, var(--lime), var(--green) 55%, var(--cyan));
   --glow-green: 0 0 24px rgba(45, 255, 179, 0.35);
@@ -800,7 +800,7 @@ input::placeholder {
 }
 
 .ign-hidden::before {
-  content: "Operator_Name_BF";
+  content: "Operator_Name_BF" / "";   /* decorative blur only: hidden from screen readers */
   position: absolute;
   left: 18px;
   color: var(--muted);

@@ -5,9 +5,11 @@ Per-game profiles live in `profiles` (unique user_id + game); account-level data
 (bio, banner, avatar, links, referral) lives in the auth user's app_metadata["playmate"],
 which only the server (secret key) can write.
 """
+import html
 import logging
 import os
 import re
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -56,6 +58,7 @@ app = FastAPI(title="PlayMate")
 API_PREFIX = "/api"
 
 _SUPABASE_HOST = (os.getenv("SUPABASE_URL") or "").rstrip("/")
+PUBLIC_URL = (os.getenv("PUBLIC_URL") or "https://playmate-api-aamc.onrender.com").rstrip("/")
 # 'unsafe-inline' is still needed for a few inline onclick/onerror handlers; everything else is locked down
 CSP = "; ".join([
     "default-src 'self'",
@@ -255,12 +258,59 @@ def mutual_ids(user_id: str, game: str, blocked: set[str] | None = None) -> list
     return [str(r["from_user_id"]) for r in (in_res.data or []) if r.get("from_user_id") and str(r["from_user_id"]) not in blocked]
 
 
+_accounts_check = {"ok": False, "at": -1e9}
+
+
+def accounts_enabled() -> bool:
+    """True once db/migrations/001 (the accounts table) has been run. Until then the app keeps using the
+    username stored on game profiles. Re-checked every 5 minutes while the table is missing."""
+    if _accounts_check["ok"]:
+        return True
+    now = time.monotonic()
+    if now - _accounts_check["at"] < 300:
+        return False
+    _accounts_check["at"] = now
+    try:
+        supabase.table("accounts").select("user_id").limit(1).execute()
+        _accounts_check["ok"] = True
+    except Exception:
+        logger.info("accounts table not found yet — using profile usernames (run db/migrations/001)")
+    return _accounts_check["ok"]
+
+
+def account_row(user_id: str) -> dict | None:
+    if not accounts_enabled():
+        return None
+    res = supabase.table("accounts").select("username,display_username").eq("user_id", user_id).limit(1).execute()
+    return res.data[0] if res.data else None
+
+
 def user_id_for_username(username: str) -> str | None:
     u = (username or "").strip().lower()
     if not u:
         return None
+    if accounts_enabled():
+        res = supabase.table("accounts").select("user_id").eq("username", u).limit(1).execute()
+        if res.data:
+            return str(res.data[0]["user_id"])
     res = supabase.table("profiles").select("user_id").eq("username", u).limit(1).execute()
     return str(res.data[0]["user_id"]) if res.data and res.data[0].get("user_id") else None
+
+
+def claim_username(user_id: str, username: str, display_username: str) -> None:
+    """Reserve a username for this account for good (unique in the DB, so two sign-ups can't both get it)."""
+    if not accounts_enabled():
+        return
+    try:
+        supabase.table("accounts").insert(
+            {"user_id": user_id, "username": username, "display_username": display_username}).execute()
+    except Exception as e:
+        msg = str(e)
+        if "duplicate key" in msg and "username" in msg:
+            raise HTTPException(status_code=409, detail="This PlayMate username is already taken.")
+        if "duplicate key" in msg:
+            return   # this account already has a row (e.g. another tab saved first) — fine
+        raise
 
 
 def auth_user(user_id: str):
@@ -372,7 +422,28 @@ def ui_redirect():
 @app.get("/profile", response_class=HTMLResponse)
 @app.get("/u/{username}", response_class=HTMLResponse)
 def profile_page(username: str | None = None):
-    return page("profile.html")
+    """Profile page with the player's name in <title> and share previews (Discord/Telegram don't run JS)."""
+    name = (username or "").strip().lower()
+    if not USERNAME_RE.match(name):
+        return page("profile.html")   # /profile without a name: the page shows its own message
+    rows = supabase.table("profiles").select("username,display_username,game").eq("username", name).execute().data or []
+    if not rows:
+        return HTMLResponse((BASE_DIR / "404.html").read_text(encoding="utf-8"), status_code=404,
+                            headers={"Cache-Control": "no-cache"})
+    shown = rows[0].get("display_username") or rows[0]["username"]
+    games = ", ".join(GAMES[r["game"]]["name"] for r in rows if r.get("game") in GAMES)
+    title = f"{shown} on PlayMate"
+    desc = f"{shown} plays {games}. Find teammates by region, language and mic on PlayMate." if games \
+        else f"{shown} is on PlayMate — find teammates by region, language and mic."
+    url = f"{PUBLIC_URL}/u/{rows[0]['username']}"
+    t, d, u = html.escape(title), html.escape(desc), html.escape(url)
+    meta = (f'<title>{t}</title>\n  <meta name="description" content="{d}">\n'
+            f'  <meta property="og:type" content="profile">\n  <meta property="og:title" content="{t}">\n'
+            f'  <meta property="og:description" content="{d}">\n  <meta property="og:url" content="{u}">\n'
+            f'  <meta property="og:image" content="{PUBLIC_URL}/static/img/og-image.png">\n'
+            f'  <meta name="twitter:card" content="summary_large_image">')
+    body = (BASE_DIR / "profile.html").read_text(encoding="utf-8").replace("<title>PlayMate | Player profile</title>", meta, 1)
+    return HTMLResponse(body, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/settings", response_class=HTMLResponse)
@@ -417,9 +488,41 @@ def count_profiles(**filters) -> int:
     return q.execute().count or 0
 
 
+_cache: dict[str, tuple[float, object]] = {}
+
+
+def cached(key: str, seconds: float, compute):
+    """Tiny per-process cache for public numbers that don't need to be exact to the second."""
+    hit = _cache.get(key)
+    now = time.monotonic()
+    if hit and now - hit[0] < seconds:
+        return hit[1]
+    value = compute()
+    _cache[key] = (now, value)
+    return value
+
+
+def forget_counts() -> None:
+    """A profile was added/removed: drop cached counters so the next request recounts."""
+    for k in [k for k in _cache if k == "player_counts" or k.startswith("stats:")]:
+        _cache.pop(k, None)
+
+
+def player_counts() -> dict[str, int]:
+    """Profiles per game in one query (instead of one count per game), cached for a minute."""
+    def compute():
+        counts = {g: 0 for g in GAME_ORDER}
+        for r in supabase.table("profiles").select("game").execute().data or []:
+            if r.get("game") in counts:
+                counts[r["game"]] += 1
+        return counts
+    return cached("player_counts", 60, compute)
+
+
 @app.get(f"{API_PREFIX}/games")
 def list_games():
-    return {"games": [{**game_summary(g), "players": count_profiles(game=("eq", g))} for g in GAME_ORDER]}
+    counts = player_counts()
+    return {"games": [{**game_summary(g), "players": counts.get(g, 0)} for g in GAME_ORDER]}
 
 
 @app.get(f"{API_PREFIX}/meta/{{game}}")
@@ -431,15 +534,18 @@ def get_game_meta(game: str):
 def stats(game: str = DEFAULT_GAME, region: str | None = None):
     """Small 'the site is alive' numbers for empty states."""
     game = norm_game(game)
-    now_iso = now_utc().isoformat()
-    day_ago = (now_utc() - timedelta(days=1)).isoformat()
-    return {
-        "game": game,
-        "players": count_profiles(game=("eq", game)),
-        "in_region": count_profiles(game=("eq", game), region=("eq", region)) if region else 0,
-        "looking_now": count_profiles(game=("eq", game), looking_until=("gt", now_iso)),
-        "active_today": count_profiles(game=("eq", game), last_active=("gt", day_ago)),
-    }
+
+    def compute():
+        now_iso = now_utc().isoformat()
+        day_ago = (now_utc() - timedelta(days=1)).isoformat()
+        return {
+            "game": game,
+            "players": player_counts().get(game, 0),
+            "in_region": count_profiles(game=("eq", game), region=("eq", region)) if region else 0,
+            "looking_now": count_profiles(game=("eq", game), looking_until=("gt", now_iso)),
+            "active_today": count_profiles(game=("eq", game), last_active=("gt", day_ago)),
+        }
+    return cached(f"stats:{game}:{region or ''}", 20, compute)
 
 
 # =========================================================
@@ -467,23 +573,30 @@ def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)
     game = norm_game(profile.game)
     g = GAMES[game]
 
-    # username: locked once chosen (same name in every game)
+    # username: locked once chosen (same name in every game, kept even if every game is removed)
     existing = my_profile_row(user_id, game, "username,display_username,game_meta")
     if not existing:
         any_game = supabase.table("profiles").select("username,display_username,game_meta").eq("user_id", user_id).limit(1).execute()
         existing = any_game.data[0] if any_game.data else None
-    if existing:
+    account = account_row(user_id)
+    needs_claim = False
+    if account:
+        username, display_username, locked = account["username"], account.get("display_username") or account["username"], True
+    elif existing:
         username = (existing.get("username") or "").strip().lower()
         display_username = existing.get("display_username") or username
         locked = True
+        needs_claim = True   # an older player without an accounts row yet
     else:
         raw = (profile.username or "").strip()
         if not USERNAME_RE.match(raw):
             raise HTTPException(status_code=422, detail="Username must be 3-24 characters: letters, numbers, _ . -")
         taken = supabase.table("profiles").select("user_id").eq("username", raw.lower()).neq("user_id", user_id).limit(1).execute()
-        if taken.data:
+        owner = user_id_for_username(raw)
+        if taken.data or (owner and owner != user_id):
             raise HTTPException(status_code=409, detail="This PlayMate username is already taken.")
         username, display_username, locked = raw.lower(), raw, False
+        needs_claim = True
 
     # common fields
     missing = []
@@ -542,6 +655,8 @@ def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)
         if f.get("column"):
             payload[f["column"]] = fields.get(f["id"])
 
+    if needs_claim:
+        claim_username(user_id, username, display_username)
     try:
         result = supabase.table("profiles").upsert(payload, on_conflict="user_id,game").execute()
     except Exception as e:
@@ -552,6 +667,7 @@ def save_profile(profile: ProfileIn, user_id: str = Depends(get_current_user_id)
             raise HTTPException(status_code=409, detail="This username is already taken.")
         raise
     saved = result.data[0] if result.data else payload
+    forget_counts()
     return {"status": "saved", "locked_username": locked, "data": saved}
 
 
@@ -562,6 +678,7 @@ def delete_game_profile(game: str, user_id: str = Depends(get_current_user_id)):
     supabase.table("likes").delete().eq("from_user_id", user_id).eq("game", game).execute()
     supabase.table("likes").delete().eq("to_user_id", user_id).eq("game", game).execute()
     supabase.table("profiles").delete().eq("user_id", user_id).eq("game", game).execute()
+    forget_counts()
     return {"status": "deleted", "game": game}
 
 
@@ -581,10 +698,10 @@ def my_profile(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user
 @app.get(f"{API_PREFIX}/my-games")
 def my_games(user_id: str = Depends(get_current_user_id)):
     rows = supabase.table("profiles").select("game,username,display_username").eq("user_id", user_id).execute().data or []
-    username = rows[0]["username"] if rows else None
+    account = account_row(user_id)
     return {
-        "username": username,
-        "display_username": rows[0].get("display_username") if rows else None,
+        "username": account["username"] if account else (rows[0]["username"] if rows else None),
+        "display_username": account["display_username"] if account else (rows[0].get("display_username") if rows else None),
         "games": [r["game"] for r in rows if r.get("game") in GAMES],
     }
 
@@ -803,84 +920,71 @@ def unmatch(to_user: str, game: str = DEFAULT_GAME, user_id: str = Depends(get_c
     return {"status": "unmatched", "game": game}
 
 
+def social_state(user_id: str, game: str) -> dict:
+    """Squad, pending likes and "liked you" for one game, from just 4 queries
+    (my likes, likes to me, blocks, and one profiles lookup for everyone involved)."""
+    out_rows = supabase.table("likes").select("to_user_id,created_at").eq("from_user_id", user_id).eq("game", game).execute().data or []
+    in_rows = supabase.table("likes").select("from_user_id,created_at").eq("to_user_id", user_id).eq("game", game).execute().data or []
+    i_liked = {str(r["to_user_id"]): r.get("created_at") for r in out_rows if r.get("to_user_id")}
+    liked_me = {str(r["from_user_id"]): r.get("created_at") for r in in_rows if r.get("from_user_id")}
+    blocked = get_blocked_ids(user_id) if (i_liked or liked_me) else set()
+    mutual = {u for u in i_liked if u in liked_me and u not in blocked}
+    pending = {u for u in i_liked if u not in liked_me and u not in blocked}
+    incoming = {u for u in liked_me if u not in i_liked and u not in blocked}
+    everyone = mutual | pending | incoming
+    rows = supabase.table("profiles").select("*").eq("game", game).in_("user_id", list(everyone)).execute().data or [] if everyone else []
+
+    squad, waiting, liked_you = [], [], []
+    for p in rows:
+        uid = str(p["user_id"])
+        v = public_view(p)
+        if uid in mutual:
+            # mutual squadmates may see how to reach each other
+            v["in_game_username"] = p.get("in_game_username")
+            v["discord_username"] = p.get("discord_username")
+            squad.append(v)
+        elif uid in pending:
+            waiting.append({"username": v["username"], "display_username": v["display_username"], "region": v["region"],
+                            "avatar": v["avatar"], "last_active": v["last_active"], "liked_at": i_liked.get(uid)})
+        elif uid in incoming:
+            v["liked_at"] = liked_me.get(uid)
+            liked_you.append(v)
+    waiting.sort(key=lambda x: x.get("liked_at") or "", reverse=True)
+    liked_you.sort(key=lambda x: x.get("liked_at") or "", reverse=True)
+    return {"squadmates": squad, "pending": waiting, "incoming": liked_you}
+
+
+@app.get(f"{API_PREFIX}/poll")
+def poll(game: str = DEFAULT_GAME, ping: bool = False, user_id: str = Depends(get_current_user_id)):
+    """Everything the app refreshes every few seconds, in one request: marks me active (ping=1),
+    and returns my squad (with contacts), my pending likes and who liked me."""
+    game = norm_game(game)
+    me = require_profile(user_id, game, "username")
+    if ping:
+        supabase.table("profiles").update({"last_active": now_utc().isoformat()}).eq("user_id", user_id).eq("game", game).execute()
+    return {"username": me.get("username"), "game": game, **social_state(user_id, game)}
+
+
 @app.get(f"{API_PREFIX}/incoming-likes")
 def incoming_likes(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user_id)):
     """People who liked me in this game and I haven't answered yet (no contact info: not mutual)."""
     game = norm_game(game)
     require_profile(user_id, game, "username")
-    in_res = supabase.table("likes").select("from_user_id,created_at").eq("to_user_id", user_id).eq("game", game).execute()
-    liked_me_at = {str(r["from_user_id"]): r.get("created_at") for r in (in_res.data or []) if r.get("from_user_id")}
-    if not liked_me_at:
-        return {"game": game, "incoming": []}
-    out_res = supabase.table("likes").select("to_user_id").eq("from_user_id", user_id).eq("game", game).execute()
-    answered = {str(r["to_user_id"]) for r in (out_res.data or [])}
-    blocked = get_blocked_ids(user_id)
-    ids = [uid for uid in liked_me_at if uid not in answered and uid not in blocked]
-    if not ids:
-        return {"game": game, "incoming": []}
-    rows = supabase.table("profiles").select("*").eq("game", game).in_("user_id", ids).execute().data or []
-    incoming = []
-    for p in rows:
-        v = public_view(p)
-        v["liked_at"] = liked_me_at.get(str(p["user_id"]))
-        incoming.append(v)
-    incoming.sort(key=lambda x: x.get("liked_at") or "", reverse=True)
-    return {"game": game, "incoming": incoming}
+    return {"game": game, "incoming": social_state(user_id, game)["incoming"]}
 
 
 @app.get(f"{API_PREFIX}/my-squad-details")
 def my_squad_details(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user_id)):
     game = norm_game(game)
     me = require_profile(user_id, game, "username")
-    blocked = get_blocked_ids(user_id)
-    ids = mutual_ids(user_id, game, blocked)
-    if not ids:
-        return {"username": me.get("username"), "game": game, "squadmates": []}
-
-    rows = (
-        supabase.table("profiles")
-        .select("*").eq("game", game).in_("user_id", ids).execute().data or []
-    )
-    mates = []
-    for p in rows:
-        v = public_view(p)
-        # mutual squadmates may see how to reach each other
-        v["in_game_username"] = p.get("in_game_username")
-        v["discord_username"] = p.get("discord_username")
-        mates.append(v)
-    return {"username": me.get("username"), "game": game, "squadmates": mates}
+    return {"username": me.get("username"), "game": game, "squadmates": social_state(user_id, game)["squadmates"]}
 
 
 @app.get(f"{API_PREFIX}/pending-likes")
 def pending_likes(game: str = DEFAULT_GAME, user_id: str = Depends(get_current_user_id)):
     """People I liked who haven't liked me back yet (no in-game name: not mutual)."""
     game = norm_game(game)
-    out_res = supabase.table("likes").select("to_user_id,created_at").eq("from_user_id", user_id).eq("game", game).execute()
-    liked_at = {str(r["to_user_id"]): r.get("created_at") for r in (out_res.data or []) if r.get("to_user_id")}
-    if not liked_at:
-        return {"game": game, "pending": []}
-
-    mutual = set(mutual_ids(user_id, game))
-    blocked = get_blocked_ids(user_id)
-    pending_ids = [uid for uid in liked_at if uid not in mutual and uid not in blocked]
-    if not pending_ids:
-        return {"game": game, "pending": []}
-
-    rows = (
-        supabase.table("profiles")
-        .select("user_id,username,display_username,region,last_active,looking_until,game_meta")
-        .eq("game", game).in_("user_id", pending_ids).execute().data or []
-    )
-    pending = [{
-        "username": p.get("username"),
-        "display_username": p.get("display_username") or p.get("username"),
-        "region": p.get("region"),
-        "avatar": profile_avatar(p),
-        "last_active": p.get("last_active"),
-        "liked_at": liked_at.get(str(p["user_id"])),
-    } for p in rows]
-    pending.sort(key=lambda x: x.get("liked_at") or "", reverse=True)
-    return {"game": game, "pending": pending}
+    return {"game": game, "pending": social_state(user_id, game)["pending"]}
 
 
 class BlockRequest(BaseModel):
@@ -966,14 +1070,15 @@ def my_account_payload(user_id: str) -> dict:
     if not user:
         raise HTTPException(status_code=404, detail="Account not found")
     games = supabase.table("profiles").select("game,username,display_username").eq("user_id", user_id).execute().data or []
-    username = games[0]["username"] if games else None
+    account = account_row(user_id)
+    username = account["username"] if account else (games[0]["username"] if games else None)
     blocked = get_blocked_ids(user_id)
     mutual_count = sum(len(mutual_ids(user_id, r["game"], blocked)) for r in games)
     referrals = int(((getattr(user, "app_metadata", None) or {}).get("playmate") or {}).get("referral_count") or 0)
     return {
         **account_data(user),
         "username": username,
-        "display_username": games[0].get("display_username") if games else None,
+        "display_username": (account or {}).get("display_username") or (games[0].get("display_username") if games else None),
         "member_since": getattr(user, "created_at", None),
         "games": [r["game"] for r in games],
         "squad_count": mutual_count,
@@ -1036,6 +1141,8 @@ def delete_account(req: DeleteAccountRequest, user_id: str = Depends(get_current
     supabase.table("blocks").delete().eq("blocker_id", user_id).execute()
     supabase.table("blocks").delete().eq("blocked_id", user_id).execute()
     supabase.table("profiles").delete().eq("user_id", user_id).execute()
+    if accounts_enabled():
+        supabase.table("accounts").delete().eq("user_id", user_id).execute()
     try:
         supabase.auth.admin.delete_user(user_id)
     except Exception:

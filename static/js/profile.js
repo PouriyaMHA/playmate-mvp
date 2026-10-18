@@ -127,9 +127,9 @@ function render() {
     </section>
 
     <nav class="pp-tabs" role="tablist">
-      ${["games", "achievements", "highlights", "squad"].map(t => `<button type="button" role="tab" data-tab="${t}" class="${page.tab === t ? "active" : ""}">${t[0].toUpperCase() + t.slice(1)}${t === "games" ? ` <span class="count">${d.games.length}</span>` : t === "achievements" ? ` <span class="count">${earned.length}/${(d.badges || []).length}</span>` : ""}</button>`).join("")}
+      ${["games", "achievements", "squad"].map(t => `<button type="button" role="tab" data-tab="${t}" aria-selected="${page.tab === t}" aria-controls="pp-tab-body" class="${page.tab === t ? "active" : ""}">${t[0].toUpperCase() + t.slice(1)}${t === "games" ? ` <span class="count">${d.games.length}</span>` : t === "achievements" ? ` <span class="count">${earned.length}/${(d.badges || []).length}</span>` : ""}</button>`).join("")}
     </nav>
-    <section class="pp-tab-body" id="pp-tab-body"></section>`;
+    <section class="pp-tab-body" id="pp-tab-body" role="tabpanel"></section>`;
 
   renderTab();
 }
@@ -137,7 +137,10 @@ function render() {
 function renderTab() {
   const d = page.data;
   const body = $("pp-tab-body");
-  document.querySelectorAll(".pp-tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === page.tab));
+  document.querySelectorAll(".pp-tabs button").forEach(b => {
+    b.classList.toggle("active", b.dataset.tab === page.tab);
+    b.setAttribute("aria-selected", String(b.dataset.tab === page.tab));
+  });
 
   if (page.tab === "games") {
     body.innerHTML = `<div class="pp-games">
@@ -176,22 +179,6 @@ function renderTab() {
           <div><b>${esc(b.label)}</b><span>${esc(b.earned ? b.desc : (b.desc === "Coming soon" ? "Coming soon" : "Locked · " + b.desc))}</span></div>
         </div>`).join("")}
     </div>`;
-  }
-
-  if (page.tab === "highlights") {
-    body.innerHTML = `
-      <div class="pp-soon">
-        <div class="pp-soon-head">
-          <div>
-            <h3>Highlights</h3>
-            <p>Show off your best clips and screenshots. ${page.isOwner ? "Uploading is coming soon." : "Coming soon."}</p>
-          </div>
-          ${page.isOwner ? `<button type="button" class="btn-secondary" disabled>${icon("upload")}Upload <span class="soon">Soon</span></button>` : ""}
-        </div>
-        <div class="pp-highlights">
-          ${[1, 2, 3, 4, 5, 6].map(i => `<div class="pp-hl ${i % 3 === 1 ? "video" : ""}">${icon(i % 3 === 1 ? "play" : "image")}</div>`).join("")}
-        </div>
-      </div>`;
   }
 
   if (page.tab === "squad") {
@@ -235,10 +222,10 @@ function openEdit() {
   const name = page.data.display_username || page.data.username;
 
   $("avatar-pick").innerHTML =
-    `<button type="button" data-avatar="" class="${!a.avatar ? "active" : ""}" title="Initial"><div class="avatar-face" style="--hue:${hue(name)}">${esc(initial(name))}</div></button>` +
-    avatars.map(id => `<button type="button" data-avatar="${id}" class="${a.avatar === id ? "active" : ""}"><img src="${avatarSrc(id)}" alt="" loading="lazy"></button>`).join("");
+    `<button type="button" data-avatar="" class="${!a.avatar ? "active" : ""}" title="Initial" aria-label="Use my initial" aria-pressed="${!a.avatar}"><div class="avatar-face" style="--hue:${hue(name)}">${esc(initial(name))}</div></button>` +
+    avatars.map(id => `<button type="button" data-avatar="${id}" class="${a.avatar === id ? "active" : ""}" aria-label="Avatar ${id.split("-")[1]}" aria-pressed="${a.avatar === id}"><img src="${avatarSrc(id)}" alt="" loading="lazy"></button>`).join("");
   $("banner-pick").innerHTML = banners.map(id =>
-    `<button type="button" data-banner="${id}" class="${a.banner === id ? "active" : ""}"><img src="/static/img/banners/${id}.svg" alt=""></button>`).join("");
+    `<button type="button" data-banner="${id}" class="${a.banner === id ? "active" : ""}" aria-label="Banner ${id.split("-")[1]}" aria-pressed="${a.banner === id}"><img src="/static/img/banners/${id}.svg" alt=""></button>`).join("");
   $("edit-bio").value = a.bio || "";
   $("bio-count").textContent = `${(a.bio || "").length}/280`;
   ["twitch", "youtube", "instagram"].forEach(k => { $(`link-${k}`).value = (a.links || {})[k] || ""; });
@@ -304,9 +291,9 @@ document.addEventListener("click", async (e) => {
     return;
   }
   const av = t.closest("[data-avatar]");
-  if (av) { $("avatar-pick").querySelectorAll("button").forEach(b => b.classList.toggle("active", b === av)); return; }
+  if (av) { $("avatar-pick").querySelectorAll("button").forEach(b => { b.classList.toggle("active", b === av); b.setAttribute("aria-pressed", String(b === av)); }); return; }
   const bn = t.closest("[data-banner]");
-  if (bn) { $("banner-pick").querySelectorAll("button").forEach(b => b.classList.toggle("active", b === bn)); return; }
+  if (bn) { $("banner-pick").querySelectorAll("button").forEach(b => { b.classList.toggle("active", b === bn); b.setAttribute("aria-pressed", String(b === bn)); }); return; }
   if (t.closest("#edit-close") || t.closest("#edit-cancel") || t === $("edit-modal")) return closeEdit();
   if (t.closest("#edit-save")) return saveEdit();
   const rm = t.closest("[data-remove-game]");

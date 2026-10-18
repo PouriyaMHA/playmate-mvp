@@ -1,6 +1,7 @@
-fastapi
-uvicorn[standard]
-python-dotenv
-supabase
-PyJWT
-httpx
+# Exact versions that are tested and running in production (update on purpose, then run the tests).
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
+python-dotenv==1.2.4
+supabase==2.32.0
+PyJWT==2.15.1
+httpx==0.28.1

@@ -9,8 +9,13 @@ Full background, decisions and open issues: `docs/PROJECT_HISTORY.md`. Raw ChatG
 - `games.py` — supported games: platforms, in-game-name label and per-game field templates. Adding a game = add an entry + art in `static/img/games/<id>.svg` and `<id>-icon.svg`; optional official cover `static/img/games/photos/<id>.jpg` (960×540, used when present, SVG is the fallback — bump `COVER_VERSION` when one changes).
 - `static/css` `static/js` — one CSS/JS pair per page (`ui.*`, `profile.*`, `landing.*`; `ui.css` holds the shared tokens). Bump `?v=` in the HTML when you change them.
 - `static/img` — original SVG art (games, banners, avatars, badges, logo); `tools/gen_art.py` regenerates it.
-- Data: `profiles` (one row per user + game; game-specific values in `game_meta.fields`), `likes`, `blocks` (RLS on, server uses the secret key). Account data (bio, banner, avatar, links, referral) lives in the auth user's `app_metadata.playmate` (only the server can write it).
+- Data: `accounts` (one row per user: the reserved username — after migration 001), `profiles` (one row per user + game; game-specific values in `game_meta.fields`), `likes`, `blocks` (RLS on, server uses the secret key). The app refreshes squad/pending/"liked you" with one `GET /api/poll` every 15 s. Account data (bio, banner, avatar, links, referral) lives in the auth user's `app_metadata.playmate` (only the server can write it).
 - Run locally: `uvicorn main:app --reload` (needs `.env` with SUPABASE_URL, SUPABASE_KEY, SUPABASE_JWT_SECRET).
+- Tests: `python -m pytest` (installs from `requirements-dev.txt`). They run against an in-memory fake DB (`tests/fakedb.py`) —
+  never the real Supabase — and run in GitHub Actions on every push (`.github/workflows/tests.yml`). Add a test with every change.
+- Database changes: SQL files in `db/migrations/` (numbered), run by the owner in Supabase → SQL Editor. Code must keep
+  working before a migration is applied (see `accounts_enabled()`); the fake DB mirrors the unique constraints.
+- `requirements.txt` pins exact versions; upgrade on purpose and run the tests.
 
 ## Rules
 - Identity comes from the JWT `user_id`, never from request bodies or query params.
