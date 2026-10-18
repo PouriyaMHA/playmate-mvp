@@ -9,13 +9,19 @@ _DATA = [
     ("na-west", "North America West", [
         ("United States", ["Los Angeles", "San Francisco", "Seattle", "San Diego", "Las Vegas", "Phoenix", "Denver",
                            "Portland", "Salt Lake City", "San Jose"]),
-        ("Canada", ["Vancouver", "Calgary", "Edmonton", "Victoria"]),
+        # BC + Alberta (Pacific / Mountain time) play on West servers
+        ("Canada", ["Vancouver", "Calgary", "Edmonton", "Victoria", "Surrey", "Burnaby", "Richmond", "Kelowna",
+                    "Abbotsford", "Kamloops", "Nanaimo", "Prince George", "Red Deer", "Lethbridge"]),
         ("Mexico", ["Tijuana", "Guadalajara", "Monterrey"]),
     ]),
     ("na-east", "North America East", [
         ("United States", ["New York", "Chicago", "Miami", "Atlanta", "Boston", "Dallas", "Houston", "Washington DC",
                            "Philadelphia", "Detroit", "Orlando", "Austin"]),
-        ("Canada", ["Toronto", "Montreal", "Ottawa", "Quebec City", "Winnipeg", "Halifax"]),
+        # Prairies (Central time) and everything east of them play on Central / East servers
+        ("Canada", ["Toronto", "Montreal", "Ottawa", "Mississauga", "Brampton", "Hamilton", "London", "Kitchener",
+                    "Waterloo", "Windsor", "Markham", "Vaughan", "Oshawa", "Barrie", "Guelph", "Sudbury",
+                    "Quebec City", "Laval", "Gatineau", "Longueuil", "Sherbrooke", "Winnipeg", "Saskatoon", "Regina",
+                    "Halifax", "Moncton", "Fredericton", "Saint John", "Charlottetown", "St. John's"]),
     ]),
     ("eu-west", "Europe West", [
         ("United Kingdom", ["London", "Manchester", "Birmingham", "Liverpool", "Leeds", "Glasgow", "Edinburgh", "Bristol"]),
