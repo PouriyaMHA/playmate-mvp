@@ -27,8 +27,11 @@ jobs:
       - run: python -m playwright install --with-deps chromium
       - name: Tests (fake DB + real-browser)
         run: |
-          python -m pytest -rs | tee out.txt
+          set +e
+          python -m pytest -rs | tee out.txt; code=${PIPESTATUS[0]}
           echo "::notice title=tests::$(tail -1 out.txt)"
+          grep -E "^(FAILED|ERROR)|^E  " out.txt | head -30 | while read -r l; do echo "::error title=tests::$l"; done
+          exit $code
       - name: JavaScript syntax check
         run: for f in static/js/*.js; do node --check "$f"; done
 
@@ -70,6 +73,8 @@ jobs:
           docker logs postgrest
       - name: Integration tests (must not be skipped)
         run: |
-          python -m pytest tests/test_integration_pg.py -v -rs | tee out.txt
+          set +e
+          python -m pytest tests/test_integration_pg.py -v -rs | tee out.txt; code=${PIPESTATUS[0]}
           echo "::notice title=integration::$(tail -1 out.txt)"
-          ! grep -q "SKIPPED" out.txt
+          grep -E "^(FAILED|ERROR)|^E  " out.txt | head -30 | while read -r l; do echo "::error title=integration::$l"; done
+          [ "$code" -eq 0 ] && ! grep -q "SKIPPED" out.txt
