@@ -110,14 +110,17 @@ def clean_optional_text(value, field: str) -> str | None:
 
 
 def profile_fields(p: dict) -> dict:
-    """Game-specific field values of a profile row (with Battlefield's old columns as fallback)."""
-    fields = dict(((p.get("game_meta") or {}).get("fields")) or {})
+    """Game-specific field values of a profile row, in the game's field order (with Battlefield's old columns
+    as fallback). Values of fields the game no longer has (e.g. a removed "role") are left out."""
+    stored = ((p.get("game_meta") or {}).get("fields")) or {}
     g = GAMES.get(p.get("game") or "")
-    if g:
-        for f in g["fields"]:
-            col = f.get("column")
-            if col and not fields.get(f["id"]) and p.get(col):
-                fields[f["id"]] = p[col]
+    if not g:
+        return dict(stored)
+    fields = {}
+    for f in g["fields"]:
+        v = stored.get(f["id"]) or (p.get(f["column"]) if f.get("column") else None)
+        if v:
+            fields[f["id"]] = v
     return fields
 
 
@@ -522,6 +525,9 @@ class MatchRequest(BaseModel):
     looking_only: bool = False
 
 
+FLEX_VALUES = {"Fill", "Any"}
+
+
 def score_pair(me: dict, other: dict, game: str) -> tuple[int, list[str]]:
     g = GAMES[game]
     score, reasons = 0, []
@@ -548,8 +554,15 @@ def score_pair(me: dict, other: dict, game: str) -> tuple[int, list[str]]:
 
     mine, theirs = profile_fields(me), profile_fields(other)
     for f in g["fields"]:
-        v = mine.get(f["id"])
-        if v and theirs.get(f["id"]) == v:
+        v, w = mine.get(f["id"]), theirs.get(f["id"])
+        if not v or not w:
+            continue
+        if f.get("match") == "diff":
+            # roles/positions: a squad wants different ones ("Fill"/"Any" fits with everyone)
+            if v != w or v in FLEX_VALUES:
+                score += f["weight"]
+                reasons.append(f"Complementary {f['label'].lower()}: you {v}, them {w}")
+        elif v == w:
             score += f["weight"]
             reasons.append(f"Same {f['label'].lower()}: {v}")
 

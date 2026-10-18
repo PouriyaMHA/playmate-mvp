@@ -358,6 +358,88 @@ def scene_helldivers(a):
     return s, defs
 
 
+def scene_fc(a):
+    defs = (f'<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#06111a"/>'
+            f'<stop offset="1" stop-color="{mix(a, BG0, .7)}"/></linearGradient>'
+            f'<linearGradient id="pitch" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d3a24"/>'
+            f'<stop offset="1" stop-color="#06180f"/></linearGradient>'
+            f'<linearGradient id="beam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{TEXT}" stop-opacity=".35"/>'
+            f'<stop offset="1" stop-color="{TEXT}" stop-opacity="0"/></linearGradient>')
+    stripes = "".join(f'<path d="M{120 + i * 80} 360L{250 + i * 56} 190H{278 + i * 56}L{200 + i * 80} 360Z" fill="#fff" opacity=".035"/>' for i in range(7))
+    crowd = "".join(f'<circle cx="{x}" cy="{150 + (x * 7) % 9}" r="3"/>' for x in range(150, 640, 9))
+
+    def light(x):
+        return (f'<path d="M{x - 18} 40L{x - 140} 200H{x + 140}Z" fill="url(#beam)" opacity=".5"/>'
+                f'<rect x="{x - 22}" y="28" width="44" height="16" rx="3" fill="#0b1219" stroke="{TEXT}" stroke-opacity=".5"/>'
+                + "".join(f'<circle cx="{f1(x - 14 + k * 9.5)}" cy="36" r="3" fill="{TEXT}" filter="url(#gl)"/>' for k in range(4)))
+    s = (f'<rect width="640" height="360" fill="url(#sky)"/>'
+         f'{light(300)}{light(560)}'
+         f'<path d="M140 190Q390 120 640 150V200H140Z" fill="#0b141c"/><g fill="{a}" opacity=".35">{crowd}</g>'
+         f'<path d="M80 360L250 190H640V360Z" fill="url(#pitch)"/>{stripes}'
+         f'<g fill="none" stroke="{TEXT}" stroke-opacity=".45" stroke-width="2">'
+         f'<path d="M250 190H640"/><path d="M330 360L410 190"/><ellipse cx="470" cy="262" rx="70" ry="22"/></g>'
+         f'<g fill="none" stroke="{TEXT}" stroke-width="4" stroke-linejoin="round"><path d="M520 196V140H624V196"/></g>'
+         f'<path d="M520 140H624V196H520Z" fill="{TEXT}" opacity=".06"/>'
+         f'<g stroke="{TEXT}" stroke-opacity=".18">' + "".join(f'<path d="M{x} 140V196"/>' for x in range(530, 624, 10)) + '</g>'
+         f'<g transform="translate(400 270)" filter="url(#gl)"><circle r="22" fill="{TEXT}"/>'
+         f'<path d="M0 -9L8.5 -2.8 5.3 7.3H-5.3L-8.5 -2.8Z" fill="#0b1219"/>'
+         f'<path d="M0 -9V-21M8.5 -2.8L19 -7M5.3 7.3L12 17M-5.3 7.3L-12 17M-8.5 -2.8L-19 -7" stroke="#0b1219" stroke-width="2"/></g>'
+         f'<path d="M378 280Q300 300 220 292" stroke="{a}" stroke-width="3" fill="none" stroke-dasharray="4 8" opacity=".8"/>'
+         f'{stand(250, 200, .9, "#05080b", a)}')
+    return s, defs
+
+
+def scene_gta(a):
+    defs = (f'<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a0d2e"/>'
+            f'<stop offset=".55" stop-color="{mix(a, "#ff8a3d", .35)}"/><stop offset="1" stop-color="#ffb547"/></linearGradient>')
+    sun_lines = "".join(f'<rect x="380" y="{150 + k * 12}" width="200" height="{3 + k}" fill="url(#sky)"/>' for k in range(6))
+    sky = ("M150 360V250H178V200H200V180H220V230H246V150H262V120H276V150H292V236H320V196H344V172H360V214H390"
+           "V160H414V110H426V160H446V220H476V190H500V232H530V170H556V140H572V170H588V226H612V204H640V360Z")
+    wins = "".join(f'<rect x="{x}" y="{y}" width="3" height="4"/>' for x in range(250, 290, 8) for y in range(160, 230, 12)) + \
+        "".join(f'<rect x="{x}" y="{y}" width="3" height="4"/>' for x in range(396, 440, 8) for y in range(122, 210, 12))
+
+    def palm(x, y, s):
+        return (f'<g transform="translate({x} {y}) scale({s})" fill="#07040c"><path d="M-3 0Q4 -60 2 -110H8Q12 -60 5 0Z"/>'
+                f'<path d="M5 -110Q-30 -120 -60 -90Q-30 -108 5 -104Z"/><path d="M5 -110Q40 -124 70 -96Q38 -110 5 -104Z"/>'
+                f'<path d="M5 -110Q-10 -140 -40 -146Q-14 -130 2 -106Z"/><path d="M5 -110Q24 -142 54 -140Q26 -128 8 -106Z"/>'
+                f'<path d="M5 -110Q-26 -96 -44 -60Q-20 -92 5 -104Z"/></g>')
+    s = (f'<rect width="640" height="360" fill="url(#sky)"/>'
+         f'<circle cx="480" cy="180" r="92" fill="#ffd27a" opacity=".9"/>{sun_lines}'
+         f'<path d="{sky}" fill="#0b0614"/><g fill="{AMBER}" opacity=".7">{wins}</g>'
+         f'<path d="M150 300H640V360H150Z" fill="#06030a"/>'
+         f'<path d="M150 318H640" stroke="{a}" stroke-width="2" stroke-dasharray="20 14" opacity=".7"/>'
+         f'<g transform="translate(330 268)"><path d="M0 30L14 12Q30 0 70 0H120Q150 0 168 16L196 22Q210 26 210 36V44H0Z" fill="#0d0716" stroke="{a}" stroke-width="2"/>'
+         f'<path d="M40 14Q52 4 76 4H112Q136 4 150 16Z" fill="{a}" opacity=".35"/>'
+         f'<circle cx="44" cy="44" r="14" fill="#06030a" stroke="{a}" stroke-width="2"/><circle cx="164" cy="44" r="14" fill="#06030a" stroke="{a}" stroke-width="2"/>'
+         f'<path d="M206 30H214" stroke="{AMBER}" stroke-width="4" filter="url(#gl)"/></g>'
+         f'{palm(190, 300, 1)}{palm(610, 300, .8)}')
+    return s, defs
+
+
+def scene_rocket(a):
+    rnd = random.Random(11)
+    defs = (f'<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#060c1c"/>'
+            f'<stop offset="1" stop-color="{mix(a, BG0, .6)}"/></linearGradient>'
+            f'<linearGradient id="boost" x1="1" y1="0" x2="0" y2="0"><stop offset="0" stop-color="{AMBER}"/>'
+            f'<stop offset=".4" stop-color="{a}" stop-opacity=".8"/><stop offset="1" stop-color="{a}" stop-opacity="0"/></linearGradient>')
+    stars = "".join(f'<circle cx="{rnd.randint(150, 640)}" cy="{rnd.randint(10, 120)}" r="{rnd.choice([.8, 1.2, 1.6])}"/>' for _ in range(30))
+    hexes = "".join(f'<path d="M{x} {y}l10 -6 10 6v12l-10 6 -10 -6z"/>' for x in range(150, 640, 24) for y in (40, 58) if (x // 24 + y) % 2)
+    s = (f'<rect width="640" height="360" fill="url(#sky)"/><g fill="{TEXT}" opacity=".6">{stars}</g>'
+         f'<g fill="none" stroke="{a}" stroke-opacity=".18">{hexes}</g>'
+         f'<path d="M150 130Q395 96 640 130V250H150Z" fill="#0a1426" stroke="{a}" stroke-opacity=".35"/>'
+         f'<path d="M100 360L190 230H640V360Z" fill="#0b1a2e"/>'
+         f'<g fill="none" stroke="{a}" stroke-opacity=".5" stroke-width="2"><path d="M190 230H640"/><path d="M380 360L420 230"/>'
+         f'<ellipse cx="470" cy="292" rx="80" ry="24"/></g>'
+         f'<g transform="translate(520 120)" filter="url(#gl2)"><circle r="40" fill="#cfd8e3"/>'
+         f'<g fill="none" stroke="#7f8ea3" stroke-width="3"><path d="M-40 0H40M0 -40V40"/><ellipse rx="40" ry="16"/><ellipse rx="16" ry="40"/></g></g>'
+         f'<g transform="translate(300 228) rotate(-12)"><rect x="-150" y="8" width="150" height="16" rx="8" fill="url(#boost)" filter="url(#bl2)"/>'
+         f'<path d="M0 26L10 6Q20 0 48 0H96Q120 0 132 12L150 16Q160 20 160 28V36H0Z" fill="#0d1626" stroke="{a}" stroke-width="2.5"/>'
+         f'<path d="M34 8Q44 2 62 2H92Q108 2 118 12Z" fill="{a}" opacity=".45"/>'
+         f'<circle cx="34" cy="38" r="12" fill="#05080f" stroke="{a}" stroke-width="2"/><circle cx="128" cy="38" r="12" fill="#05080f" stroke="{a}" stroke-width="2"/></g>'
+         f'<path d="M380 196Q450 140 486 136" stroke="{TEXT}" stroke-width="2" stroke-dasharray="3 7" fill="none" opacity=".6"/>')
+    return s, defs
+
+
 def scene_default(a):
     pad = ("M-100 -30C-100 -55 -80 -60 -60 -60H60C80 -60 100 -55 100 -30L118 40C124 66 100 80 82 64L56 40H-56L-82 64"
            "C-100 80 -124 66 -118 40Z")
@@ -381,6 +463,9 @@ GAMES = [
     ("minecraft", "Minecraft", "Sandbox", "#5bd65b", scene_minecraft, "MC"),
     ("lol", "League of Legends", "MOBA", "#4fc3f7", scene_lol, "LOL"),
     ("helldivers2", "Helldivers 2", "Co-op shooter", "#ffd23f", scene_helldivers, "HD2"),
+    ("fc", "EA SPORTS FC 26", "Football", "#3fe0c5", scene_fc, "FC"),
+    ("gta", "GTA Online", "Open-world crime", "#ff5fa2", scene_gta, "GTA"),
+    ("rocket-league", "Rocket League", "Car soccer", "#3b8bff", scene_rocket, "RL"),
     ("default", "Game", "Any genre", GREEN, scene_default, "GG"),
 ]
 
@@ -394,6 +479,9 @@ MOTIF = {
     "minecraft": '<path d="M100 14L112 20V34L100 40L88 34V20Z"/>',
     "lol": '<path d="M100 12L109 28L100 44L91 28Z"/>',
     "helldivers2": '<path d="M95 14H105L108 34L100 42L92 34Z"/>',
+    "fc": '<circle cx="100" cy="28" r="11" fill="none" stroke-width="3"/>',
+    "gta": '<path d="M100 12L104 24H116L106 31L110 43L100 36L90 43L94 31L84 24H96Z"/>',
+    "rocket-league": '<path d="M84 34L96 20H110L116 26V34Z"/>',
     "default": '<circle cx="100" cy="28" r="9"/>',
 }
 

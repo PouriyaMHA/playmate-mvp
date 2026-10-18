@@ -5,7 +5,8 @@ Each game defines:
   - platforms: options for the platform field
   - ign_label: what the in-game name is called for that game
   - fields: game-specific profile fields, stored in profiles.game_meta["fields"].
-    Matching gives `weight` points when both players picked the same value.
+    Matching gives `weight` points when both players picked the same value — or, for fields with
+    match="diff" (roles/positions), when they picked DIFFERENT values, because a squad needs mixed roles.
     `column` mirrors the value into an old profiles column (Battlefield only, for compatibility).
 """
 from pathlib import Path
@@ -35,8 +36,8 @@ LANGUAGES = [
 PC_CONSOLE = ["PC", "PlayStation", "Xbox"]
 
 
-def _field(fid, label, options, weight, required=True, column=None):
-    f = {"id": fid, "label": label, "options": options, "weight": weight, "required": required}
+def _field(fid, label, options, weight, required=True, column=None, match="same"):
+    f = {"id": fid, "label": label, "options": options, "weight": weight, "required": required, "match": match}
     if column:
         f["column"] = column
     return f
@@ -52,7 +53,8 @@ GAMES = {
         "ign_label": "EA ID",
         "fields": [
             _field("favorite_mode", "Favorite mode", ["Conquest", "Breakthrough", "Rush", "Team Deathmatch", "REDSEC", "Portal"], 18, column="favorite_mode"),
-            _field("class_type", "Class", ["Assault", "Engineer", "Support", "Recon", "Vehicle Main"], 12, column="class_type"),
+            _field("class_type", "Class", ["Assault", "Engineer", "Support", "Recon", "Vehicle Main"], 8,
+                   required=False, column="class_type", match="diff"),
         ],
     },
     "cs2": {
@@ -65,7 +67,6 @@ GAMES = {
         "fields": [
             _field("mode", "Mode", ["Premier", "Competitive", "Wingman", "Casual", "Deathmatch", "FACEIT"], 12),
             _field("rank", "Rank", ["Unranked", "Silver", "Gold Nova", "Master Guardian", "Legendary Eagle", "Supreme / Global"], 10),
-            _field("role", "Role", ["Entry", "AWPer", "Support", "Lurker", "IGL"], 8),
         ],
     },
     "fortnite": {
@@ -91,7 +92,6 @@ GAMES = {
         "fields": [
             _field("mode", "Mode", ["Battle Royale", "Ranked", "Mixtape"], 12),
             _field("rank", "Rank", ["Unranked", "Rookie", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master", "Predator"], 10),
-            _field("role", "Legend class", ["Assault", "Skirmisher", "Recon", "Support", "Controller"], 8),
         ],
     },
     "pubg-mobile": {
@@ -117,7 +117,6 @@ GAMES = {
         "fields": [
             _field("mode", "Mode", ["Ranked MP", "Battle Royale", "Casual MP", "Zombies"], 12),
             _field("rank", "Rank", ["Rookie", "Veteran", "Elite", "Pro", "Master", "Grandmaster", "Legendary"], 10),
-            _field("role", "Role", ["Slayer", "Objective", "Anchor", "Sniper", "Support"], 8),
         ],
     },
     "minecraft": {
@@ -142,7 +141,7 @@ GAMES = {
         "ign_label": "Riot ID",
         "fields": [
             _field("server", "Server", ["EUW", "EUNE", "NA", "TR", "ME", "KR", "OCE", "BR", "LAN"], 12),
-            _field("role", "Main role", ["Top", "Jungle", "Mid", "ADC", "Support", "Fill"], 10),
+            _field("role", "Main role", ["Top", "Jungle", "Mid", "ADC", "Support", "Fill"], 10, match="diff"),
             _field("rank", "Rank", ["Unranked", "Iron", "Bronze", "Silver", "Gold", "Platinum", "Emerald", "Diamond", "Master+"], 8),
         ],
     },
@@ -156,12 +155,51 @@ GAMES = {
         "fields": [
             _field("difficulty", "Difficulty", ["1–3 Easy", "4–6 Medium", "7–8 Hard", "9–10 Helldive"], 12),
             _field("front", "Favorite front", ["Terminids", "Automatons", "Illuminate", "Any"], 8),
-            _field("role", "Loadout role", ["Anti-tank", "Crowd control", "Support / Stims", "Objectives", "Flex"], 10),
+        ],
+    },
+    "fc": {
+        "name": "EA SPORTS FC 26",
+        "short": "FC26",
+        "genre": "Football",
+        "accent": "#3fe0c5",
+        "platforms": ["PC", "PlayStation", "Xbox", "Switch"],
+        "ign_label": "EA ID",
+        "fields": [
+            _field("mode", "Mode", ["Pro Clubs", "Rush", "Ultimate Team Co-op", "Seasons / Friendlies"], 14),
+            _field("division", "Division", ["Div 10–8", "Div 7–5", "Div 4–2", "Div 1", "Elite"], 10),
+            _field("position", "Position", ["Goalkeeper", "Defender", "Midfielder", "Forward", "Any"], 8,
+                   required=False, match="diff"),
+        ],
+    },
+    "gta": {
+        "name": "GTA Online",
+        "short": "GTA",
+        "genre": "Open-world crime",
+        "accent": "#ff5fa2",
+        "platforms": ["PC", "PlayStation", "Xbox"],
+        "ign_label": "Rockstar ID",
+        "fields": [
+            _field("activity", "Activity", ["Heists", "Business / Grinding", "Races", "Missions", "Free roam", "PvP"], 14),
+            _field("style", "Playstyle", ["Money grind", "Casual / fun", "Tryhard", "Roleplay"], 8),
+        ],
+    },
+    "rocket-league": {
+        "name": "Rocket League",
+        "short": "RL",
+        "genre": "Car soccer",
+        "accent": "#3b8bff",
+        "platforms": ["PC", "PlayStation", "Xbox", "Switch"],
+        "ign_label": "Epic name",
+        "fields": [
+            _field("mode", "Mode", ["2v2 Doubles", "3v3 Standard", "Extra modes", "Casual", "Tournaments"], 14),
+            _field("rank", "Rank", ["Unranked", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Champion",
+                                    "Grand Champion", "Supersonic Legend"], 10),
         ],
     },
 }
 
-GAME_ORDER = ["battlefield", "cs2", "fortnite", "apex", "pubg-mobile", "codm", "minecraft", "lol", "helldivers2"]
+GAME_ORDER = ["battlefield", "cs2", "fortnite", "apex", "pubg-mobile", "codm", "minecraft", "lol", "helldivers2",
+              "fc", "gta", "rocket-league"]
 
 
 def get_game(game_id: str | None) -> dict | None:

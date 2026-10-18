@@ -12,6 +12,7 @@ const MIC_LABELS = { voice: "Voice", both: "Voice + Text", none: "No mic" };
 const FIELD_ICONS = {
   favorite_mode: "flag", mode: "flag", class_type: "class", role: "class", rank: "trophy", tier: "trophy",
   server: "server", edition: "server", difficulty: "bolt", front: "globe", style: "bolt",
+  division: "trophy", position: "class", activity: "flag",
 };
 
 /* ---------------- auth ---------------- */
@@ -405,7 +406,7 @@ function buildForm() {
     <div class="field-row">
       <label class="field-label" for="gf-${esc(f.id)}">${svgIcon(FIELD_ICONS[f.id] || "class")}${esc(f.label)}</label>
       <select id="gf-${esc(f.id)}" data-field="${esc(f.id)}" ${f.required ? "required" : ""}>
-        <option value="">Select…</option>
+        <option value="">${f.required ? "Select…" : "Optional — skip or select…"}</option>
         ${f.options.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join("")}
       </select>
     </div>`).join("");

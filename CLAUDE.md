@@ -1,6 +1,6 @@
 # PlayMate
 
-Gaming teammate matchmaking (9 games, Battlefield 6 first). FastAPI + Supabase (DB + Auth) + plain HTML/CSS/JS, deployed on Render from GitHub `PouriyaMHA/playmate-mvp` (`main`, auto-deploy).
+Gaming teammate matchmaking (12 games, Battlefield 6 first). FastAPI + Supabase (DB + Auth) + plain HTML/CSS/JS, deployed on Render from GitHub `PouriyaMHA/playmate-mvp` (`main`, auto-deploy).
 Full background, decisions and open issues: `docs/PROJECT_HISTORY.md`. Raw ChatGPT history (local only): `docs/chatgpt-history/`.
 
 ## Layout
