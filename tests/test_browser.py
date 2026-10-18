@@ -704,3 +704,18 @@ def test_intent_rejects_unsafe_targets_and_other_accounts(open_page, users, make
     page.goto(base_url + "/app?game=cs2")
     wait_for(page, "() => typeof state !== 'undefined' && state.gameReady")
     assert page.evaluate(INTENT) is None and not page.is_visible("#intent-strip")
+
+
+def test_match_card_shows_the_bio_safely_in_two_lines(open_page, users, make_profile, api):
+    """Pre-launch #2"""
+    make_profile(users["alice"], "Alice")
+    make_profile(users["bob"], "Bob")
+    bio = "بازیکن آروم، شب‌ها پلی میدم & \"quotes\" &amp; " + "لوله‌کش " * 40
+    assert api.put("/api/account", user=users["bob"], json={"bio": bio[:280]})[0] == 200
+    page = open_page("/app?game=cs2", as_user=users["alice"])
+    wait_for(page, READY)
+    el = page.locator("#active-card .card-bio")
+    assert el.text_content() == bio[:280].strip()                      # escaped text, not HTML
+    line = float(page.evaluate("parseFloat(getComputedStyle(document.querySelector('.card-bio')).lineHeight)"))
+    assert el.bounding_box()["height"] <= line * 2 + 2                  # clamped to two lines
+    assert page.locator('[data-action="like"]').is_visible()

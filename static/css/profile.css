@@ -870,3 +870,4 @@ body.profile-page {
 .pp-rel { color: var(--muted); font-size: 0.82rem; }
 a.pp-rel { color: var(--cyan); }
 .pp-game-foot { flex-wrap: wrap; }
+.field-note { color: var(--muted); font-size: 0.78rem; margin: 6px 0 0; }

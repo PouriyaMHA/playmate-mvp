@@ -218,6 +218,19 @@ def profile_avatar(p: dict) -> str:
     return a if a in AVATARS else ""
 
 
+def bio_of(account: dict | None) -> str:
+    return (account or {}).get("bio") or ""
+
+
+def legacy_bio(user_id: str) -> str | None:
+    """A bio saved in the Auth metadata before the account was claimed (before migration 008), validated."""
+    try:
+        bio = (account_data(auth_user(user_id)).get("bio") or "").strip()
+    except HTTPException:
+        return None
+    return bio[:280] if bio and not re.search(r"[<>]", bio) else None
+
+
 def avatar_of(account: dict | None) -> str:
     a = (account or {}).get("avatar")
     return a if a in AVATARS else ""
@@ -334,7 +347,7 @@ ACCOUNT_GONE = HTTPException(status_code=401, detail="This account no longer exi
 # The accounts table (db/migrations/001, applied 2026-10-18) is the one source of truth for usernames.
 # Any error reading it is an error (503 from the handler below) — never a silent fallback to profile names.
 def account_row(user_id: str) -> dict | None:
-    res = supabase.table("accounts").select("username,display_username,avatar").eq("user_id", user_id).limit(1).execute()
+    res = supabase.table("accounts").select("username,display_username,avatar,bio").eq("user_id", user_id).limit(1).execute()
     return res.data[0] if res.data else None
 
 
@@ -352,7 +365,8 @@ def claim_username(user_id: str, username: str, display_username: str) -> tuple[
     (so profiles and accounts never disagree); a name owned by someone else is a 409."""
     try:
         supabase.table("accounts").insert({"user_id": user_id, "username": username, "display_username": display_username,
-                                           "avatar": current_avatar(user_id, None) or None}).execute()
+                                           "avatar": current_avatar(user_id, None) or None,
+                                           "bio": legacy_bio(user_id)}).execute()
         return username, display_username
     except Exception as e:
         if is_fk_violation(e):
@@ -984,6 +998,7 @@ def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)
         if view["looking_now"]:
             reasons.insert(0, "Looking for a squad right now")
         matches.append({
+            "_uid": str(p["user_id"]),
             "username": p.get("username"),
             "match_percent": score,
             "reasons": reasons,
@@ -994,8 +1009,16 @@ def match_players(req: MatchRequest, user_id: str = Depends(get_current_user_id)
 
     # players looking right now first, then people who already like me, then by score
     matches.sort(key=lambda m: (m["looking_now"], m["likes_you"], m["match_percent"]), reverse=True)
+    page = matches[:20]
+    # their public bios (pre-launch #2): one query for the returned players only, from accounts (the source of truth)
+    bios = {}
+    if page:
+        rows = supabase.table("accounts").select("user_id,bio").in_("user_id", [m["_uid"] for m in page]).execute().data or []
+        bios = {str(r["user_id"]): r.get("bio") or "" for r in rows}
+    for m in page:
+        m["profile"]["bio"] = bios.get(m.pop("_uid"), "")
     return {"target_user": me.get("username"), "game": game, "total": len(matches), "has_more": len(matches) > 20,
-            "matches": matches[:20]}
+            "matches": page}
 
 
 # =========================================================
@@ -1237,7 +1260,7 @@ def my_account_payload(user_id: str) -> dict:
     referrals = int(((getattr(user, "app_metadata", None) or {}).get("playmate") or {}).get("referral_count") or 0)
     return {
         **account_data(user),
-        **({"avatar": avatar_of(account)} if account else {}),
+        **({"avatar": avatar_of(account), "bio": bio_of(account)} if account else {}),
         "username": username,
         "display_username": (account or {}).get("display_username") or (games[0].get("display_username") if games else None),
         "member_since": getattr(user, "created_at", None),
@@ -1260,11 +1283,14 @@ def update_account(req: AccountUpdate, user_id: str = Depends(get_current_user_i
     if not user:
         raise HTTPException(status_code=404, detail="Account not found")
     changes = {}
+    new_bio = None
     if req.bio is not None:
         bio = req.bio.strip()
         if len(bio) > 280 or re.search(r"[<>]", bio):
             raise HTTPException(status_code=422, detail="Bio must be up to 280 characters and cannot contain < or >")
-        changes["bio"] = bio
+        if not account_row(user_id):
+            raise HTTPException(status_code=409, detail="Save your first game profile before writing a bio.")
+        new_bio = bio   # stored in accounts.bio only (migration 008) — "" = cleared
     if req.banner is not None:
         if req.banner not in BANNERS:
             raise HTTPException(status_code=422, detail="Unknown banner")
@@ -1284,6 +1310,8 @@ def update_account(req: AccountUpdate, user_id: str = Depends(get_current_user_i
             if v:
                 links[k] = v
         changes["links"] = links
+    if new_bio is not None:
+        supabase.table("accounts").update({"bio": new_bio}).eq("user_id", user_id).execute()
     if changes:
         save_account_meta(user, changes)
         if "avatar" in changes:   # accounts.avatar + every game profile, in one DB transaction (migration 005)
@@ -1360,7 +1388,7 @@ def public_profile(username: str, viewer_id: str | None = Depends(optional_user_
     return {
         "username": names.get("username") or username.lower(),
         "display_username": names.get("display_username") or names.get("username") or username,
-        "bio": acc["bio"],
+        "bio": bio_of(names) if names else acc["bio"],
         "banner": acc["banner"],
         "avatar": avatar_of(names) if names else acc["avatar"],
         "links": {k: v for k, v in acc["links"].items() if k != "steam"},

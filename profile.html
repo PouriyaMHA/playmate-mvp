@@ -8,8 +8,8 @@
   <title>PlayMate | Player profile</title>
   <link rel="icon" href="/static/img/logo.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
-  <link rel="stylesheet" href="/static/css/ui.css?v=22">
-  <link rel="stylesheet" href="/static/css/profile.css?v=6">
+  <link rel="stylesheet" href="/static/css/ui.css?v=23">
+  <link rel="stylesheet" href="/static/css/profile.css?v=7">
 </head>
 
 <body class="profile-page">
@@ -84,7 +84,10 @@
       <section class="edit-section">
         <h3>About me <span class="field-hint" id="bio-count">0/280</span></h3>
         <textarea id="edit-bio" maxlength="280" rows="3" aria-label="About me"
-          placeholder="How do you play? e.g. Chill Persian squad player, mostly evenings, love Breakthrough."></textarea>
+          placeholder="How do you play? e.g. Chill Persian squad player, mostly evenings, love Breakthrough."
+          aria-describedby="bio-note"></textarea>
+        <p class="field-note" id="bio-note">Public — shown on your profile and on match cards. Don't put contact or
+          personal details here.</p>
       </section>
 
       <section class="edit-section">

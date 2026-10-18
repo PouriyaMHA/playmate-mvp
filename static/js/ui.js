@@ -1129,6 +1129,7 @@ function renderCard() {
 
     <a class="card-brand" href="/u/${encodeURIComponent(match.username)}" target="_blank" rel="noopener" title="View profile"><svg><use href="#i-logo"/></svg>View profile</a>
     <div class="player-name">${esc(name)}</div>
+    ${p.bio ? `<p class="card-bio" title="${esc(p.bio)}">${esc(p.bio)}</p>` : ""}
     ${match.looking_now ? '<div style="margin-top:8px;"><span class="looking-badge">● Looking for a squad now</span></div>' : ""}
     ${match.likes_you ? '<div style="margin-top:8px;"><span class="likes-you-badge">💚 Already likes you</span></div>' : ""}
 

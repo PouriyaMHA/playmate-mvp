@@ -347,3 +347,25 @@ def test_deletion_and_avatar_change_queue_instead_of_deadlocking(users, make_pro
         th.join(10)
         assert "error" not in result, result
         assert rows("profiles", f"user_id = '{uid}'") == 0 and rows("accounts", f"user_id = '{uid}'") == 0
+
+
+# ---------------------------------------------------------------------------------------------- migration 008
+def test_bio_backfill_only_fills_never_set_bios_and_the_constraint_holds(users, make_profile, db):
+    import psycopg
+    from pathlib import Path
+    a, b, c = users["alice"], users["bob"], users["carol"]
+    for uid, name in ((a, "Alice"), (b, "Bob"), (c, "Carol")):
+        make_profile(uid, name)
+    sql("""update auth.users set raw_app_meta_data = jsonb_build_object('playmate', jsonb_build_object('bio', v))
+           from (values (%s::uuid, '  old <b>bio</b>  '), (%s::uuid, 'should not come back'), (%s::uuid, '')) t(id, v)
+           where auth.users.id = t.id""", (a, b, c))
+    sql("update public.accounts set bio = null where user_id = %s", (a,))     # never set
+    sql("update public.accounts set bio = '' where user_id = %s", (b,))       # cleared on purpose
+    migration = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "008_account_bio.sql").read_text(encoding="utf-8")
+    sql(migration)                                                            # re-run
+    bios = dict(sql("select user_id::text, bio from public.accounts", fetch=True))
+    assert bios[a] == "old bbio/b" and bios[b] == "" and bios[c] is None
+    with pytest.raises(psycopg.errors.CheckViolation):
+        sql("update public.accounts set bio = '<script>' where user_id = %s", (a,))
+    with pytest.raises(psycopg.errors.CheckViolation):
+        sql("update public.accounts set bio = %s where user_id = %s", ("x" * 281, a))

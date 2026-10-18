@@ -68,7 +68,8 @@ def test_avatar_needs_a_claimed_account_first(api, users, make_profile, db):
     a = users["alice"]
     status, d = api.put("/api/account", user=a, json={"avatar": "avatar-9"})
     assert status == 409 and "first game profile" in d["detail"]
-    assert api.put("/api/account", user=a, json={"bio": "hi"})[0] == 200   # other account fields are fine
+    assert api.put("/api/account", user=a, json={"bio": "hi"})[0] == 409    # bio too (accounts.bio, migration 008)
+    assert api.put("/api/account", user=a, json={"banner": "banner-2"})[0] == 200   # other fields are fine
     make_profile(a, "Alice")
     assert api.put("/api/account", user=a, json={"avatar": "avatar-9"})[0] == 200
     assert db.tables["profiles"][0]["game_meta"]["avatar"] == "avatar-9"
