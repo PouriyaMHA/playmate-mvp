@@ -54,7 +54,7 @@ Later same day: RLS enabled on `likes` (was fully open to the public anon key); 
 Decision log from the planning summary: mobile app postponed (responsive web first); per-game cards inside one profile (no page per game); in-person meetups NOT pursued for now (minors/safety) — city is only for ping/region; add games gradually but all 9 are listed.
 
 ## Roadmap
-1. Before public launch: turn on Supabase **Confirm email**; reliable keep-alive (cron-job.org / UptimeRobot, or Render paid); finalise Terms/Privacy; manual check of Sign up / Log in / password reset.
+1. Before public launch: turn on Supabase **Confirm email**; ~~reliable keep-alive~~ done 2026-10-17 (cron-job.org, every 10 min, `/health?deep=1`); finalise Terms/Privacy; manual check of Sign up / Log in / password reset.
 2. Grow: invite rewards (badges for referrals), share cards, Persian community marketing.
 3. Profile photo upload (Supabase Storage + report/moderation), highlights upload.
 4. Squad chat / notifications by email, rank verification ("Verified" badge), account deletion self-service.
