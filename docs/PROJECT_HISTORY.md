@@ -44,7 +44,7 @@ Later same day: RLS enabled on `likes` (was fully open to the public anon key); 
 2026-10-14/15 (6-hour build session, based on the planning summary `PlayMate-Summary.pdf`):
 - **Multi-game:** 12 games in `games.py` (Battlefield 6, CS2, Fortnite, Apex, PUBG Mobile, CODM, Minecraft, LoL, Helldivers 2, EA SPORTS FC 27 (the `fc` slot always holds the newest FC), GTA Online, Rocket League — last three added 2026-10-18), each with its own platforms, in-game-name label and field template (mode/rank/server…). Locations (2026-10-18): Region → Country (required) → City (optional) from `locations.py`, 9 regions incl. Africa, ~80 countries, big Iran city list; same country = +5 in matching. Role fields were removed 2026-10-18 except LoL role, FC position and BF class (optional); those use `match="diff"` = points for DIFFERENT roles, stored in `profiles.game_meta.fields`. Username shared across games. Game picker with cover art; prefill shared fields from another game.
 - **Matching:** uses my saved profile; region 35, city +5, languages 15–20, voice 10, platform 5, game fields (weights per game). Filters: same language only, looking-now only. No minimum score (small user base) — instead a smart empty state (Looking now / invite / add game) and live stats.
-- **Profiles:** `/u/<name>` with banner, avatar (12 presets; photo upload = placeholder), bio, links (Twitch/YouTube/Instagram), badges (Early Member, First Match, Squad Leader; Verified/Legendary = placeholders), per-game cards, Highlights tab (placeholder), Squad tab. Owner edit drawer. Account data in auth `app_metadata.playmate`.
+- **Profiles:** `/u/<name>` with banner, avatar (12 SVG presets + 13 illustrated WebP avatars added 2026-10-18, shown on match cards/squad/modal too; photo upload = placeholder), bio, links (Twitch/YouTube/Instagram), badges (Early Member, First Match, Squad Leader; Verified/Legendary = placeholders), per-game cards, Highlights tab (placeholder), Squad tab. Owner edit drawer. Account data in auth `app_metadata.playmate`.
 - **Invites:** `/?ref=<username>` captured on landing, saved after first profile save; invite card with referral count.
 - **Landing** rebuilt (games showcase, how it works, safety), inline auth errors, password reset, removed public "Quick Dev Account". Draft `/terms` `/privacy`.
 - **Mobile:** bottom tabs (Profile / Match / Squad), sticky Skip/Like.
@@ -57,11 +57,11 @@ Decision log from the planning summary: mobile app postponed (responsive web fir
 1. Before public launch: turn on Supabase **Confirm email**; ~~reliable keep-alive~~ done 2026-10-17 (cron-job.org, every 10 min, `/health?deep=1`); finalise Terms/Privacy; manual check of Sign up / Log in / password reset.
 2. Grow: invite rewards (badges for referrals), share cards, Persian community marketing.
 3. Profile photo upload (Supabase Storage + report/moderation), highlights upload.
-4. Squad chat / notifications by email, rank verification ("Verified" badge), account deletion self-service.
+4. Squad chat / notifications by email, rank verification ("Verified" badge). (Self-service account deletion: done 2026-10-18.)
 5. Later: i18n (UI English only for now), mobile app.
 
 ## Decisions to respect
-- Platform optional/display-only (cross-play). Playstyle & available-time dropped.
+- Platform is scored lightly; hard crossplay filters only where a game has no crossplay (GTA Online; FC Switch) plus must-match fields (Minecraft edition, LoL server) — added 2026-10-18. Playstyle & available-time dropped (user declined a "when do you play" field again on 2026-10-18).
 - IGN revealed only to mutual squadmates. "Match" means mutual.
 - Username lowercase canonical + `display_username`; locked after signup.
 - UI has no scoring/privacy logic; backend decides.
