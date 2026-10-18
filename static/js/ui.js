@@ -7,6 +7,7 @@
 
 const API_BASE = "/api";
 const REALTIME_INTERVAL_MS = 15000;
+const SHOW_COUNTS_FROM = 25;   // below this, player counts make the app look empty, so we hide them
 const MIC_LABELS = { voice: "Voice", both: "Voice + Text", none: "No mic" };
 const FIELD_ICONS = {
   favorite_mode: "flag", mode: "flag", class_type: "class", role: "class", rank: "trophy", tier: "trophy",
@@ -285,12 +286,9 @@ function renderGamePicker() {
     const mine = state.myGames.includes(g.id);
     const current = g.id === state.game;
     return `
-      <button type="button" class="game-card ${current ? "current" : ""}" data-game="${esc(g.id)}" style="--accent:${esc(g.accent)}">
+      <button type="button" class="game-card ${current ? "current" : ""}" data-game="${esc(g.id)}" style="--accent:${esc(g.accent)}" aria-label="${esc(g.name)}">
         <img src="${esc(g.cover)}" alt="" loading="lazy" onerror="this.src='/static/img/games/default.svg'">
-        <span class="game-card-body">
-          <span class="game-card-name">${esc(g.name)}</span>
-          <span class="game-card-meta">${esc(g.genre)} · ${g.players} player${g.players === 1 ? "" : "s"}</span>
-        </span>
+        ${g.players >= SHOW_COUNTS_FROM ? `<span class="game-card-body"><span class="game-card-meta">${g.players} players</span></span>` : ""}
         ${mine ? `<span class="game-card-tag">${current ? "Playing" : "Added"}</span>` : ""}
       </button>`;
   }).join("");
@@ -328,9 +326,13 @@ async function refreshStats() {
     const region = state.profile.region || els.region.value || "";
     const res = await fetch(`${API_BASE}/stats?game=${encodeURIComponent(state.game)}&region=${encodeURIComponent(region)}`);
     const s = await res.json();
-    const parts = [`${s.players} player${s.players === 1 ? "" : "s"}`];
-    if (region) parts.push(`${s.in_region} in ${regionLabel(region)}`);
-    parts.push(`${s.looking_now} looking now`);
+    const parts = [];
+    if (s.players >= SHOW_COUNTS_FROM) {
+      parts.push(`${s.players} players`);
+      if (region && s.in_region) parts.push(`${s.in_region} in ${regionLabel(region)}`);
+    }
+    if (s.looking_now > 0) parts.push(`${s.looking_now} looking now`);
+    if (!parts.length) parts.push(`${gameInfo(state.game)?.genre || "Squad finder"} · Early access`);
     $("game-bar-stats").textContent = parts.join(" · ");
     state.stats = s;
   } catch { }
@@ -380,6 +382,8 @@ async function selectGame(gameId) {
     startRealtime();
     refreshSquad().catch(() => { });
     refreshPending();
+    // returning player: show matches straight away instead of making them press Find Matches
+    findMatches({ keepTab: true });
   }
 }
 
@@ -500,15 +504,35 @@ function collectProfile() {
   };
 }
 
+// returns [{ label, el }] for every required value that is missing, in form order
 function validateProfile(p) {
   const missing = [];
-  if (!p.username) missing.push("Username");
-  if (!p.region) missing.push("Region");
-  (state.meta?.fields || []).forEach(f => { if (f.required && !p.fields[f.id]) missing.push(f.label); });
-  if (!p.languages) missing.push("Languages");
-  if (state.meta?.platforms?.length > 1 && !p.platform) missing.push("Platform");
+  if (!p.username) missing.push({ label: "Username", el: els.usernameInput });
+  if (!p.region) missing.push({ label: "Region", el: els.region });
+  if (state.meta?.platforms?.length > 1 && !p.platform) missing.push({ label: "Platform", el: els.platform });
+  (state.meta?.fields || []).forEach(f => {
+    if (f.required && !p.fields[f.id]) missing.push({ label: f.label, el: $(`gf-${f.id}`) });
+  });
+  if (!p.languages) missing.push({ label: "Languages", el: els.langContainer });
   return missing;
 }
+
+function markMissing(missing) {
+  document.querySelectorAll(".field-invalid").forEach(el => el.classList.remove("field-invalid"));
+  missing.forEach(m => m.el?.classList.add("field-invalid"));
+  const first = missing[0]?.el;
+  if (!first) return;
+  if (window.innerWidth <= 760) setTab("profile");
+  first.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (first.focus && first !== els.langContainer) first.focus({ preventScroll: true });
+}
+
+// clear the red outline as soon as the user fixes a field
+document.addEventListener("change", (e) => e.target.classList?.remove("field-invalid"));
+document.addEventListener("input", (e) => e.target.classList?.remove("field-invalid"));
+document.addEventListener("click", (e) => {
+  if (e.target.closest?.(".lang-pill")) els.langContainer.classList.remove("field-invalid");
+});
 
 async function saveProfile() {
   if (state.loadFailed) {
@@ -518,7 +542,8 @@ async function saveProfile() {
   const payload = collectProfile();
   const missing = validateProfile(payload);
   if (missing.length) {
-    showToast(`Please fill in: ${missing.join(", ")}`, "error");
+    markMissing(missing);
+    showToast(`Please fill in: ${missing.map(m => m.label).join(", ")}`, "error");
     throw new Error("Validation");
   }
   try {
@@ -590,7 +615,7 @@ function renderNoMatches(total) {
       <h3>${total === 0 ? "No new players right now" : "You're all caught up"}</h3>
       <p>${filtered
       ? "Your filters are hiding some players. Turn them off to see everyone."
-      : `PlayMate is new — ${s.players ?? 0} ${esc(gameInfo(state.game)?.name || "")} player${s.players === 1 ? "" : "s"} so far. Help it grow and you'll get matches faster:`}</p>
+      : `PlayMate is in early access — every new ${esc(gameInfo(state.game)?.name || "")} player makes your matches better. Help it grow:`}</p>
       <div class="empty-actions">
         ${filtered ? `<button class="btn-primary" type="button" data-action="clear-filters">Show everyone</button>` : ""}
         <button class="empty-action" type="button" data-action="looking">${svgIcon("bolt")}<span><b>Turn on "Looking now"</b><br>Show up first for 1 hour</span></button>
@@ -601,17 +626,19 @@ function renderNoMatches(total) {
     </div>`;
 }
 
-async function findMatches() {
+async function findMatches({ keepTab = false } = {}) {
   if (state.loading || inFlight.match || !state.game) return;
   inFlight.match = true;
-  if (window.innerWidth <= 760) setTab("match");   // results (and errors) are shown on the Match tab
+  const game = state.game;
+  if (!keepTab && window.innerWidth <= 760) setTab("match");   // results (and errors) are shown on the Match tab
   try {
     setLoading(true);
     const data = await postJson(`${API_BASE}/match`, {
-      game: state.game,
+      game,
       same_language_only: els.optSameLang.checked,
       looking_only: els.optLookingOnly.checked,
     });
+    if (state.game !== game) { setLoading(false); return; }   // switched game while loading
     state.matches = data.matches || [];
     state.currentMatchIndex = 0;
     setLoading(false);
@@ -630,6 +657,8 @@ async function findMatches() {
     }
   } finally {
     inFlight.match = false;
+    // the player switched game mid-scan: load the new game's matches instead
+    if (state.game !== game && state.hasProfile) findMatches({ keepTab: true });
   }
 }
 

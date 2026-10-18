@@ -2443,3 +2443,17 @@ a.sm-name:hover {
     display: block;
   }
 }
+
+/* required field left empty (set by markMissing in ui.js) */
+select.field-invalid,
+input.field-invalid {
+  border-color: var(--red, #ff4d6d) !important;
+  box-shadow: 0 0 0 3px rgba(255, 77, 109, 0.18);
+}
+
+.lang-grid.field-invalid {
+  padding: 6px;
+  border-radius: 14px;
+  outline: 1px solid var(--red, #ff4d6d);
+  box-shadow: 0 0 0 3px rgba(255, 77, 109, 0.12);
+}

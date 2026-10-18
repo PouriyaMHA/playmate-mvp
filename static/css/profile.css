@@ -753,3 +753,18 @@ body.profile-page {
     padding: 22px 16px;
   }
 }
+
+/* phones: all four tabs fit without sideways scrolling */
+@media (max-width: 520px) {
+  .pp-tabs {
+    width: 100%;
+    gap: 2px;
+    padding: 4px;
+  }
+
+  .pp-tabs button {
+    flex: 1 1 auto;
+    padding: 8px 8px;
+    font-size: 0.8rem;
+  }
+}

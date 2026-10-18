@@ -172,13 +172,12 @@ async function loadGames() {
     const games = (await res.json()).games || [];
     $("lp-games").innerHTML = games.map(g => `
       <a class="lp-game" href="#auth" data-mode="signup" style="--accent:${esc(g.accent)}">
-        <img src="${esc(g.cover)}" alt="${esc(g.name)}" loading="lazy">
-        <span class="lp-game-body"><b>${esc(g.name)}</b><span>${esc(g.genre)}</span></span>
+        <img src="${esc(g.cover)}" alt="${esc(g.name)} — ${esc(g.genre)}" loading="lazy">
       </a>`).join("");
     const covers = games.map(g => `<img src="${esc(g.cover)}" alt="">`).join("");
     $("lp-marquee").innerHTML = covers + covers;
     const total = games.reduce((n, g) => n + (g.players || 0), 0);
-    if (total > 0) $("lp-stat").textContent = `${total} player profiles across ${games.length} games — and growing.`;
+    if (total >= 50) $("lp-stat").textContent = `${total} player profiles across ${games.length} games — and growing.`;
   } catch { }
 }
 
